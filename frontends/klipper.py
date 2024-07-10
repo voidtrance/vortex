@@ -1,0 +1,128 @@
+from frontends import BaseFrontend
+import frontends.klippy.msgproto as msgproto
+import frontends.lib
+import ctypes
+import select
+import os
+
+def create_message(size):
+    class MessageBlock(ctypes.Structure):
+        _fields_ = [("length", ctypes.c_byte),
+                    ("sequence", ctypes.c_byte),
+                    ("data", ctypes.c_byte * (size - 5)),
+                    ("crc", ctypes.c_byte * 2),
+                    ("sync", ctypes.c_byte)]
+    return MessageBlock
+
+class KlipperFrontend(BaseFrontend):
+    DEV = "/tmp/klipper_uds"
+    BLOCK_SYNC = 0x7e
+    MIN_MSG_LEN = 5
+    MAX_MSG_LEN = 64
+    SEQ_DEST = 0x10
+    SEQ_NUM_MASK = 0xF
+
+    def __init__(self):
+        super().__init__()
+        mfd, sfd = frontends.lib.create_pty(self.DEV)
+        self.serial = os.fdopen(mfd, "wb+", buffering=0)
+        self.next_sequence = self.SEQ_DEST
+        self._poll = select.poll()
+        self._poll.register(self.serial, select.POLLIN|select.POLLHUP)
+
+    def __del__(self):
+        self.serial.close()
+        os.unlink(self.DEV)
+
+    def _calc_crc(self, data):
+        crc = ctypes.c_uint16(0xffff)
+        for i in range(len(data) - 3):
+            e = ctypes.c_uint8(data[i])
+            e.value = e.value ^ (crc.value & 0xff)
+            e.value = e.value ^ (e.value << 4)
+            crc.value = ((e.value << 8) | crc.value >> 8) ^ (e.value >> 4) ^ (e.value << 3)
+        return crc
+ 
+    def _forward_to_next(self, data):
+        if data[0] == self.BLOCK_SYNC:
+            return None, data[1:]
+        
+        i = data.find(bytes([self.BLOCK_SYNC]))
+        if i == -1:
+            return None, data
+        return None, data[i+1:]
+    
+    def parse_message_block(self, data):
+        if len(data) < self.MIN_MSG_LEN:
+            return None, data
+        
+        msg_len = data[0]
+        if msg_len < self.MIN_MSG_LEN or msg_len > self.MAX_MSG_LEN:
+            return self._forward_to_next(data)            
+        
+        if len(data) < msg_len:
+            return None, data
+        
+        message = data[:msg_len]
+        print(message)
+        # verify sync byte
+        if message[-1] != self.BLOCK_SYNC:
+            print("msg sync failed")
+            return self._forward_to_next(data)
+        
+        # verify sequence destination
+        if message[1] & ~self.SEQ_NUM_MASK != self.SEQ_DEST:
+            print("msg dest failed")
+            return self._forward_to_next(data)
+        
+        # verify CRC
+        msg_crc = message[-3] << 8 | message[-2]
+        crc = self._calc_crc(message)
+        if crc != msg_crc:
+            print("msg crc failed")
+            return self._forward_to_next(data)
+        
+        if message[1] != self.next_sequence:
+            print("msg seq failed")
+            return None, data[msg_len+1:]
+        
+        # Advance the sequence number only on successful message
+        # parsing. This way all other cases end up sending a NAK.
+        self.next_sequence = (message[1] + 1) & self.SEQ_NUM_MASK | self.SEQ_DEST
+        return message[3:-3], data
+    
+    def send_ack_nak(self, device):
+        msg = bytearray(self.MIN_MSG_LEN)
+        msg[0] = self.MIN_MSG_LEN
+        msg[1] = self.next_sequence
+        crc = self._calc_crc(msg)
+        msg[2] = crc.value >> 8
+        msg[3] = crc.value & 0xF
+        msg[4] = self.BLOCK_SYNC
+        device.write(msg)
+
+    def _process_commands(self):
+        serial_data = bytes()
+        mp = msgproto.MessageParser()
+        while self._run:
+            events = self._poll.poll(0.1)
+            if not events or self.serial.fileno() not in [e[0] for e in events]:
+                continue
+            event = [e for e in events if e[0] == self.serial.fileno()]
+            if not (event[0][1] & select.POLLIN):
+                continue
+
+            serial_data += self.serial.read(4096)
+            while 1:
+                i = mp.check_packet(serial_data)
+                if i == 0:
+                    break
+                if i < 0:
+                    serial_data = serial_data[-i:]
+                    continue
+                msg_params = mp.parse(serial_data[:i])
+                print(msg_params)
+                data = serial_data[:i]
+
+def create():
+    return KlipperFrontend()
