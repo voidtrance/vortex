@@ -53,6 +53,7 @@ class Controller(controllers.core.Core):
         super().__init__()
         self.objects = Objects()
         self.object_defs = {x: None for x in ModuleTypes}
+        self._completion_callback = None
         self._load_objects(config)
     def _load_objects(self, config):
         module = importlib.import_module("controllers.objects.object_defs")

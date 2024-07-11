@@ -96,7 +96,7 @@ class Emulator:
 
     def run(self):
         try:
-           self._controller.start(self._frequency)
+           self._controller.start(self._frequency, self._command_complete)
         except CoreError:
             self._controller.stop()
             return
@@ -116,11 +116,15 @@ class Emulator:
             cmd.time = timestep
             self._scheduled_queue.put(cmd)
 
+    def _command_complete(self, command_id, result):
+        self._frontend.complete_command(command_id, result)
+
     def _process_schedule(self, timestamp):
         for command in self._scheduled_queue.get_all(timestamp):
-            result = self._controller.exec_command(command.id.hex, command.obj_id,
-                                                   command.cmd_id, addressof(command.opts))
-            self._frontend.complete_command(command.id, result)
+            ret = self._controller.exec_command(command.id.hex, command.obj_id,
+                                                command.cmd_id, addressof(command.opts))
+            if ret:
+                logging.error("Failed to execute command")
             
 
         

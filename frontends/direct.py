@@ -19,7 +19,7 @@ class DirectFrontend(BaseFrontend):
         self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
         self._command_id_queue = []
 
-    def _process_commands(self):
+    def _process_commands(self, *args):
         while self._run:
             events = self._poll.poll(0.1)
             if not events or self._fd.fileno() not in [e[0] for e in events]:
@@ -28,7 +28,7 @@ class DirectFrontend(BaseFrontend):
             if not (event[0][1] & select.POLLIN):
                 continue
             cmd = self._fd.readline()
-            logging.debug(f"Received command: {cmd}")
+            logging.debug(f"Received command: {cmd.strip()}")
             try:
                 parts = cmd.strip().split(':', maxsplit=4)
                 klass, name, cmd = parts[:3]

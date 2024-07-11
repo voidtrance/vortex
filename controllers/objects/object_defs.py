@@ -5,8 +5,7 @@ class ObjectDef(Namespace):
     def __init__(self):
         self.config = None
         self.commands = []
-        self.sources = []
-
+        self.state = None
 
 class Stepper(ObjectDef):
     class StepperConfig(ctypes.Structure):
@@ -19,12 +18,14 @@ class Stepper(ObjectDef):
     class StepperMoveCommandOpts(ctypes.Structure):
         _fields_ = [("direction", ctypes.c_uint8),
                     ("steps", ctypes.c_uint32)]
+    class StepperStatus(ctypes.Structure):
+        _fields_ = [("enabled", ctypes.c_uint8),
+                    ("steps", ctypes.c_uint64)]
     def __init__(self):
         super().__init__()
         self.config = self.StepperConfig
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
                          (1, "move", self.StepperMoveCommandOpts, (0, 0))]
-        self.sources = ["controllers/objects/stepper.c"]
         
 
 __objects__ = [Stepper]

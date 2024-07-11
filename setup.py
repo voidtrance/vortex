@@ -1,6 +1,5 @@
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
-import importlib
 import shutil
 import glob
 import os.path
@@ -32,14 +31,19 @@ class BuildExtension(build_ext):
       self.move_files(files, "controllers/objects")
 
 def find_all_objects():
-    module = importlib.import_module("controllers.objects.object_defs")
-    objects = getattr(module, "__objects__")
+    with open("controllers/objects/object_defs.py") as fd:
+        for line in fd:
+            if line.startswith("__objects__"):
+                defs = line.strip()
+                break
+    objects = [x.strip() for x in defs[:-1].partition("[")[2].split(",")]
+    print(objects)
     source_root = pathlib.PosixPath("src")
     build_objects = {}
     for object in objects:
-        o = object()
-        build_objects[o.__class__.__name__.lower()] = \
-            [(source_root / x).as_posix() for x in o.sources]
+        object = object.lower()
+        build_objects[object] = \
+            [(source_root / "controllers" / "objects" / f"{object}.c").as_posix()]
     return build_objects
 
 object_extensions = []
@@ -53,7 +57,7 @@ setup(name="emulator", version="0.0.1",
       packages=find_packages("."),
       ext_modules=[Extension(name="core",
                             sources=["src/controllers/core.c",
-                                     "src/controllers/timing.c"],
+                                     "src/controllers/thread_control.c"],
                             libraries=["dl", "pthread"])] + \
                    object_extensions,
       cmdclass={"build_py": BuildExtension})

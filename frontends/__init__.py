@@ -29,7 +29,7 @@ class BaseFrontend:
                     self._obj_name_2_id[klass][obj[0]] = obj[1]
     
     def run(self):
-        self._thread = threading.Thread(None, self._process_commands, "frontent")
+        self._thread = threading.Thread(None, self._process_commands, "frontend")
         self._run = True
         self._thread.start()
     
@@ -56,10 +56,10 @@ class BaseFrontend:
     
     def queue_command(self, klass, cmd, name, opts, timestamp):
         cmd_id = self._cmd_name_2_id[klass].get(cmd, (None,))[0]
-        if not cmd_id:
+        if cmd_id is None:
             return
         obj_id = self._obj_name_2_id[klass].get(name, None)
-        if not obj_id:
+        if obj_id is None:
             return
         klass_cmds = self._cmd_name_2_id.get(klass, {})
         if cmd not in klass_cmds:
