@@ -1,6 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include "common_defs.h"
-#include "utils.h"
+#include "../utils.h"
 #include <Python.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -22,10 +22,10 @@ typedef struct {
 } stepper_config_params_t;
 
 typedef struct {
-    CoreObject_t object;
+    core_object_t object;
     complete_cb_t complete_cb;
     void *complete_data;
-    CoreObjectCommand_t *current_cmd;
+    core_object_command_t *current_cmd;
     uint64_t last_timestep;
     float current_step;
     float steps;
@@ -49,14 +49,14 @@ struct stepper_status {
     uint64_t steps;
 };
 
-void stepper_update(CoreObject_t *object, uint64_t timestep);
-int stepper_exec(CoreObject_t *object, CoreObjectCommand_t *cmd);
-int stepper_enable(CoreObject_t *object, void *args);
-int stepper_move(CoreObject_t *object, void *args);
-void *stepper_status(CoreObject_t *object);
-void stepper_destroy(CoreObject_t *object);
+void stepper_update(core_object_t *object, uint64_t timestep);
+int stepper_exec(core_object_t *object, core_object_command_t *cmd);
+int stepper_enable(core_object_t *object, void *args);
+int stepper_move(core_object_t *object, void *args);
+void *stepper_status(core_object_t *object);
+void stepper_destroy(core_object_t *object);
 
-typedef int (*command_func_t)(CoreObject_t *object, void *args);
+typedef int (*command_func_t)(core_object_t *object, void *args);
 
 static const command_func_t command_handlers[] = {
     [STEPPER_COMMAND_ENABLE] = stepper_enable,
@@ -93,7 +93,7 @@ Stepper_t *object_create(const char *name, void *config_ptr,
     return stepper;
 }
 
-int stepper_enable(CoreObject_t *object, void *args) {
+int stepper_enable(core_object_t *object, void *args) {
     Stepper_t *stepper = (Stepper_t *)object;
     struct stepper_enable_args *opts = (struct stepper_enable_args *)args;
 
@@ -104,7 +104,7 @@ int stepper_enable(CoreObject_t *object, void *args) {
     return 0;
 }
 
-int stepper_move(CoreObject_t *object, void *args) {
+int stepper_move(core_object_t *object, void *args) {
     Stepper_t *stepper = (Stepper_t *)object;
     struct stepper_move_args *opts = (struct stepper_move_args *)args;
 
@@ -119,7 +119,7 @@ int stepper_move(CoreObject_t *object, void *args) {
     return 0;
 }
 
-int stepper_exec(CoreObject_t *object, CoreObjectCommand_t *cmd) {
+int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
     Stepper_t *stepper = (Stepper_t *)object;
     int ret;
 
@@ -131,7 +131,7 @@ int stepper_exec(CoreObject_t *object, CoreObjectCommand_t *cmd) {
     return ret;
 }
 
-void stepper_update(CoreObject_t *object, uint64_t timestep) {
+void stepper_update(core_object_t *object, uint64_t timestep) {
     Stepper_t *stepper = (Stepper_t *)object;
     uint64_t delta  = timestep - stepper->last_timestep;
 
@@ -154,7 +154,7 @@ void stepper_update(CoreObject_t *object, uint64_t timestep) {
     stepper->last_timestep = timestep;
 }
 
-void stepper_destroy(CoreObject_t *object) {
+void stepper_destroy(core_object_t *object) {
     Stepper_t *stepper = (Stepper_t *)object;
     free(stepper);
 }

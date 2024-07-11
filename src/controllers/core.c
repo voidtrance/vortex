@@ -5,15 +5,16 @@
 #include <dlfcn.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/queue.h>
 #include <structmember.h>
 
 static PyObject *CoreError;
-typedef CoreObject_t *(*object_create_func_t)(const char *, void *,
+typedef core_object_t *(*object_create_func_t)(const char *, void *,
                                               complete_cb_t, void *);
 
 typedef LIST_HEAD(CoreCmdList, core_object_command) CoreCmdList_t;
-typedef LIST_HEAD(CoreObjectList, core_object) CoreObjectList_t;
+typedef LIST_HEAD(core_objectList, core_object) core_objectList_t;
 
 #define MAX_COMPLETIONS 256
 
@@ -30,7 +31,7 @@ typedef struct {
 typedef struct {
     PyObject_HEAD void *object_libs[OBJECT_TYPE_MAX];
     object_create_func_t object_create[OBJECT_TYPE_MAX];
-    CoreObjectList_t objects[OBJECT_TYPE_MAX];
+    core_objectList_t objects[OBJECT_TYPE_MAX];
     CoreCmdList_t cmds;
     core_object_completion_data_t *completions;
     uint64_t timestep;
@@ -65,7 +66,7 @@ PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
 }
 
 int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
-    CoreObjectType_t type;
+    core_object_type_t type;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
         LIST_INIT(&self->objects[type]);
@@ -79,11 +80,11 @@ int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
 }
 
 void core_dealloc(core_t *self) {
-    CoreObjectType_t type;
+    core_object_type_t type;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-	CoreObject_t *object;
-	CoreObject_t *object_next;
+	core_object_t *object;
+	core_object_t *object_next;
 
 	if (LIST_EMPTY(&self->objects[type]))
 	    continue;
@@ -138,7 +139,7 @@ PyObject *core_stop(PyObject *self, PyObject *args) {
 
 static unsigned long load_object(core_t *core, int klass, const char *name,
                                  void *config) {
-    CoreObject_t *new_obj;
+    core_object_t *new_obj;
     char *libname[] = {
         [OBJECT_TYPE_STEPPER] = "controllers/objects/stepper.so",
         [OBJECT_TYPE_DIGITAL_PIN] = "controllers/objects/dpin.so",
@@ -171,6 +172,7 @@ static unsigned long load_object(core_t *core, int klass, const char *name,
     return (unsigned long)new_obj;
 }
 
+
 PyObject *core_create_object(PyObject *self, PyObject *args, PyObject *kwargs) {
     char *kw[] = {"klass", "name", "options", NULL};
     int klass;
@@ -200,8 +202,8 @@ PyObject *core_exec_command(PyObject *self, PyObject *args, PyObject *kwargs) {
     char *cmd_id = NULL;
     uint16_t obj_cmd_id = 0;
     void *cmd_args = NULL;
-    CoreObject_t *object;
-    CoreObjectCommand_t *cmd;
+    core_object_t *object;
+    core_object_command_t *cmd;
     PyObject *rc;
     int ret = -1;
 
@@ -227,11 +229,11 @@ PyObject *core_exec_command(PyObject *self, PyObject *args, PyObject *kwargs) {
 
 void core_object_update(uint64_t time_step, void *user_data) {
     core_t *self = (core_t *)user_data;
-    CoreObjectType_t type;
+    core_object_type_t type;
 
     self->timestep = time_step;
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-        CoreObject_t *object;
+        core_object_t *object;
 
         if (LIST_EMPTY(&self->objects[type]))
             continue;
@@ -327,7 +329,7 @@ static struct PyModuleDef Core_module = {
 
 PyMODINIT_FUNC PyInit_core(void) {
     PyObject *module = PyModule_Create(&Core_module);
-    CoreObjectType_t type;
+    core_object_type_t type;
     PyObject *type_dict;
 
     if (PyType_Ready(&Core_Type) == -1) {

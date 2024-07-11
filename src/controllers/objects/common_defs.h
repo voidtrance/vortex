@@ -18,7 +18,7 @@ typedef enum {
     OBJECT_TYPE_HEATER,
     OBJECT_TYPE_THERMISTOR,
     OBJECT_TYPE_MAX
-} CoreObjectType_t;
+} core_object_type_t;
 
 static const char *const ObjectTypeExportNames[] = {
     [OBJECT_TYPE_NONE] = stringify(OBJECT_TYPE_NONE),
@@ -53,17 +53,17 @@ typedef struct core_object_command {
     const char *command_id;
     uint16_t object_cmd_id;
     void *args;
-} CoreObjectCommand_t;
+} core_object_command_t;
 
-typedef struct core_object CoreObject_t;
+typedef struct core_object core_object_t;
 
 struct core_object {
-    CoreObjectType_t type;
+    core_object_type_t type;
     LIST_ENTRY(core_object) entry;
-    void (*update)(CoreObject_t *object, uint64_t timestep);
-    int (*exec_command)(CoreObject_t *object, CoreObjectCommand_t *cmd);
-    void *(*get_state)(CoreObject_t *object);
-    void (*destroy)(CoreObject_t *object);
+    void (*update)(core_object_t *object, uint64_t timestep);
+    int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
+    void *(*get_state)(core_object_t *object);
+    void (*destroy)(core_object_t *object);
 };
 
 typedef enum {
