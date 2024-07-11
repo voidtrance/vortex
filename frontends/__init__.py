@@ -9,6 +9,7 @@ class BaseFrontend:
         self._cmd_id_2_cmd = {x: {} for x in ModuleTypes}
         self._cmd_name_2_id = {x: {} for x in ModuleTypes}
         self._obj_name_2_id = {x: {} for x in ModuleTypes}
+        self._command_completion = {}
         self._run = True
 
     def set_command_queue(self, queue):
@@ -66,8 +67,8 @@ class BaseFrontend:
             return
         opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
         opts = self.convert_opts(klass, cmd_id, opts)
-        self._command_id_queue.append(self._queue.queue_command(obj_id, cmd_id,
-                                                                opts, timestamp))
+        cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
+        self._cmd_id_2_cmd[cmd_id] = cmd
 
     def complete_command(self, id, result):
         pass

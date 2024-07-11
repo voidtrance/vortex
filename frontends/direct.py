@@ -51,6 +51,7 @@ class DirectFrontend(BaseFrontend):
 
     def complete_command(self, id, result):
         logging.debug(f"Command {id} complete: {result}")
+        self._command_completion.pop(id)
 
     def event_handler(self, event, owner, timestamp, *args):
         super().event_handler(event, owner, timestamp, *args)

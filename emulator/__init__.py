@@ -5,6 +5,7 @@ import logging
 from lib.constants import *
 from controllers.core import CoreError
 from ctypes import addressof
+import time
 
 __all__ = ["Emulator"]
 
@@ -12,7 +13,7 @@ class Command:
     def __init__(self, obj_id, cmd_id, opts, timestamp=None):
         self.obj_id, self.cmd_id, self.opts, self.time = \
             obj_id, cmd_id, opts, timestamp
-        self.id = uuid.uuid4()
+        self.id = uuid.uuid4().hex
     def __str__(self):
         return f"[{self.obj_id}:{self.cmd_id}@{self.time}"
         
@@ -23,7 +24,8 @@ class CommandQueue(queue.Queue):
         super().put(command)
         return command.id
     def queue_command(self, obj_id, cmd_id, opts, timestamp=None):
-        return self.put(Command(obj_id, cmd_id, opts, timestamp))
+        cmd = Command(obj_id, cmd_id, opts, timestamp)
+        return (self.put(cmd), cmd)
 
 class ScheduleQueue:
     class TimeDict(OrderedDict):
@@ -121,10 +123,11 @@ class Emulator:
 
     def _process_schedule(self, timestamp):
         for command in self._scheduled_queue.get_all(timestamp):
-            ret = self._controller.exec_command(command.id.hex, command.obj_id,
+            ret = self._controller.exec_command(command.id, command.obj_id,
                                                 command.cmd_id, addressof(command.opts))
             if ret:
                 logging.error("Failed to execute command")
+            time.sleep(0.001)
             
 
         

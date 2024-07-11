@@ -18,10 +18,11 @@ typedef LIST_HEAD(CoreObjectList, core_object) CoreObjectList_t;
 #define MAX_COMPLETIONS 256
 
 typedef struct {
-    struct {
+    struct __comp_entry {
 	const char *id;
 	int result;
-    } completions[MAX_COMPLETIONS];
+    } *entries;
+    size_t size;
     size_t head;
     size_t tail;
 } core_object_completion_data_t;
@@ -36,7 +37,7 @@ typedef struct {
     PyObject *comp_cb;
 } core_t;
 
-int core_object_update(uint64_t time_step, void *user_data);
+void core_object_update(uint64_t time_step, void *user_data);
 void core_process_completions(void *user_data);
 void core_object_command_complete(const char *command_id, int result,
                                   void *data);
@@ -47,6 +48,15 @@ PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
     core = (core_t *)type->tp_alloc(type, 0);
     core->completions = calloc(1, sizeof(*core->completions));
     if (!core->completions) {
+	type->tp_free((PyObject *)core);
+	return NULL;
+    }
+
+    core->completions->size = MAX_COMPLETIONS;
+    core->completions->entries = calloc(core->completions->size,
+					sizeof(*core->completions->entries));
+    if (!core->completions->entries) {
+	free(core->completions);
 	type->tp_free((PyObject *)core);
 	return NULL;
     }
@@ -72,20 +82,20 @@ void core_dealloc(core_t *self) {
     CoreObjectType_t type;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-    CoreObject_t *object;
-    CoreObject_t *object_next;
+	CoreObject_t *object;
+	CoreObject_t *object_next;
 
-    if (LIST_EMPTY(&self->objects[type]))
-        continue;
+	if (LIST_EMPTY(&self->objects[type]))
+	    continue;
 
-    object = LIST_FIRST(&self->objects[type]);
-    while (object) {
-        object_next = LIST_NEXT(object, entry);
-        object->destroy(object);
-        object = object_next;
-    }
+	object = LIST_FIRST(&self->objects[type]);
+	while (object) {
+	    object_next = LIST_NEXT(object, entry);
+	    object->destroy(object);
+	    object = object_next;
+	}
 
-    dlclose(self->object_libs[type]);
+	dlclose(self->object_libs[type]);
     }
 
     Py_TYPE(self)->tp_free((PyObject *)self);
@@ -211,12 +221,11 @@ PyObject *core_exec_command(PyObject *self, PyObject *args, PyObject *kwargs) {
     LIST_INSERT_HEAD(&core->cmds, cmd, entry);
 
     ret = object->exec_command(object, cmd);
-    printf("%d\n", ret);
     rc = Py_BuildValue("i", ret);
     return rc;
 }
 
-int core_object_update(uint64_t time_step, void *user_data) {
+void core_object_update(uint64_t time_step, void *user_data) {
     core_t *self = (core_t *)user_data;
     CoreObjectType_t type;
 
@@ -231,48 +240,53 @@ int core_object_update(uint64_t time_step, void *user_data) {
             object->update(object, time_step);
         }
     }
-
-    return 0;
 }
 
 void core_process_completions(void *arg) {
     core_t *core = (core_t *)arg;
     core_object_completion_data_t *comps = core->completions;
-    PyGILState_STATE state = PyGILState_Ensure();
 
     while (comps->tail != comps->head) {
-	PyObject *args = Py_BuildValue("(si)",
-				       comps->completions[comps->tail].id,
-				       comps->completions[comps->tail].result);
-
+        PyGILState_STATE state = PyGILState_Ensure();
+        PyObject *args = Py_BuildValue("(si)", comps->entries[comps->tail].id,
+                                       comps->entries[comps->tail].result);
 	if (!args) {
 	    PyErr_Print();
 	    goto next;
 	}
 
-	(void)PyObject_Call(core->comp_cb, args, NULL);
+        (void)PyObject_Call(core->comp_cb, args, NULL);
 	Py_DECREF(args);
 	if (PyErr_Occurred())
 	    PyErr_Print();
+        PyGILState_Release(state);
 
       next:
-	comps->tail = (comps->tail + 1) % MAX_COMPLETIONS;
+	comps->tail = (comps->tail + 1) % comps->size;
     }
 
-    PyGILState_Release(state);
 }
 
 void core_object_command_complete(const char *cmd_id, int result, void *data) {
     core_t *core = (core_t *)data;
     core_object_completion_data_t *comps = core->completions;
 
+    printf("comp: %zu\n", comps->head);
     if (comps->head != comps->tail - 1 ||
-	(comps->head == MAX_COMPLETIONS && comps->tail != 0)) {
-	comps->completions[comps->head].id = cmd_id;
-	comps->completions[comps->head].result = result;
-	comps->head = (comps->head + 1) % MAX_COMPLETIONS;
+	(comps->head == comps->size && comps->tail != 0)) {
+	comps->entries[comps->head].id = cmd_id;
+	comps->entries[comps->head].result = result;
+	comps->head = (comps->head + 1) % comps->size;;
     } else {
-	printf("Missed command completion!!\n");
+	void *ptr  = realloc(comps->entries,
+			     (comps->size * 2) * sizeof(*comps->entries));
+	if (ptr) {
+	    comps->entries = (struct __comp_entry *)ptr;
+	    comps->size *= 2;
+	} else {
+	    printf("Resizing of completion entries failed! Completions can be missed");
+	}
+
     }
 }
 

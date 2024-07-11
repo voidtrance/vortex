@@ -2,7 +2,7 @@
 #define __TIMING_H__
 #include <stdint.h>
 
-typedef int (*update_callback_t)(uint64_t clock_step, void *user_data);
+typedef void (*update_callback_t)(uint64_t clock_step, void *user_data);
 typedef void (*completion_callback_t)(void *user_data);
 
 int controller_timer_start(uint64_t frequency, update_callback_t update_cb,

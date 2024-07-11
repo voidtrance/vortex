@@ -52,10 +52,9 @@ static void *core_update_thread(void *arg) {
     args->ret = 0;
     while (*(volatile int *)args->control == 1) {
 	long delay;
-	int ret;
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-	ret = args->callback(step_time, args->user_data);
+	args->callback(step_time, args->user_data);
 	clock_gettime(CLOCK_MONOTONIC_RAW, &te);
 	args->total += timespec_delta(ts, te);
 	args->count++;
@@ -67,7 +66,7 @@ static void *core_update_thread(void *arg) {
         step_time += (int)step_duration;
     }
 
-    return &args->ret;
+    pthread_exit(&args->ret);
 }
 
 static void *core_complete_thread(void *arg) {
@@ -91,7 +90,7 @@ static void *core_complete_thread(void *arg) {
         nanosleep(&sleep_time, NULL);
     }
 
-    return &args->ret;
+    pthread_exit(&args->ret);
 }
 
 int start_thread(core_thread_control_t *control,
