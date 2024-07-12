@@ -6,6 +6,7 @@ class ObjectDef(Namespace):
         self.config = None
         self.commands = []
         self.state = None
+        self.events = {}
 
 class Stepper(ObjectDef):
     class StepperConfig(ctypes.Structure):

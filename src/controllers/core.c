@@ -1,20 +1,23 @@
 #define PY_SSIZE_T_CLEAN
-#include "objects/common_defs.h"
+#include "events.h"
+#include "common_defs.h"
 #include "thread_control.h"
+#include "objects/object_defs.h"
+#include "utils.h"
 #include <Python.h>
 #include <dlfcn.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <sys/queue.h>
 #include <structmember.h>
+#include <sys/queue.h>
 
 static PyObject *CoreError;
 typedef core_object_t *(*object_create_func_t)(const char *, void *,
-                                              complete_cb_t, void *);
+                                              core_call_data_t *);
 
 typedef LIST_HEAD(CoreCmdList, core_object_command) CoreCmdList_t;
-typedef LIST_HEAD(core_objectList, core_object) core_objectList_t;
+typedef LIST_HEAD(core_objectList, core_object) core_object_list_t;
 
 #define MAX_COMPLETIONS 256
 
@@ -28,20 +31,55 @@ typedef struct {
     size_t tail;
 } core_object_completion_data_t;
 
+typedef struct event_subscription {
+    STAILQ_ENTRY(event_subscription) entry;
+    const char *object_name;
+    core_object_t *object;
+    event_handler_t handler;
+} event_subscription_t;
+
+typedef struct event {
+    STAILQ_ENTRY(event) entry;
+    core_object_event_t event;
+    const char *name;
+    void *event_data;
+} core_event_t;
+
+typedef STAILQ_HEAD(event_handlers, event_subscription) core_event_handlers_t;
+typedef STAILQ_HEAD(events, event) core_events_t;
+
 typedef struct {
-    PyObject_HEAD void *object_libs[OBJECT_TYPE_MAX];
+    PyObject_HEAD
+    void *object_libs[OBJECT_TYPE_MAX];
     object_create_func_t object_create[OBJECT_TYPE_MAX];
-    core_objectList_t objects[OBJECT_TYPE_MAX];
+    core_object_list_t objects[OBJECT_TYPE_MAX];
     CoreCmdList_t cmds;
     core_object_completion_data_t *completions;
     uint64_t timestep;
-    PyObject *comp_cb;
+    PyObject *python_complete_cb;
+
+    /* Event handling */
+    core_event_handlers_t event_handlers[OBJECT_EVENT_MAX];
+    core_events_t events;
 } core_t;
 
 void core_object_update(uint64_t time_step, void *user_data);
 void core_process_completions(void *user_data);
+void core_process_events(void *user_data);
+
+/* Object callbacks */
 void core_object_command_complete(const char *command_id, int result,
                                   void *data);
+int core_object_event_register(const core_object_event_t event,
+                               const char *name, core_object_t *object,
+                               event_handler_t handler, void *user_data);
+int core_object_event_unregister(const core_object_event_t event,
+                                 const char *name, core_object_t *object,
+                                 event_handler_t handler, void *user_data);
+int core_object_event_submit(const core_object_event_t event, const char *name,
+			     void *event_data, void *user_data);
+
+static core_call_data_t core_call_data;
 
 PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
     core_t *core;
@@ -61,6 +99,15 @@ PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
 	type->tp_free((PyObject *)core);
 	return NULL;
     }
+
+    core_call_data.completion_callback = core_object_command_complete;
+    core_call_data.completion_data = core;
+    core_call_data.event_register = core_object_event_register;
+    core_call_data.event_register_data = core;
+    core_call_data.event_unregister = core_object_event_unregister;
+    core_call_data.event_unregister_data = core;
+    core_call_data.event_submit = core_object_event_submit;
+    core_call_data.event_submit_data = core;
 
     return (PyObject *)core;
 }
@@ -107,20 +154,27 @@ PyObject *core_start(PyObject *self, PyObject *args) {
     uint64_t frequency;
     int ret;
 
-    if (PyArg_ParseTuple(args, "KO", &frequency, &core->comp_cb) == -1)
+    if (PyArg_ParseTuple(args, "KO", &frequency,
+			 &core->python_complete_cb) == -1)
         return NULL;
 
-    if (!PyCallable_Check(core->comp_cb)) {
+    if (!PyCallable_Check(core->python_complete_cb)) {
         PyErr_Format(CoreError, "Completion callback is not callable");
         return NULL;
     }
-    Py_INCREF(core->comp_cb);
+    Py_INCREF(core->python_complete_cb);
 
-    ret = controller_timer_start(frequency, core_object_update,
-				 core_process_completions, self);
+    ret = controller_timer_start(core_object_update,
+				 frequency,
+				 core_process_completions,
+				 str_to_hertz("20HZ"),
+				 core_process_events,
+				 str_to_hertz("20HZ"),
+				 self);
     if (ret) {
-    PyErr_Format(CoreError, "Failed to start timer thread: %s", strerror(ret));
-    return NULL;
+	PyErr_Format(CoreError, "Failed to start core threads: %s",
+		     strerror(ret));
+	return NULL;
     }
 
     Py_INCREF(self);
@@ -131,14 +185,14 @@ PyObject *core_start(PyObject *self, PyObject *args) {
 PyObject *core_stop(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     controller_timer_stop();
-    Py_DECREF(core->comp_cb);
+    Py_DECREF(core->python_complete_cb);
     Py_DECREF(self);
     Py_XINCREF(Py_None);
     return Py_None;
 }
 
-static unsigned long load_object(core_t *core, int klass, const char *name,
-                                 void *config) {
+static unsigned long load_object(core_t *core, core_object_type_t klass,
+				 const char *name, void *config) {
     core_object_t *new_obj;
     char *libname[] = {
         [OBJECT_TYPE_STEPPER] = "controllers/objects/stepper.so",
@@ -163,15 +217,13 @@ static unsigned long load_object(core_t *core, int klass, const char *name,
             return -1UL;
     }
 
-    new_obj = core->object_create[klass](name, config,
-                                         core_object_command_complete, core);
+    new_obj = core->object_create[klass](name, config, &core_call_data);
     if (!new_obj)
         return -1UL;
 
     LIST_INSERT_HEAD(&core->objects[klass], new_obj, entry);
     return (unsigned long)new_obj;
 }
-
 
 PyObject *core_create_object(PyObject *self, PyObject *args, PyObject *kwargs) {
     char *kw[] = {"klass", "name", "options", NULL};
@@ -257,7 +309,7 @@ void core_process_completions(void *arg) {
 	    goto next;
 	}
 
-        (void)PyObject_Call(core->comp_cb, args, NULL);
+        (void)PyObject_Call(core->python_complete_cb, args, NULL);
 	Py_DECREF(args);
 	if (PyErr_Occurred())
 	    PyErr_Print();
@@ -273,7 +325,6 @@ void core_object_command_complete(const char *cmd_id, int result, void *data) {
     core_t *core = (core_t *)data;
     core_object_completion_data_t *comps = core->completions;
 
-    printf("comp: %zu\n", comps->head);
     if (comps->head != comps->tail - 1 ||
 	(comps->head == comps->size && comps->tail != 0)) {
 	comps->entries[comps->head].id = cmd_id;
@@ -292,6 +343,92 @@ void core_object_command_complete(const char *cmd_id, int result, void *data) {
     }
 }
 
+int core_object_event_register(const core_object_event_t event,
+			       const char *name, core_object_t *object,
+			       event_handler_t handler, void *data) {
+    core_t *core = (core_t *)data;
+    event_subscription_t *subscription;
+
+    subscription = calloc(1, sizeof(*subscription));
+    if(!subscription)
+	return -1;
+
+    subscription->handler = handler;
+    subscription->object = object;
+    subscription->object_name = strdup(name);
+    STAILQ_INSERT_TAIL(&core->event_handlers[event], subscription, entry);
+    return 0;
+}
+
+int core_object_event_unregister(const core_object_event_t event,
+				 const char *name, core_object_t *object,
+				 event_handler_t handler, void *data) {
+    core_t *core = (core_t *)data;
+    event_subscription_t *subscription;
+
+    STAILQ_FOREACH(subscription, &core->event_handlers[event], entry) {
+	if (!strncmp(subscription->object_name, name, strlen(name)) &&
+	    subscription->object == object) {
+	    STAILQ_REMOVE(&core->event_handlers[event], subscription,
+			  event_subscription, entry);
+	    free((char *)subscription->object_name);
+	    free(subscription);
+	    return 0;
+	}
+    }
+
+    return -1;
+}
+
+int core_object_event_submit(const core_object_event_t type, const char *name,
+                              void *event_data, void *user_data) {
+    core_t *core = (core_t *)user_data;
+    core_event_t *event;
+
+    event = calloc(1, sizeof(*event));
+    if (!event)
+	return -1;
+
+    event->event = type;
+    event->name = strdup(name);
+    event->event_data = event_data;
+    STAILQ_INSERT_TAIL(&core->events, event, entry);
+    return 0;
+}
+
+void core_process_events(void *user_data) {
+    core_t *core = (core_t *)user_data;
+    core_event_t *event;
+    core_event_t *event_next;
+
+    if (STAILQ_EMPTY(&core->events))
+	return;
+
+    event = STAILQ_FIRST(&core->events);
+    while (event) {
+	event_subscription_t *subscription;
+
+	event_next = STAILQ_NEXT(event, entry);
+	STAILQ_FOREACH(subscription, &core->event_handlers[event->event],
+		       entry) {
+	    if (!strncmp(subscription->object_name, event->name,
+			 strlen(event->name)))
+		subscription->handler(subscription->object, event->event,
+				      event->name, event->event_data);
+	}
+
+	free((char *)event->name);
+	free(event);
+	event = event_next;
+    }
+}
+
+PyObject *core_event_register(PyObject *self, PyObject *args,
+			      PyObject *kwargs) {
+    core_object_event_t type;
+    unsigned long obj_ptr;
+    char *name;
+}
 PyObject *core_get_timestep(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     PyObject *timestep = PyLong_FromUnsignedLongLong(core->timestep);

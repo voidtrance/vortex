@@ -57,7 +57,8 @@ setup(name="emulator", version="0.0.1",
       packages=find_packages("."),
       ext_modules=[Extension(name="core",
                             sources=["src/controllers/core.c",
-                                     "src/controllers/thread_control.c"],
+                                     "src/controllers/thread_control.c",
+                                     "src/controllers/utils.c"],
                             libraries=["dl", "pthread"])] + \
                    object_extensions,
       cmdclass={"build_py": BuildExtension})

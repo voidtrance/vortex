@@ -1,10 +1,12 @@
 #define PY_SSIZE_T_CLEAN
+#include "object_defs.h"
 #include "common_defs.h"
 #include "../utils.h"
 #include <Python.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef enum { MOVE_DIR_NONE, MOVE_DIR_FWD, MOVE_DIR_BACK } stepper_move_dir_t;
 
@@ -23,8 +25,7 @@ typedef struct {
 
 typedef struct {
     core_object_t object;
-    complete_cb_t complete_cb;
-    void *complete_data;
+    core_call_data_t *call_data;
     core_object_command_t *current_cmd;
     uint64_t last_timestep;
     float current_step;
@@ -64,7 +65,7 @@ static const command_func_t command_handlers[] = {
 };
 
 Stepper_t *object_create(const char *name, void *config_ptr,
-                         complete_cb_t complete, void *complete_data) {
+			 core_call_data_t *call_data) {
     Stepper_t *stepper;
     stepper_config_params_t *config = (stepper_config_params_t *)config_ptr;
     uint32_t clock_speed = 0;
@@ -77,8 +78,8 @@ Stepper_t *object_create(const char *name, void *config_ptr,
     stepper->object.update = stepper_update;
     stepper->object.destroy = stepper_destroy;
     stepper->object.exec_command = stepper_exec;
-    stepper->complete_cb = complete;
-    stepper->complete_data = complete_data;
+    stepper->object.name = strdup(name);
+    stepper->call_data = call_data;
 
     clock_speed = str_to_hertz(config->clock_speed);
     printf("Stepper: %u, %u, %u\n", config->steps_per_rotation,
@@ -88,7 +89,9 @@ Stepper_t *object_create(const char *name, void *config_ptr,
     // TMC5560: RPS = (VACTUAL[5560] *(fCLK[Hz]/2 / 2^23)) / microsteps / spr
     stepper->rps = (float)clock_speed / config->microsteps /
 	config->steps_per_rotation;
-    stepper->spns = stepper->rps / SEC_TO_NSEC(1);
+    stepper->spns = (config->steps_per_rotation * stepper->rps) /
+	SEC_TO_NSEC(1);
+    printf("s/ns = %f\n", stepper->spns);
 
     return stepper;
 }
@@ -98,8 +101,9 @@ int stepper_enable(core_object_t *object, void *args) {
     struct stepper_enable_args *opts = (struct stepper_enable_args *)args;
 
     stepper->enabled = !!opts->enable;
-    stepper->complete_cb(stepper->current_cmd->command_id, 0,
-			 stepper->complete_data);
+    stepper->call_data->completion_callback(
+	stepper->current_cmd->command_id, 0,
+	stepper->call_data->completion_data);
     stepper->current_cmd = NULL;
     return 0;
 }
@@ -144,12 +148,12 @@ void stepper_update(core_object_t *object, uint64_t timestep) {
 	    stepper->current_step += steps;
 	stepper->steps -= steps;
     } else if (stepper->current_cmd) {
-	stepper->complete_cb(stepper->current_cmd->command_id, 0,
-			     stepper->complete_data);
+	stepper->call_data->completion_callback(
+	    stepper->current_cmd->command_id, 0,
+	    stepper->call_data->completion_data);
 	stepper->current_cmd = NULL;
 	stepper->steps = 0.0;
     }
-    //printf("current steps: %lu\n", stepper->current_step);
 
     stepper->last_timestep = timestep;
 }

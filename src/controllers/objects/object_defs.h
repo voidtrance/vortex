@@ -1,9 +1,9 @@
-#ifndef __OBJECTS_COMMON_DEFS_H__
-#define __OBJECTS_COMMON_DEFS_H__
-#define PY_SSIZE_T_CLEAN
-#include <Python.h>
+#ifndef __OBJECT_DEFS_H__
+#define __OBJECT_DEFS_H__
+
 #include <stdint.h>
 #include <sys/queue.h>
+#include <stdlib.h>
 
 #define _stringify(x) #x
 #define stringify(x) _stringify(x)
@@ -55,17 +55,6 @@ typedef struct core_object_command {
     void *args;
 } core_object_command_t;
 
-typedef struct core_object core_object_t;
-
-struct core_object {
-    core_object_type_t type;
-    LIST_ENTRY(core_object) entry;
-    void (*update)(core_object_t *object, uint64_t timestep);
-    int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
-    void *(*get_state)(core_object_t *object);
-    void (*destroy)(core_object_t *object);
-};
-
 typedef enum {
     CMD_OPTION_TYPE_NONE,
     CMD_OPTION_TYPE_INT,
@@ -86,5 +75,23 @@ typedef struct {
     size_t n_options;
 } object_command_spec_t;
 
-typedef void (*complete_cb_t)(const char *, int, void *);
+/*
+ * Common object structure. Objects should wrap
+ * this structure in their own object-specific
+ * structure.
+ * If wrapped, this structure should be the
+ * first member of the object-specific
+ * structure.
+ */
+typedef struct core_object core_object_t;
+struct core_object {
+    core_object_type_t type;
+    const char *name;
+    LIST_ENTRY(core_object) entry;
+    void (*update)(core_object_t *object, uint64_t timestep);
+    int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
+    void *(*get_state)(core_object_t *object);
+    void (*destroy)(core_object_t *object);
+};
+
 #endif

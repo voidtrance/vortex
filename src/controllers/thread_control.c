@@ -7,33 +7,28 @@
 #include <string.h>
 #include <sys/resource.h>
 
-typedef struct {
-    int core_thread_do_run;
+struct core_thread_control {
+    int do_run;
     pthread_t thread_id;
-} core_thread_control_t;
-
-struct core_update_thread_args {
-    update_callback_t callback;
-    void *user_data;
-    uint64_t frequency;
-    int *control;
-    uint64_t total;
-    uint64_t count;
-    int ret;
 };
 
-struct core_completion_thread_args {
-    completion_callback_t callback;
+struct core_thread_args {
+    void *callback;
     void *user_data;
     uint64_t frequency;
     int *control;
     int ret;
 };
 
-static core_thread_control_t core_update_global_data;
-static core_thread_control_t core_complete_global_data;
-static struct core_update_thread_args update_args;
-static struct core_completion_thread_args completion_args;
+struct core_control_data {
+    struct core_thread_control control;
+    struct core_thread_args args;
+    void *(*thread_func)(void *);
+};
+
+static struct core_control_data core_global_update;
+static struct core_control_data core_global_complete;
+static struct core_control_data core_global_events;
 
 #define DEFAULT_SCHED_POLICY SCHED_FIFO
 
@@ -42,23 +37,24 @@ static struct core_completion_thread_args completion_args;
     ((((e).tv_sec - (s).tv_sec) * 1000000000) + ((e).tv_nsec - (s).tv_nsec))
 
 static void *core_update_thread(void *arg) {
-    struct core_update_thread_args *args =
-	(struct core_update_thread_args *)arg;
+    struct core_thread_args *args = (struct core_thread_args *)arg;
+    update_callback_t callback = (update_callback_t)args->callback;
     float step_duration = ((float)1000 / (args->frequency / 1000000));
     uint64_t step_time = 0;
     struct timespec sleep_time = {0};
     struct timespec ts, te;
+    int64_t sleep_counter = 0;
 
     args->ret = 0;
     while (*(volatile int *)args->control == 1) {
-	long delay;
+	int64_t delay;
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-	args->callback(step_time, args->user_data);
+	callback(step_time, args->user_data);
 	clock_gettime(CLOCK_MONOTONIC_RAW, &te);
-	args->total += timespec_delta(ts, te);
-	args->count++;
-        delay = max((long)step_duration - timespec_delta(ts, te), 0);
+	delay = (int64_t)step_duration - timespec_delta(ts, te);
+        sleep_counter += delay;
+        delay = max(delay, 0);
         if (delay < 0 || delay > step_duration)
 	    continue;
         sleep_time.tv_nsec = delay;
@@ -66,12 +62,13 @@ static void *core_update_thread(void *arg) {
         step_time += (int)step_duration;
     }
 
+    printf("update time counter: %ld\n", sleep_counter);
     pthread_exit(&args->ret);
 }
 
-static void *core_complete_thread(void *arg) {
-    struct core_completion_thread_args *args =
-	(struct core_completion_thread_args *)arg;
+static void *core_generic_thread(void *arg) {
+    struct core_thread_args *args = (struct core_thread_args *)arg;
+    completion_callback_t callback = (completion_callback_t)args->callback;
     float step_duration = ((float)1000 / (args->frequency / 1000000));
     struct timespec sleep_time = {0};
     struct timespec ts, te;
@@ -81,7 +78,7 @@ static void *core_complete_thread(void *arg) {
 	long delay;
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-	args->callback(args->user_data);
+	callback(args->user_data);
 	clock_gettime(CLOCK_MONOTONIC_RAW, &te);
         delay = max((long)step_duration - timespec_delta(ts, te), 0);
         if (delay < 0 || delay > step_duration)
@@ -93,8 +90,7 @@ static void *core_complete_thread(void *arg) {
     pthread_exit(&args->ret);
 }
 
-int start_thread(core_thread_control_t *control,
-		 void *(*thread_func)(void *), void *args) {
+int start_thread(struct core_control_data *thread_data) {
     // struct sched_param sched_params;
     pthread_attr_t attrs;
     int ret;
@@ -114,7 +110,10 @@ int start_thread(core_thread_control_t *control,
     if (ret)
         return ret;
 
-    ret = pthread_create(&control->thread_id, &attrs, thread_func, args);
+    thread_data->control.do_run = 1;
+    thread_data->args.control = &thread_data->control.do_run;
+    ret = pthread_create(&thread_data->control.thread_id, &attrs,
+			 thread_data->thread_func, &thread_data->args);
     if (ret)
         return ret;
 
@@ -128,38 +127,45 @@ int start_thread(core_thread_control_t *control,
     return 0;
 }
 
-int controller_timer_start(uint64_t frequency, update_callback_t update_cb,
+int controller_timer_start(update_callback_t update_cb,
+			   uint64_t update_frequency,
 			   completion_callback_t completion_cb,
+			   uint64_t completion_frequency,
+			   event_callback_t event_cb,
+			   uint64_t event_frequency,
                            void *user_data) {
     int ret;
 
-    core_update_global_data.core_thread_do_run = 1;
-    update_args.frequency = frequency;
-    update_args.callback = update_cb;
-    update_args.user_data = user_data;
-    update_args.control = &core_update_global_data.core_thread_do_run;
-
-    ret = start_thread(&core_update_global_data, core_update_thread,
-		       &update_args);
+    core_global_update.args.frequency = update_frequency;
+    core_global_update.args.callback = update_cb;
+    core_global_update.args.user_data = user_data;
+    core_global_update.thread_func = core_update_thread;
+    ret = start_thread(&core_global_update);
     if (ret)
 	return ret;
 
-    core_complete_global_data.core_thread_do_run = 1;
-    completion_args.frequency = frequency;
-    completion_args.callback = completion_cb;
-    completion_args.user_data = user_data;
-    completion_args.control = &core_update_global_data.core_thread_do_run;
+    core_global_complete.args.frequency = completion_frequency;
+    core_global_complete.args.callback = completion_cb;
+    core_global_complete.args.user_data = user_data;
+    core_global_complete.thread_func = core_generic_thread;
+    ret = start_thread(&core_global_complete);
+    if (ret)
+	return ret;
 
-    ret = start_thread(&core_complete_global_data, core_complete_thread,
-		       &completion_args);
+    core_global_events.args.frequency = event_frequency;
+    core_global_events.args.callback = event_cb;
+    core_global_events.args.user_data = user_data;
+    core_global_events.thread_func = core_generic_thread;
+    ret = start_thread(&core_global_events);
+
     return ret;
 }
 
 void controller_timer_stop(void) {
-    core_update_global_data.core_thread_do_run = 0;
-    core_complete_global_data.core_thread_do_run = 0;
-    pthread_join(core_update_global_data.thread_id, NULL);
-    pthread_join(core_complete_global_data.thread_id, NULL);
-    printf("Average update cycle: %f nsec\n",
-	   (float)update_args.total / update_args.count);
+    core_global_update.control.do_run = 0;
+    core_global_complete.control.do_run = 0;
+    core_global_events.control.do_run = 0;
+    pthread_join(core_global_update.control.thread_id, NULL);
+    pthread_join(core_global_complete.control.thread_id, NULL);
+    pthread_join(core_global_events.control.thread_id, NULL);
 }

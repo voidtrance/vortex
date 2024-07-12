@@ -68,7 +68,7 @@ class BaseFrontend:
         opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
         opts = self.convert_opts(klass, cmd_id, opts)
         cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
-        self._cmd_id_2_cmd[cmd_id] = cmd
+        self._command_completion[cmd_id] = cmd
 
     def complete_command(self, id, result):
         pass
