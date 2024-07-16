@@ -52,7 +52,7 @@ struct stepper_status {
     uint64_t steps;
 };
 
-void stepper_update(core_object_t *object, uint64_t timestep);
+void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep);
 int stepper_exec(core_object_t *object, core_object_command_t *cmd);
 int stepper_enable(core_object_t *object, void *args);
 int stepper_move(core_object_t *object, void *args);
@@ -137,7 +137,7 @@ int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
     return ret;
 }
 
-void stepper_update(core_object_t *object, uint64_t timestep) {
+void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     Stepper_t *stepper = (Stepper_t *)object;
     uint64_t delta  = timestep - stepper->last_timestep;
 

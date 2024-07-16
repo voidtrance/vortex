@@ -88,7 +88,17 @@ struct core_object {
     core_object_type_t type;
     const char *name;
     LIST_ENTRY(core_object) entry;
-    void (*update)(core_object_t *object, uint64_t timestep);
+
+    /*
+     * Object update callback. This callback will be called
+     * by the timing loop to update the object's state.
+     *    - ticks are the number of controller clock ticks that have
+     *      elapsed since the last update. The rate of change of
+     *      this value depends on the controller's running frequency.
+     *    - runtime is the absolute wall clock runtime (in ns) of
+     *      the emulator.
+     */
+    void (*update)(core_object_t *object, uint64_t ticks, uint64_t runtime);
     int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
     void *(*get_state)(core_object_t *object);
     void (*destroy)(core_object_t *object);

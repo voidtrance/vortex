@@ -2,7 +2,8 @@
 #define __TIMING_H__
 #include <stdint.h>
 
-typedef void (*update_callback_t)(uint64_t clock_step, void *user_data);
+typedef void (*update_callback_t)(uint64_t ticks, uint64_t runtime,
+				  void *user_data);
 typedef void (*completion_callback_t)(void *user_data);
 typedef void (*event_callback_t)(void *user_data);
 

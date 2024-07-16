@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <sys/resource.h>
+#include "utils.h"
 
 struct core_thread_control {
     int do_run;
@@ -32,34 +34,40 @@ static struct core_control_data core_global_events;
 
 #define DEFAULT_SCHED_POLICY SCHED_FIFO
 
-#define max(a, b) ((a <= (typeof(a))b) ? b : a)
 #define timespec_delta(s, e)                                                   \
-    ((((e).tv_sec - (s).tv_sec) * 1000000000) + ((e).tv_nsec - (s).tv_nsec))
+    ((SEC_TO_NSEC((e).tv_sec - (s).tv_sec)) + ((e).tv_nsec - (s).tv_nsec))
 
 static void *core_update_thread(void *arg) {
     struct core_thread_args *args = (struct core_thread_args *)arg;
     update_callback_t callback = (update_callback_t)args->callback;
-    float step_duration = ((float)1000 / (args->frequency / 1000000));
-    uint64_t step_time = 0;
     struct timespec sleep_time = {0};
     struct timespec ts, te;
+    float tick = (1000.0 / (args->frequency / 1000000));
+    uint64_t ticks = 0;
+    uint64_t runtime = 0;
     int64_t sleep_counter = 0;
 
+    printf("step duration: %f\n", tick);
     args->ret = 0;
     while (*(volatile int *)args->control == 1) {
 	int64_t delay;
+	uint64_t time;
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-	callback(step_time, args->user_data);
+	callback(ticks, runtime, args->user_data);
 	clock_gettime(CLOCK_MONOTONIC_RAW, &te);
-	delay = (int64_t)step_duration - timespec_delta(ts, te);
+	time = timespec_delta(ts, te);
+	delay = (int64_t)tick - time;
         sleep_counter += delay;
-        delay = max(delay, 0);
-        if (delay < 0 || delay > step_duration)
-	    continue;
-        sleep_time.tv_nsec = delay;
+        if (delay <= 0 || delay > tick)
+	    goto count;
+        sleep_time.tv_nsec = (uint64_t)delay;
         nanosleep(&sleep_time, NULL);
-        step_time += (int)step_duration;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &te);
+        time = timespec_delta(ts, te);
+    count:
+        runtime += time;
+	ticks += (uint64_t)(roundf(((float)time / tick) * 100) / 100);
     }
 
     printf("update time counter: %ld\n", sleep_counter);

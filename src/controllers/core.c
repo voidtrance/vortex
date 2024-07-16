@@ -55,7 +55,8 @@ typedef struct {
     core_object_list_t objects[OBJECT_TYPE_MAX];
     CoreCmdList_t cmds;
     core_object_completion_data_t *completions;
-    uint64_t timestep;
+    uint64_t ticks;
+    uint64_t runtime;
     PyObject *python_complete_cb;
 
     /* Event handling */
@@ -63,7 +64,7 @@ typedef struct {
     core_events_t events;
 } core_t;
 
-void core_object_update(uint64_t time_step, void *user_data);
+void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data);
 void core_process_completions(void *user_data);
 void core_process_events(void *user_data);
 
@@ -124,7 +125,8 @@ int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
 
     STAILQ_INIT(&self->events);
 
-    self->timestep = 0;
+    self->ticks = 0;
+    self->runtime = 0;
     self->completions->head = 0;
     self->completions->tail = 0;
 
@@ -285,11 +287,12 @@ PyObject *core_exec_command(PyObject *self, PyObject *args, PyObject *kwargs) {
     return rc;
 }
 
-void core_object_update(uint64_t time_step, void *user_data) {
+void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data) {
     core_t *self = (core_t *)user_data;
     core_object_type_t type;
 
-    self->timestep = time_step;
+    self->ticks = ticks;
+    self->runtime = runtime;
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
         core_object_t *object;
 
@@ -297,7 +300,7 @@ void core_object_update(uint64_t time_step, void *user_data) {
             continue;
 
         LIST_FOREACH(object, &self->objects[type], entry) {
-            object->update(object, time_step);
+            object->update(object, ticks, runtime);
         }
     }
 }
@@ -444,10 +447,16 @@ PyObject *core_event_register(PyObject *self, PyObject *args,
     return Py_None;
 }
 
-PyObject *core_get_timestep(PyObject *self, PyObject *args) {
+PyObject *core_get_ticks(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
-    PyObject *timestep = PyLong_FromUnsignedLongLong(core->timestep);
-    return timestep;
+    PyObject *ticks = PyLong_FromUnsignedLongLong(core->ticks);
+    return ticks;
+}
+
+PyObject *core_get_runtime(PyObject *self, PyObject *args) {
+    core_t *core = (core_t *)self;
+    PyObject *runtime = PyLong_FromUnsignedLongLong(core->runtime);
+    return runtime;
 }
 
 static PyMethodDef CoreMethods[] = {
@@ -457,7 +466,8 @@ static PyMethodDef CoreMethods[] = {
      METH_VARARGS | METH_KEYWORDS, "Create core object"},
     {"exec_command", (PyCFunction)core_exec_command,
      METH_VARARGS | METH_KEYWORDS, "Execute command"},
-    {"get_timestep", core_get_timestep, METH_NOARGS, "Get current timestep"},
+    {"get_clock_ticks", core_get_ticks, METH_NOARGS, "Get current tick count"},
+    {"get_runtime", core_get_runtime, METH_NOARGS, "Get controller runtime"},
     {NULL, NULL, 0, NULL}
 };
 
