@@ -7,8 +7,13 @@
  * an entry in this enum with the event type.
  */
 typedef enum {
+    OBJECT_EVENT_HEATER_TEMP_REACHED,
     OBJECT_EVENT_MAX,
 } core_object_event_t;
+
+const char *OBJECT_EVENT_NAMES[] = {
+    [OBJECT_EVENT_HEATER_TEMP_REACHED] = "HEATER_TEMP_REACHED",
+};
 
 /*******
  * Event data structure definitions.
@@ -16,7 +21,9 @@ typedef enum {
  * Each event will have a matching data structure that
  * describes the data the event will provide.
  */
-
+typedef struct {
+    float temp;
+} heater_temp_reached_event_data_t;
 
 typedef void (*event_handler_t)(core_object_t *, const core_object_event_t,
                                 const char *, void *);

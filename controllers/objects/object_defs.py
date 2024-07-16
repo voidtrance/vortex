@@ -28,5 +28,29 @@ class Stepper(ObjectDef):
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
                          (1, "move", self.StepperMoveCommandOpts, (0, 0))]
         
+class Thermistor(ObjectDef):
+    class ThermistorConfig(ctypes.Structure):
+        _fields_ = [("sensor_type", ctypes.c_char * 64),
+                    ("beta", ctypes.c_uint32)]
+    class ThermistorStatus(ctypes.Structure):
+        _fields_ = [("resistance", ctypes.c_float)]
+    def __init__(self):
+        super().__init__()
+        self.config = self.ThermistorConfig
+        self.state = self.ThermistorStatus
+class Heater(ObjectDef):
+    class HeaterConfig(ctypes.Structure):
+        _fields_ = [("sensor_type", ctypes.c_char * 64),
+                    ("beta", ctypes.c_uint32),
+                    ("power", ctypes.c_uint16)]
+    class HeaterSetTempCommandOpts(ctypes.Structure):
+        _fields_ = [("temperature", ctypes.c_uint32)]
+    class HeaterStatus(ctypes.Structure):
+        _fields_ = [("temperature", ctypes.c_uint32),
+                    ("power", ctypes.c_uint16)]
+    def __init__(self):
+        super().__init__()
+        self.config = self.HeaterConfig
+        self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,))]
 
-__objects__ = [Stepper]
+__objects__ = [Stepper, Heater]
