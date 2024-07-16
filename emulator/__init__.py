@@ -77,8 +77,6 @@ class ScheduleQueue:
             yield command
             command = self.get(timestamp)
         return None
-            
-EMULATOR_MAX_FREQUENCY = 1 * MHZ2HZ
 
 class Emulator:
     def __init__(self, controller, frontend):
@@ -91,10 +89,10 @@ class Emulator:
         self._run_emulation = True
         self._frequency = 0
 
-    def set_frequency(self, frequency):
+    def set_frequency(self, frequency=0):
         if (frequency / MHZ2HZ) > 10:
             logging.warning("Frequency greater than 10MHz may result in inaccurate timing")
-        self._frequency = frequency
+        self._frequency = frequency or self._controller.FREQUENCY
 
     def run(self):
         try:

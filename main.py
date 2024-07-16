@@ -13,7 +13,7 @@ def create_arg_parser():
     parser.add_argument("-f", "--frontend", default="direct")
     parser.add_argument("-C", "--config", required=True)
     parser.add_argument("-c", "--controller", required=True)
-    parser.add_argument("-F", "--frequency", default=emulator.EMULATOR_MAX_FREQUENCY)
+    parser.add_argument("-F", "--frequency", default=0)
     parser.add_argument("-d", "--debug", choices=logging._nameToLevel.keys(),
                         default="INFO")
     parser.add_argument("-l", "--logfile", type=str, default=None)
