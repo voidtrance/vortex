@@ -1,14 +1,16 @@
-#define PY_SSIZE_T_CLEAN
 #include "object_defs.h"
-#include "common_defs.h"
+#include "../common_defs.h"
 #include "../utils.h"
-#include <Python.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum { MOVE_DIR_NONE, MOVE_DIR_FWD, MOVE_DIR_BACK } stepper_move_dir_t;
+typedef enum {
+    MOVE_DIR_NONE,
+    MOVE_DIR_FWD,
+    MOVE_DIR_BACK
+} stepper_move_dir_t;
 
 enum {
     STEPPER_COMMAND_ENABLE,

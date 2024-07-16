@@ -201,9 +201,10 @@ static unsigned long load_object(core_t *core, core_object_type_t klass,
     core_object_t *new_obj;
     char *libname[] = {
         [OBJECT_TYPE_STEPPER] = "controllers/objects/stepper.so",
-        [OBJECT_TYPE_DIGITAL_PIN] = "controllers/objects/dpin.so",
-        [OBJECT_TYPE_PWM_PIN] = "controllers/objects/pwmpin.so",
-        [OBJECT_TYPE_ENDSTOP] = "controllers/objects/endstop.so",
+	[OBJECT_TYPE_DIGITAL_PIN] = "controllers/objects/dpin.so",
+	[OBJECT_TYPE_PWM_PIN] = "controllers/objects/pwmpin.so",
+	[OBJECT_TYPE_ENDSTOP] = "controllers/objects/endstop.so",
+	[OBJECT_TYPE_HEATER] = "controllers/objects/heater.so",
     };
 
     if (!core->object_libs[klass]) {
@@ -427,7 +428,7 @@ void core_process_events(void *user_data) {
         }
 
 	STAILQ_REMOVE(&core->events, event, event, entry);
-        free((char *)event->name);
+	free((char *)event->name);
 	free(event);
 	event = event_next;
     }
@@ -438,12 +439,16 @@ PyObject *core_event_register(PyObject *self, PyObject *args,
     core_object_event_t type;
     unsigned long obj_ptr;
     char *name;
+
+    Py_DECREF(Py_None);
+    return Py_None;
 }
+
 PyObject *core_get_timestep(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     PyObject *timestep = PyLong_FromUnsignedLongLong(core->timestep);
     return timestep;
-    }
+}
 
 static PyMethodDef CoreMethods[] = {
     {"start", core_start, METH_VARARGS, "Run the emulator core thread"},
@@ -453,13 +458,14 @@ static PyMethodDef CoreMethods[] = {
     {"exec_command", (PyCFunction)core_exec_command,
      METH_VARARGS | METH_KEYWORDS, "Execute command"},
     {"get_timestep", core_get_timestep, METH_NOARGS, "Get current timestep"},
-    {NULL, NULL, 0, NULL}};
+    {NULL, NULL, 0, NULL}
+};
 
 static PyTypeObject Core_Type = {
-		.ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "Core",
-		.tp_doc = PyDoc_STR("HW Core"),
-		.tp_basicsize = sizeof(core_t),
-		.tp_itemsize = 0,
+    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "Core",
+    .tp_doc = PyDoc_STR("HW Core"),
+    .tp_basicsize = sizeof(core_t),
+    .tp_itemsize = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     .tp_new = core_new,
     .tp_init = (initproc)core_init,
