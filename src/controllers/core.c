@@ -40,9 +40,9 @@ typedef struct event_subscription {
 
 typedef struct event {
     STAILQ_ENTRY(event) entry;
-    core_object_event_t event;
+    core_object_event_t type;
     const char *name;
-    void *event_data;
+    void *data;
 } core_event_t;
 
 typedef STAILQ_HEAD(event_handlers, event_subscription) core_event_handlers_t;
@@ -79,7 +79,7 @@ int core_object_event_unregister(const core_object_event_t event,
 int core_object_event_submit(const core_object_event_t event, const char *name,
 			     void *event_data, void *user_data);
 
-static core_call_data_t core_call_data;
+static core_call_data_t core_call_data = { 0 };
 
 PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
     core_t *core;
@@ -114,10 +114,15 @@ PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
 
 int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     core_object_type_t type;
+    core_object_event_t event;
 
-    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++)
         LIST_INIT(&self->objects[type]);
-    }
+
+    for (event = 0; event < OBJECT_EVENT_MAX; event++)
+	STAILQ_INIT(&self->event_handlers[event]);
+
+    STAILQ_INIT(&self->events);
 
     self->timestep = 0;
     self->completions->head = 0;
@@ -344,8 +349,8 @@ void core_object_command_complete(const char *cmd_id, int result, void *data) {
 }
 
 int core_object_event_register(const core_object_event_t event,
-			       const char *name, core_object_t *object,
-			       event_handler_t handler, void *data) {
+                               const char *name, core_object_t *object,
+                               event_handler_t handler, void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
 
@@ -365,8 +370,11 @@ int core_object_event_unregister(const core_object_event_t event,
 				 event_handler_t handler, void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
+    event_subscription_t *next;
 
-    STAILQ_FOREACH(subscription, &core->event_handlers[event], entry) {
+    subscription = STAILQ_FIRST(&core->event_handlers[event]);
+    while (subscription != NULL) {
+	next = STAILQ_NEXT(subscription, entry);
 	if (!strncmp(subscription->object_name, name, strlen(name)) &&
 	    subscription->object == object) {
 	    STAILQ_REMOVE(&core->event_handlers[event], subscription,
@@ -375,6 +383,7 @@ int core_object_event_unregister(const core_object_event_t event,
 	    free(subscription);
 	    return 0;
 	}
+	subscription = next;
     }
 
     return -1;
@@ -389,9 +398,9 @@ int core_object_event_submit(const core_object_event_t type, const char *name,
     if (!event)
 	return -1;
 
-    event->event = type;
+    event->type = type;
     event->name = strdup(name);
-    event->event_data = event_data;
+    event->data = event_data;
     STAILQ_INSERT_TAIL(&core->events, event, entry);
     return 0;
 }
@@ -409,15 +418,16 @@ void core_process_events(void *user_data) {
 	event_subscription_t *subscription;
 
 	event_next = STAILQ_NEXT(event, entry);
-	STAILQ_FOREACH(subscription, &core->event_handlers[event->event],
+	STAILQ_FOREACH(subscription, &core->event_handlers[event->type],
 		       entry) {
-	    if (!strncmp(subscription->object_name, event->name,
-			 strlen(event->name)))
-		subscription->handler(subscription->object, event->event,
-				      event->name, event->event_data);
-	}
+            if (!strncmp(subscription->object_name, event->name,
+                         strlen(event->name)))
+              subscription->handler(subscription->object, event->type,
+                                    event->name, event->data);
+        }
 
-	free((char *)event->name);
+	STAILQ_REMOVE(&core->events, event, event, entry);
+        free((char *)event->name);
 	free(event);
 	event = event_next;
     }
@@ -467,7 +477,8 @@ static struct PyModuleDef Core_module = {
 PyMODINIT_FUNC PyInit_core(void) {
     PyObject *module = PyModule_Create(&Core_module);
     core_object_type_t type;
-    PyObject *type_dict;
+    core_object_event_t event;
+    PyObject *value_dict;
 
     if (PyType_Ready(&Core_Type) == -1) {
         Py_XDECREF(module);
@@ -484,8 +495,8 @@ PyMODINIT_FUNC PyInit_core(void) {
     if (PyModule_AddObject(module, "CoreError", CoreError) < 0)
         goto fail;
 
-    type_dict = PyDict_New();
-    if (!type_dict)
+    value_dict = PyDict_New();
+    if (!value_dict)
         goto fail;
 
     for (type = 0; type < OBJECT_TYPE_MAX; type++) {
@@ -493,8 +504,8 @@ PyMODINIT_FUNC PyInit_core(void) {
         PyObject *value;
         int ret;
 
-        if (PyModule_AddIntConstant(module, ObjectTypeExportNames[type], type) ==
-            -1)
+        if (PyModule_AddIntConstant(module, ObjectTypeExportNames[type],
+				    type) == -1)
             goto fail;
 
         key = PyLong_FromLong((long)type);
@@ -507,7 +518,7 @@ PyMODINIT_FUNC PyInit_core(void) {
             goto fail;
         }
 
-        ret = PyDict_SetItem(type_dict, key, value);
+        ret = PyDict_SetItem(value_dict, key, value);
         if (ret == -1) {
           Py_XDECREF(key);
           Py_XDECREF(value);
@@ -515,9 +526,45 @@ PyMODINIT_FUNC PyInit_core(void) {
         }
     }
 
-    if (PyModule_AddObject(module, "OBJECT_TYPE_NAMES", type_dict) == -1) {
-        Py_XDECREF(type_dict);
+    if (PyModule_AddObject(module, "OBJECT_TYPE_NAMES", value_dict) == -1) {
+        Py_XDECREF(value_dict);
         goto fail;
+    }
+
+    value_dict = PyDict_New();
+    if (!value_dict)
+	goto fail;
+
+    for (event = 0; event < OBJECT_EVENT_MAX; event++) {
+	PyObject *key;
+	PyObject *value;
+	int ret;
+
+	if (PyModule_AddIntConstant(module, OBJECT_EVENT_NAMES[event],
+				    event) == -1)
+	    goto fail;
+
+	key = PyLong_FromLong((long)event);
+	if (!key)
+	    goto fail;
+
+	value = PyUnicode_FromString(OBJECT_EVENT_NAMES[event]);
+	if (!value) {
+	    Py_XDECREF(key);
+	    goto fail;
+	}
+
+	ret = PyDict_SetItem(value_dict, key, value);
+	if (ret == -1) {
+	    Py_XDECREF(key);
+	    Py_XDECREF(value);
+	    goto fail;
+	}
+    }
+
+    if (PyModule_AddObject(module, "OBJECT_EVENT_NAMES", value_dict) == -1) {
+	Py_XDECREF(value_dict);
+	goto fail;
     }
 
     return module;
