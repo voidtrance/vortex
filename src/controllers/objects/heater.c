@@ -7,6 +7,7 @@
 #include "../common_defs.h"
 #include "thermistor.h"
 #include "../utils.h"
+#include "heater.h"
 
 #define AMBIENT_TEMP 25
 
@@ -51,7 +52,7 @@ typedef struct {
 
 void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestamp);
 int heater_set_temp(core_object_t *object, core_object_command_t *cmd);
-void heater_status(core_object_t *object);
+void heater_status(core_object_t *object, void *status);
 void heater_destroy(core_object_t *object);
 
 heater_t *object_create(const char *name, void *config_ptr,
@@ -67,6 +68,7 @@ heater_t *object_create(const char *name, void *config_ptr,
     heater->object.update = heater_update;
     heater->object.destroy = heater_destroy;
     heater->object.exec_command = heater_set_temp;
+    heater->object.get_state = heater_status;
     heater->object.name = strdup(name);
     heater->call_data = call_data;
     heater->pos = 0;
@@ -113,6 +115,13 @@ int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     }
 
     return 0;
+}
+
+void heater_status(core_object_t *object, void *status) {
+    heater_status_t *s = (heater_status_t *)status;
+    heater_t *heater = (heater_t *)object;
+
+    s->temperature = heater->temp;
 }
 
 static float powout(float value, uint8_t p) {

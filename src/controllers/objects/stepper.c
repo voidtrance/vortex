@@ -1,6 +1,7 @@
 #include "object_defs.h"
 #include "../common_defs.h"
 #include "../utils.h"
+#include "stepper.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -47,16 +48,11 @@ struct stepper_move_args {
     uint32_t steps;
 };
 
-struct stepper_status {
-    uint8_t enabled;
-    uint64_t steps;
-};
-
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep);
 int stepper_exec(core_object_t *object, core_object_command_t *cmd);
 int stepper_enable(core_object_t *object, void *args);
 int stepper_move(core_object_t *object, void *args);
-void *stepper_status(core_object_t *object);
+void stepper_status(core_object_t *object, void *status);
 void stepper_destroy(core_object_t *object);
 
 typedef int (*command_func_t)(core_object_t *object, void *args);
@@ -135,6 +131,14 @@ int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
     stepper->current_cmd = cmd;
     ret = command_handlers[cmd->object_cmd_id](object, cmd->args);
     return ret;
+}
+
+void stepper_status(core_object_t *object, void *status) {
+    stepper_status_t *s = (stepper_status_t *)status;
+    stepper_t *stepper = (stepper_t *)object;
+
+    s->enabled = stepper->enabled;
+    s->steps = stepper->current_step;
 }
 
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
