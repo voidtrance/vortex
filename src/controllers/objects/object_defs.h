@@ -16,6 +16,7 @@ typedef enum {
     OBJECT_TYPE_FAN,
     OBJECT_TYPE_HEATER,
     OBJECT_TYPE_THERMISTOR,
+    OBJECT_TYPE_PROBE,
     OBJECT_TYPE_MAX
 } core_object_type_t;
 
@@ -28,6 +29,7 @@ static const char *const ObjectTypeExportNames[] = {
     [OBJECT_TYPE_FAN] = stringify(OBJECT_TYPE_FAN),
     [OBJECT_TYPE_HEATER] = stringify(OBJECT_TYPE_HEATER),
     [OBJECT_TYPE_THERMISTOR] = stringify(OBJECT_TYPE_THERMISTOR),
+    [OBJECT_TYPE_PROBE] = stringify(OBJECT_TYPE_PROBE),
 };
 
 static const char *const ObjectTypeNames[] = {
