@@ -7,11 +7,13 @@
  * an entry in this enum with the event type.
  */
 typedef enum {
+    OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
     OBJECT_EVENT_HEATER_TEMP_REACHED,
     OBJECT_EVENT_MAX,
 } core_object_event_type_t;
 
 const char *OBJECT_EVENT_NAMES[] = {
+    [OBJECT_EVENT_STEPPER_MOVE_COMPLETE] = "STEPPER_MOVE_COMPLETE",
     [OBJECT_EVENT_HEATER_TEMP_REACHED] = "HEATER_TEMP_REACHED",
 };
 
@@ -21,6 +23,10 @@ const char *OBJECT_EVENT_NAMES[] = {
  * Each event will have a matching data structure that
  * describes the data the event will provide.
  */
+typedef struct {
+    uint64_t steps;
+} stepper_move_comeplete_event_data_t;
+
 typedef struct {
     float temp;
 } heater_temp_reached_event_data_t;

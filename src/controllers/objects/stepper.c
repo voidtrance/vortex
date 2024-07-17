@@ -154,9 +154,17 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 	    stepper->current_step += steps;
 	stepper->steps -= steps;
     } else if (stepper->current_cmd) {
+	stepper_move_comeplete_event_data_t data;
+
+	data.steps = stepper->current_step;
+
 	stepper->call_data->completion_callback(
 	    stepper->current_cmd->command_id, 0,
 	    stepper->call_data->completion_data);
+	stepper->call_data->event_submit(
+	    OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
+	    core_object_to_id((core_object_t *)stepper),
+	    &data, stepper->call_data->event_submit_data);
 	stepper->current_cmd = NULL;
 	stepper->steps = 0.0;
     }

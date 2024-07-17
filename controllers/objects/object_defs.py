@@ -24,12 +24,15 @@ class Stepper(ObjectDef):
     class StepperStatus(ctypes.Structure):
         _fields_ = [("enabled", ctypes.c_uint8),
                     ("steps", ctypes.c_uint64)]
+    class StepperMoveCompleteEvent(ctypes.Structure):
+        _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
         super().__init__()
         self.type = ModuleTypes.STEPPER
         self.config = self.StepperConfig
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
                          (1, "move", self.StepperMoveCommandOpts, (0, 0))]
+        self.events = {ModuleEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
         
 class Thermistor(ObjectDef):
     class ThermistorConfig(ctypes.Structure):
