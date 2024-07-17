@@ -136,7 +136,7 @@ class Emulator:
             return
         self._frontend.run()
         while self._run_emulation:
-            timestep = self._controller.get_timestep()
+            timestep = self._controller.get_clock_ticks()
             self._schedule_commands(timestep)
             self._process_schedule(timestep)
     

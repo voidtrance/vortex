@@ -78,12 +78,12 @@ typedef struct {
 static core_object_t *core_object_find(core_t *core,
 				       const core_object_type_t type,
 				       const char *name);
-void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data);
-void core_process_completions(void *user_data);
-void core_process_events(void *user_data);
+static void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data);
+static void core_process_completions(void *user_data);
+static void core_process_events(void *user_data);
 
 /* Object callbacks */
-void core_object_command_complete(const char *command_id, int result,
+static void core_object_command_complete(const char *command_id, int result,
 				  void *data);
 static int core_object_event_register(const core_object_type_t object_type,
 				      const core_object_event_type_t event,
@@ -100,7 +100,8 @@ static int core_object_event_submit(const core_object_event_type_t event,
 
 static core_call_data_t core_call_data = { 0 };
 
-PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
+static PyObject *core_new(PyTypeObject *type, PyObject *args,
+			  PyObject *kwargs) {
     core_t *core;
 
     core = (core_t *)type->tp_alloc(type, 0);
@@ -131,7 +132,7 @@ PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
     return (PyObject *)core;
 }
 
-int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
+static int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     core_object_type_t type;
     core_object_event_type_t event;
 
@@ -151,7 +152,7 @@ int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     return 0;
 }
 
-void core_dealloc(core_t *self) {
+static void core_dealloc(core_t *self) {
     core_object_type_t type;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
@@ -174,7 +175,7 @@ void core_dealloc(core_t *self) {
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
-PyObject *core_start(PyObject *self, PyObject *args) {
+static PyObject *core_start(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     uint64_t frequency;
     int ret;
@@ -208,7 +209,7 @@ PyObject *core_start(PyObject *self, PyObject *args) {
     return Py_None;
 }
 
-PyObject *core_stop(PyObject *self, PyObject *args) {
+static PyObject *core_stop(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     controller_timer_stop();
     Py_DECREF(core->python_complete_cb);
@@ -217,8 +218,8 @@ PyObject *core_stop(PyObject *self, PyObject *args) {
     return Py_None;
 }
 
-static unsigned long load_object(core_t *core, core_object_type_t klass,
-				 const char *name, void *config) {
+static core_object_id_t load_object(core_t *core, core_object_type_t klass,
+				    const char *name, void *config) {
     core_object_t *new_obj;
     char *libname[] = {
         [OBJECT_TYPE_STEPPER] = "controllers/objects/stepper.so",
@@ -252,7 +253,8 @@ static unsigned long load_object(core_t *core, core_object_type_t klass,
     return (core_object_id_t)new_obj;
 }
 
-PyObject *core_create_object(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *core_create_object(PyObject *self, PyObject *args,
+				    PyObject *kwargs) {
     char *kw[] = {"klass", "name", "options", NULL};
     int klass;
     char *name;
@@ -275,7 +277,8 @@ PyObject *core_create_object(PyObject *self, PyObject *args, PyObject *kwargs) {
     return id;
 }
 
-PyObject *core_exec_command(PyObject *self, PyObject *args, PyObject *kwargs) {
+static PyObject *core_exec_command(PyObject *self, PyObject *args,
+				   PyObject *kwargs) {
     char *kw[] = {"command_id", "object_id", "subcommand_id", "args", NULL};
     core_t *core = (core_t *)self;
     char *cmd_id = NULL;
@@ -306,7 +309,8 @@ PyObject *core_exec_command(PyObject *self, PyObject *args, PyObject *kwargs) {
     return rc;
 }
 
-void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data) {
+static void core_object_update(uint64_t ticks, uint64_t runtime,
+			       void *user_data) {
     core_t *self = (core_t *)user_data;
     core_object_type_t type;
 
@@ -324,7 +328,7 @@ void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data) {
     }
 }
 
-void core_process_completions(void *arg) {
+static void core_process_completions(void *arg) {
     core_t *core = (core_t *)arg;
     core_object_completion_data_t *comps = core->completions;
 
@@ -349,7 +353,8 @@ void core_process_completions(void *arg) {
 
 }
 
-void core_object_command_complete(const char *cmd_id, int result, void *data) {
+static void core_object_command_complete(const char *cmd_id, int result,
+					 void *data) {
     core_t *core = (core_t *)data;
     core_object_completion_data_t *comps = core->completions;
 
@@ -595,13 +600,13 @@ static PyObject *core_python_event_unregister(PyObject *self, PyObject *args) {
     Py_RETURN_FALSE;
 }
 
-PyObject *core_get_ticks(PyObject *self, PyObject *args) {
+static PyObject *core_get_ticks(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     PyObject *ticks = PyLong_FromUnsignedLongLong(core->ticks);
     return ticks;
 }
 
-PyObject *core_get_runtime(PyObject *self, PyObject *args) {
+static PyObject *core_get_runtime(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     PyObject *runtime = PyLong_FromUnsignedLongLong(core->runtime);
     return runtime;
