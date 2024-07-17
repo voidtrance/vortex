@@ -303,12 +303,15 @@ static PyObject *core_exec_command(PyObject *self, PyObject *args,
         return NULL;
     }
 
-    cmd->command_id = cmd_id;
-    cmd->object_cmd_id = obj_cmd_id;
-    cmd->args = cmd_args;
-    LIST_INSERT_HEAD(&core->cmds, cmd, entry);
+    if (object->exec_command) {
+	cmd->command_id = cmd_id;
+	cmd->object_cmd_id = obj_cmd_id;
+	cmd->args = cmd_args;
+	LIST_INSERT_HEAD(&core->cmds, cmd, entry);
 
-    ret = object->exec_command(object, cmd);
+	ret = object->exec_command(object, cmd);
+    }
+
     rc = Py_BuildValue("i", ret);
     return rc;
 }
