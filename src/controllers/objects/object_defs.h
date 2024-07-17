@@ -1,6 +1,5 @@
 #ifndef __OBJECT_DEFS_H__
 #define __OBJECT_DEFS_H__
-
 #include <stdint.h>
 #include <sys/queue.h>
 #include <stdlib.h>
@@ -40,7 +39,11 @@ static const char *const ObjectTypeNames[] = {
     [OBJECT_TYPE_FAN] = "fan",
     [OBJECT_TYPE_HEATER] = "heater",
     [OBJECT_TYPE_THERMISTOR] = "thermistor",
+    [OBJECT_TYPE_PROBE] = "probe",
 };
+
+typedef unsigned long core_object_id_t;
+#define CORE_OBJECT_ID_INVALID (-1UL)
 
 /*
  * Common command structure. This structure will be
@@ -103,5 +106,15 @@ struct core_object {
     void *(*get_state)(core_object_t *object);
     void (*destroy)(core_object_t *object);
 };
+
+static inline core_object_id_t core_object_to_id(core_object_t *object) {
+    return (core_object_id_t)object;
+}
+
+static inline core_object_t *core_id_to_object(core_object_id_t id) {
+    if (id != CORE_OBJECT_ID_INVALID)
+	return (core_object_t *)id;
+    return NULL;
+}
 
 #endif

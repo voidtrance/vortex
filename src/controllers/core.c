@@ -6,6 +6,7 @@
 #include "utils.h"
 #include <Python.h>
 #include <dlfcn.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -33,15 +34,25 @@ typedef struct {
 
 typedef struct event_subscription {
     STAILQ_ENTRY(event_subscription) entry;
-    const char *object_name;
-    core_object_t *object;
-    event_handler_t handler;
+    core_object_type_t object_type;
+    core_object_id_t object_id;
+    bool is_python;
+    union {
+	struct {
+	    core_object_t *object;
+	    event_handler_t handler;
+	} core;
+	struct {
+	    PyObject *handler;
+	} python;
+    };
 } event_subscription_t;
 
 typedef struct event {
     STAILQ_ENTRY(event) entry;
-    core_object_event_t type;
-    const char *name;
+    core_object_event_type_t type;
+    core_object_type_t object_type;
+    core_object_id_t object_id;
     void *data;
 } core_event_t;
 
@@ -64,21 +75,28 @@ typedef struct {
     core_events_t events;
 } core_t;
 
+static core_object_t *core_object_find(core_t *core,
+				       const core_object_type_t type,
+				       const char *name);
 void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data);
 void core_process_completions(void *user_data);
 void core_process_events(void *user_data);
 
 /* Object callbacks */
 void core_object_command_complete(const char *command_id, int result,
-                                  void *data);
-int core_object_event_register(const core_object_event_t event,
-                               const char *name, core_object_t *object,
-                               event_handler_t handler, void *user_data);
-int core_object_event_unregister(const core_object_event_t event,
-                                 const char *name, core_object_t *object,
-                                 event_handler_t handler, void *user_data);
-int core_object_event_submit(const core_object_event_t event, const char *name,
-			     void *event_data, void *user_data);
+				  void *data);
+static int core_object_event_register(const core_object_type_t object_type,
+				      const core_object_event_type_t event,
+				      const char *name, core_object_t *object,
+				      event_handler_t handler, void *user_data);
+static int core_object_event_unregister(const core_object_type_t object_type,
+					const core_object_event_type_t event,
+					const char *name, core_object_t *object,
+					event_handler_t handler,
+					void *user_data);
+static int core_object_event_submit(const core_object_event_type_t event,
+				    const core_object_id_t id,
+				    void *event_data, void *user_data);
 
 static core_call_data_t core_call_data = { 0 };
 
@@ -115,7 +133,7 @@ PyObject *core_new(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
 
 int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     core_object_type_t type;
-    core_object_event_t event;
+    core_object_event_type_t event;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++)
         LIST_INIT(&self->objects[type]);
@@ -169,6 +187,7 @@ PyObject *core_start(PyObject *self, PyObject *args) {
         PyErr_Format(CoreError, "Completion callback is not callable");
         return NULL;
     }
+
     Py_INCREF(core->python_complete_cb);
 
     ret = controller_timer_start(core_object_update,
@@ -230,7 +249,7 @@ static unsigned long load_object(core_t *core, core_object_type_t klass,
         return -1UL;
 
     LIST_INSERT_HEAD(&core->objects[klass], new_obj, entry);
-    return (unsigned long)new_obj;
+    return (core_object_id_t)new_obj;
 }
 
 PyObject *core_create_object(PyObject *self, PyObject *args, PyObject *kwargs) {
@@ -238,7 +257,7 @@ PyObject *core_create_object(PyObject *self, PyObject *args, PyObject *kwargs) {
     int klass;
     char *name;
     void *options = NULL;
-    unsigned long object_id;
+    core_object_id_t object_id;
     PyObject *id;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "isk", kw, &klass, &name,
@@ -346,15 +365,31 @@ void core_object_command_complete(const char *cmd_id, int result, void *data) {
 	    comps->entries = (struct __comp_entry *)ptr;
 	    comps->size *= 2;
 	} else {
-	    printf("Resizing of completion entries failed! Completions can be missed");
+	    printf("Resizing of completion entries failed! "
+		   "Completions can be missed");
 	}
 
     }
 }
 
-int core_object_event_register(const core_object_event_t event,
-                               const char *name, core_object_t *object,
-                               event_handler_t handler, void *data) {
+static core_object_t *core_object_find(core_t *core,
+				       const core_object_type_t type,
+				       const char *name) {
+    core_object_t *object;
+
+    LIST_FOREACH(object, &core->objects[type], entry) {
+	if (!strncmp(object->name, name, strlen(object->name)))
+	    return object;
+    }
+
+    return NULL;
+}
+
+
+static int core_object_event_register(const core_object_type_t object_type,
+				      const core_object_event_type_t event,
+				      const char *name, core_object_t *object,
+				      event_handler_t handler, void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
 
@@ -362,54 +397,75 @@ int core_object_event_register(const core_object_event_t event,
     if(!subscription)
 	return -1;
 
-    subscription->handler = handler;
-    subscription->object = object;
-    subscription->object_name = strdup(name);
+    subscription->object_type = object_type;
+    if (name) {
+	core_object_t *object = core_object_find(core, object_type, name);
+
+	if (!object) {
+	    free(subscription);
+	    return -1;
+	}
+
+	subscription->object_id = core_object_to_id(object);
+    } else {
+	subscription->object_id = CORE_OBJECT_ID_INVALID;
+    }
+
+    subscription->is_python = false;
+    subscription->core.handler = handler;
+    subscription->core.object = object;
     STAILQ_INSERT_TAIL(&core->event_handlers[event], subscription, entry);
     return 0;
 }
 
-int core_object_event_unregister(const core_object_event_t event,
-				 const char *name, core_object_t *object,
-				 event_handler_t handler, void *data) {
+static int core_object_event_unregister(const core_object_type_t object_type,
+					const core_object_event_type_t event,
+					const char *name, core_object_t *object,
+					event_handler_t handler, void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
     event_subscription_t *next;
+    core_object_t *obj = core_object_find(core, object_type, name);
 
     subscription = STAILQ_FIRST(&core->event_handlers[event]);
     while (subscription != NULL) {
 	next = STAILQ_NEXT(subscription, entry);
-	if (!strncmp(subscription->object_name, name, strlen(name)) &&
-	    subscription->object == object) {
+	if (subscription->object_type == object_type &&
+	    (subscription->object_id == CORE_OBJECT_ID_INVALID ||
+	     (object && subscription->object_id ==
+	      core_object_to_id(obj)))) {
 	    STAILQ_REMOVE(&core->event_handlers[event], subscription,
 			  event_subscription, entry);
-	    free((char *)subscription->object_name);
 	    free(subscription);
 	    return 0;
 	}
+
 	subscription = next;
     }
 
     return -1;
 }
 
-int core_object_event_submit(const core_object_event_t type, const char *name,
-                              void *event_data, void *user_data) {
+static int core_object_event_submit(const core_object_event_type_t type,
+				    const core_object_id_t id,
+				    void *event_data, void *user_data) {
     core_t *core = (core_t *)user_data;
     core_event_t *event;
+    core_object_t *object = (core_object_t *)id;
 
     event = calloc(1, sizeof(*event));
     if (!event)
 	return -1;
 
     event->type = type;
-    event->name = strdup(name);
+    event->object_type = object->type;
+    event->object_id = id;
     event->data = event_data;
     STAILQ_INSERT_TAIL(&core->events, event, entry);
     return 0;
 }
 
-void core_process_events(void *user_data) {
+static void core_process_events(void *user_data) {
     core_t *core = (core_t *)user_data;
     core_event_t *event;
     core_event_t *event_next;
@@ -424,27 +480,119 @@ void core_process_events(void *user_data) {
 	event_next = STAILQ_NEXT(event, entry);
 	STAILQ_FOREACH(subscription, &core->event_handlers[event->type],
 		       entry) {
-            if (!strncmp(subscription->object_name, event->name,
-                         strlen(event->name)))
-              subscription->handler(subscription->object, event->type,
-                                    event->name, event->data);
-        }
+	    if (subscription->object_type == event->object_type) {
+		core_object_t *object;
+
+		if (subscription->object_id != CORE_OBJECT_ID_INVALID &&
+		    subscription->object_id != event->object_id)
+		    continue;
+
+		object = core_id_to_object(event->object_id);
+		if (!subscription->is_python)
+		    subscription->core.handler(subscription->core.object,
+					       object->name, event->type,
+					       event->data);
+		else {
+		    PyGILState_STATE state = PyGILState_Ensure();
+		    PyObject *args = Py_BuildValue("(isik)", object->type,
+						   object->name, event->type,
+						   event->data);
+		    if (!args) {
+			PyErr_Print();
+			continue;
+		    }
+
+		    (void)PyObject_Call(subscription->python.handler,
+					args, NULL);
+		    Py_DECREF(args);
+		    if (PyErr_Occurred())
+			PyErr_Print();
+		    PyGILState_Release(state);
+		}
+	    }
+	}
 
 	STAILQ_REMOVE(&core->events, event, event, entry);
-	free((char *)event->name);
 	free(event);
 	event = event_next;
     }
 }
 
-PyObject *core_event_register(PyObject *self, PyObject *args,
-			      PyObject *kwargs) {
-    core_object_event_t type;
-    unsigned long obj_ptr;
+static PyObject *core_python_event_register(PyObject *self, PyObject *args) {
+    core_t *core = (core_t *)self;
+    event_subscription_t *subscription;
+    core_object_type_t object_type;
+    core_object_event_type_t type;
+    PyObject *callback;
     char *name;
 
-    Py_DECREF(Py_None);
-    return Py_None;
+    if (PyArg_ParseTuple(args, "iisO", &object_type, &type, &name, &callback)
+	== -1)
+	return NULL;
+
+    Py_INCREF(callback);
+
+    subscription = calloc(1, sizeof(*subscription));
+    if (!subscription)
+	Py_RETURN_FALSE;
+
+    if (name) {
+        core_object_t *object = core_object_find(core, object_type, name);
+
+	if (!object) {
+	    free(subscription);
+	    Py_RETURN_FALSE;
+	}
+
+	subscription->object_id = core_object_to_id(object);
+    } else {
+	subscription->object_id = CORE_OBJECT_ID_INVALID;
+    }
+
+    subscription->object_type = object_type;
+    subscription->is_python = true;
+    subscription->python.handler = callback;
+    STAILQ_INSERT_TAIL(&core->event_handlers[type], subscription, entry);
+    Py_RETURN_TRUE;
+}
+
+static PyObject *core_python_event_unregister(PyObject *self, PyObject *args) {
+    core_t *core = (core_t *)self;
+    event_subscription_t *subscription;
+    event_subscription_t *next;
+    core_object_type_t object_type;
+    core_object_event_type_t type;
+    core_object_id_t object_id = CORE_OBJECT_ID_INVALID;
+    char *name;
+
+    if (PyArg_ParseTuple(args, "iis", &object_type, &type, &name))
+	return NULL;
+
+    if (name) {
+	core_object_t *object = core_object_find(core, object_type, name);
+
+	if (object)
+	    object_id = core_object_to_id(object);
+    }
+
+    subscription = STAILQ_FIRST(&core->event_handlers[type]);
+    while (subscription != NULL) {
+	next = STAILQ_NEXT(subscription, entry);
+	if (subscription->object_type == object_type &&
+	    (subscription->object_id == CORE_OBJECT_ID_INVALID ||
+	     subscription->object_id == object_id)) {
+	    STAILQ_REMOVE(&core->event_handlers[type], subscription,
+			  event_subscription, entry);
+	    if (subscription->is_python)
+		Py_DECREF(subscription->python.handler);
+	    free(subscription);
+	    Py_RETURN_TRUE;
+	}
+
+	subscription = next;
+    }
+
+    Py_RETURN_FALSE;
 }
 
 PyObject *core_get_ticks(PyObject *self, PyObject *args) {
@@ -468,6 +616,10 @@ static PyMethodDef CoreMethods[] = {
      METH_VARARGS | METH_KEYWORDS, "Execute command"},
     {"get_clock_ticks", core_get_ticks, METH_NOARGS, "Get current tick count"},
     {"get_runtime", core_get_runtime, METH_NOARGS, "Get controller runtime"},
+    {"event_register", core_python_event_register, METH_VARARGS,
+     "Register to core object events"},
+    {"event_unregister", core_python_event_unregister, METH_VARARGS,
+     "Unregister from core object events"},
     {NULL, NULL, 0, NULL}
 };
 
@@ -493,7 +645,7 @@ static struct PyModuleDef Core_module = {
 PyMODINIT_FUNC PyInit_core(void) {
     PyObject *module = PyModule_Create(&Core_module);
     core_object_type_t type;
-    core_object_event_t event;
+    core_object_event_type_t event;
     PyObject *value_dict;
 
     if (PyType_Ready(&Core_Type) == -1) {

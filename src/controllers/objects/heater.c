@@ -173,10 +173,10 @@ void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     if (heater->temp == heater->target_temp) {
 	heater_temp_reached_event_data_t data;
 	data.temp = heater->temp;
-	heater->call_data->event_submit(OBJECT_EVENT_HEATER_TEMP_REACHED,
-					heater->object.name,
-					&data,
-					heater->call_data->event_submit_data);
+	heater->call_data->event_submit(
+	    OBJECT_EVENT_HEATER_TEMP_REACHED,
+	    core_object_to_id((core_object_t *)heater),
+	    &data, heater->call_data->event_submit_data);
 	heater->call_data->completion_callback(
 	    heater->command.command_id, 0, heater->call_data->completion_data);
     }

@@ -4,8 +4,10 @@ from collections import OrderedDict
 import logging
 from lib.constants import *
 from controllers.core import CoreError
-from ctypes import addressof
+import ctypes
 import time
+from controllers.types import ModuleTypes, ModuleEvents
+import controllers.objects.object_defs as odefs
 
 __all__ = ["Emulator"]
 
@@ -88,11 +90,43 @@ class Emulator:
         self._scheduled_queue = ScheduleQueue()
         self._run_emulation = True
         self._frequency = 0
+        self._event_handlers = {}
+        self._controller_object_data = {k: None for k in ModuleTypes}
+        for t in ModuleTypes:
+            object_def = getattr(odefs, str(t).capitalize(), None)
+            if not object_def:
+                continue
+            self._controller_object_data[t] = object_def()
+        self._controller_event_data = {k: {} for k in ModuleTypes}
+        for t in ModuleTypes:
+            if not self._controller_object_data[t]:
+                continue
+            self._controller_event_data[t].update(
+                {e: s for e, s in self._controller_object_data[t].events.items()})
 
     def set_frequency(self, frequency=0):
         if (frequency / MHZ2HZ) > 10:
             logging.warning("Frequency greater than 10MHz may result in inaccurate timing")
         self._frequency = frequency or self._controller.FREQUENCY
+
+    def register_event(self, object_type, event_type, object_name, handler):
+        if not self._controller.event_register(object_type, event_type,
+                                               object_name,
+                                               self._event_handler):
+            return False
+        self._event_handlers[(object_type, event_type, object_name)] = handler
+        return True
+    
+    def unregister_event(self, object_type, event_type, object_name):
+        self._event_handlers.pop((object_type, event_type, object_name))
+        return self._controller.event_unregister(object_type, event_type, object_name)
+    
+    def _event_handler(self, object_type, event_type, object_name, data):
+        event_data_def = self._controller_event_data[object_type][event_type]
+        pointer = ctypes.cast(data, ctypes.POINTER(event_data_def))
+        data = pointer.contents
+        handler = self._event_handlers[(object_type, event_type, object_name)]
+        handler(object_type, event_type, object_name, data)
 
     def run(self):
         try:
@@ -122,7 +156,8 @@ class Emulator:
     def _process_schedule(self, timestamp):
         for command in self._scheduled_queue.get_all(timestamp):
             ret = self._controller.exec_command(command.id, command.obj_id,
-                                                command.cmd_id, addressof(command.opts))
+                                                command.cmd_id,
+                                                ctypes.addressof(command.opts))
             if ret:
                 logging.error("Failed to execute command")
             time.sleep(0.001)
