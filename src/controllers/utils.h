@@ -2,7 +2,7 @@
 #define __UTILS_H__
 #include <stdint.h>
 
-#define SEC_TO_MSEC(x) ((x)*1000)
+#define SEC_TO_MSEC(x) ((uint64_t)(x)*1000)
 #define MSEC_TO_USEC(x) SEC_TO_MSEC(x)
 #define SEC_TO_USEC(x) (SEC_TO_MSEC(x) * 1000)
 #define MSEC_TO_NSEC(x) SEC_TO_USEC(x)
