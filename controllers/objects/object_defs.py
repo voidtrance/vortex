@@ -37,6 +37,7 @@ class Stepper(ObjectDef):
 class Thermistor(ObjectDef):
     class ThermistorConfig(ctypes.Structure):
         _fields_ = [("sensor_type", ctypes.c_char * 64),
+                    ("heater", ctypes.c_char * 64),
                     ("beta", ctypes.c_uint32)]
     class ThermistorStatus(ctypes.Structure):
         _fields_ = [("resistance", ctypes.c_float)]
@@ -47,14 +48,11 @@ class Thermistor(ObjectDef):
         self.state = self.ThermistorStatus
 class Heater(ObjectDef):
     class HeaterConfig(ctypes.Structure):
-        _fields_ = [("sensor_type", ctypes.c_char * 64),
-                    ("beta", ctypes.c_uint32),
-                    ("power", ctypes.c_uint16)]
+        _fields_ = [("power", ctypes.c_uint16)]
     class HeaterSetTempCommandOpts(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_uint32)]
     class HeaterStatus(ctypes.Structure):
-        _fields_ = [("temperature", ctypes.c_uint32),
-                    ("power", ctypes.c_uint16)]
+        _fields_ = [("temperature", ctypes.c_uint32)]
     class HeaterEventTempReached(ctypes.Structure):
         _fields_ = [("temp", ctypes.c_float)]
     def __init__(self):
@@ -64,4 +62,4 @@ class Heater(ObjectDef):
         self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,))]
         self.events = {ModuleEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
 
-__objects__ = [Stepper, Heater]
+__objects__ = [Stepper, Thermistor, Heater]

@@ -17,8 +17,6 @@ enum {
 };
 
 typedef struct {
-    char sensor_type[64];
-    uint32_t beta_value;
     uint16_t power;
 } heater_config_params_t;
 
@@ -36,18 +34,12 @@ typedef struct {
     core_call_data_t *call_data;
     core_object_command_t command;
     uint64_t timestep;
-    thermistor_type_t type;
-    uint32_t beta_value;
     float set_temp;
     float target_temp;
     float base_temp;
     float temp;
-    float resistance;
     uint64_t ramp_duration;
     uint64_t pos;
-    float a;
-    float b;
-    float c;
 } heater_t;
 
 void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestamp);
@@ -73,21 +65,6 @@ heater_t *object_create(const char *name, void *config_ptr,
     heater->call_data = call_data;
     heater->pos = 0;
     heater->ramp_duration = SEC_TO_NSEC(120.0 * 100 / config->power);
-    printf("duration: %lu nsec\n", heater->ramp_duration);
-
-    if (!strncmp(config->sensor_type, "pt100", 5) ||
-	!strncmp(config->sensor_type, "PT100", 5))
-	heater->type = SENSOR_TYPE_PT100;
-    else if (!strncmp(config->sensor_type, "pt1000", 6) ||
-	     !strncmp(config->sensor_type, "PT1000", 6))
-	heater->type = SENSOR_TYPE_PT1000;
-    else {
-	heater->type = SENSOR_TYPE_B3950;
-	heater->beta_value = config->beta_value;
-	calc_coefficiants(b3950_nominal_t, b3950_nominal_r,
-			  heater->beta_value, &heater->a,
-			  &heater->b, &heater->c);
-    }
 
     return heater;
 }
@@ -153,6 +130,7 @@ static float interpolate(uint64_t *p_pos, float base, float limit,
 void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     heater_t *heater = (heater_t *)object;
     uint64_t time_delta = timestep - heater->timestep;
+    heater_temp_reached_event_data_t data;
 
     heater->timestep = timestep;
     if (heater->set_temp == 0.0 || heater->temp == heater->set_temp)
@@ -167,30 +145,16 @@ void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 			       heater->ramp_duration);
     heater->temp = roundl(heater->temp * 100) / 100;
 
-    switch (heater->type) {
-    case SENSOR_TYPE_PT100:
-	heater->resistance = pt100_resistance(heater->temp);
-	break;
-    case SENSOR_TYPE_PT1000:
-	heater->resistance = pt1000_resistance(heater->temp);
-	break;
-    case SENSOR_TYPE_B3950:
-	heater->resistance = beta_resistance(heater->temp, heater->a,
-					     heater->b, heater->c);
-    default:
-	break;
-    }
-    //printf("resistance: %f\n");
-    if (heater->temp == heater->target_temp) {
-	heater_temp_reached_event_data_t data;
-	data.temp = heater->temp;
-	heater->call_data->event_submit(
-	    OBJECT_EVENT_HEATER_TEMP_REACHED,
-	    core_object_to_id((core_object_t *)heater),
-	    &data, heater->call_data->event_submit_data);
-	heater->call_data->completion_callback(
-	    heater->command.command_id, 0, heater->call_data->completion_data);
-    }
+    if (heater->temp != heater->target_temp)
+	return;
+
+    data.temp = heater->temp;
+    heater->call_data->event_submit(OBJECT_EVENT_HEATER_TEMP_REACHED,
+				    core_object_to_id((core_object_t *)heater),
+				    &data,
+				    heater->call_data->event_submit_data);
+    heater->call_data->completion_callback(heater->command.command_id, 0,
+					   heater->call_data->completion_data);
 }
 
 void heater_destroy(core_object_t *object) {

@@ -75,9 +75,8 @@ typedef struct {
     core_events_t events;
 } core_t;
 
-static core_object_t *core_object_find(core_t *core,
-				       const core_object_type_t type,
-				       const char *name);
+static core_object_t *core_object_find(const core_object_type_t type,
+				       const char *name, void *data);
 static void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data);
 static void core_process_completions(void *user_data);
 static void core_process_events(void *user_data);
@@ -120,6 +119,8 @@ static PyObject *core_new(PyTypeObject *type, PyObject *args,
 	return NULL;
     }
 
+    core_call_data.object_lookup = core_object_find;
+    core_call_data.object_lookup_data = core;
     core_call_data.completion_callback = core_object_command_complete;
     core_call_data.completion_data = core;
     core_call_data.event_register = core_object_event_register;
@@ -384,9 +385,9 @@ static void core_object_command_complete(const char *cmd_id, int result,
     }
 }
 
-static core_object_t *core_object_find(core_t *core,
-				       const core_object_type_t type,
-				       const char *name) {
+static core_object_t *core_object_find(const core_object_type_t type,
+				       const char *name, void *data) {
+    core_t *core = (core_t *)data;
     core_object_t *object;
 
     LIST_FOREACH(object, &core->objects[type], entry) {
@@ -411,7 +412,7 @@ static int core_object_event_register(const core_object_type_t object_type,
 
     subscription->object_type = object_type;
     if (name) {
-	core_object_t *object = core_object_find(core, object_type, name);
+	core_object_t *object = core_object_find(object_type, name, core);
 
 	if (!object) {
 	    free(subscription);
@@ -437,7 +438,7 @@ static int core_object_event_unregister(const core_object_type_t object_type,
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
     event_subscription_t *next;
-    core_object_t *obj = core_object_find(core, object_type, name);
+    core_object_t *obj = core_object_find(object_type, name, core);
 
     subscription = STAILQ_FIRST(&core->event_handlers[event]);
     while (subscription != NULL) {
@@ -549,7 +550,7 @@ static PyObject *core_python_event_register(PyObject *self, PyObject *args) {
 	Py_RETURN_FALSE;
 
     if (name) {
-        core_object_t *object = core_object_find(core, object_type, name);
+        core_object_t *object = core_object_find(object_type, name, core);
 
 	if (!object) {
 	    free(subscription);
@@ -581,7 +582,7 @@ static PyObject *core_python_event_unregister(PyObject *self, PyObject *args) {
 	return NULL;
 
     if (name) {
-	core_object_t *object = core_object_find(core, object_type, name);
+	core_object_t *object = core_object_find(object_type, name, core);
 
 	if (object)
 	    object_id = core_object_to_id(object);

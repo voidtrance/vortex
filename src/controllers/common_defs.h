@@ -3,12 +3,17 @@
 #include "objects/object_defs.h"
 #include "events.h"
 
+typedef core_object_t *(*object_lookup_cb_t)(const core_object_type_t,
+					     const char *, void *);
 typedef void (*complete_cb_t)(const char *, int, void *);
 
 /*
  * Data structure given to all the objects.
  */
 typedef struct {
+    object_lookup_cb_t object_lookup;
+    void *object_lookup_data;
+
     /* Callback that object call when a command is complete */
     complete_cb_t completion_callback;
 
