@@ -222,11 +222,15 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
 				    const char *name, void *config) {
     core_object_t *new_obj;
     char *libname[] = {
-        [OBJECT_TYPE_STEPPER] = "controllers/objects/stepper.so",
+	[OBJECT_TYPE_NONE] = NULL,
+	[OBJECT_TYPE_STEPPER] = "controllers/objects/stepper.so",
 	[OBJECT_TYPE_DIGITAL_PIN] = "controllers/objects/dpin.so",
 	[OBJECT_TYPE_PWM_PIN] = "controllers/objects/pwmpin.so",
 	[OBJECT_TYPE_ENDSTOP] = "controllers/objects/endstop.so",
+	[OBJECT_TYPE_FAN] = "controllers/objects/fan.so",
 	[OBJECT_TYPE_HEATER] = "controllers/objects/heater.so",
+	[OBJECT_TYPE_THERMISTOR] = "controllers/objects/thermistor.so",
+	[OBJECT_TYPE_PROBE] = "controllers/objects/probe.so",
     };
 
     if (!core->object_libs[klass]) {
