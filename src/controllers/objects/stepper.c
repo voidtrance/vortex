@@ -80,8 +80,6 @@ stepper_t *object_create(const char *name, void *config_ptr,
     stepper->call_data = call_data;
 
     clock_speed = str_to_hertz(config->clock_speed);
-    printf("Stepper: %u, %u, %u\n", config->steps_per_rotation,
-	   config->microsteps, clock_speed);
 
     // TMC2209: RPS = (VACTUAL[2209] * fCLK[Hz] / 2^24) / microsteps / spr
     // TMC5560: RPS = (VACTUAL[5560] *(fCLK[Hz]/2 / 2^23)) / microsteps / spr
@@ -143,7 +141,6 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     stepper_t *stepper = (stepper_t *)object;
     uint64_t delta  = timestep - stepper->last_timestep;
 
-    //printf("delta: %lu, %f\n", delta, stepper->spns);
     if (stepper->steps > 0.0) {
 	float steps = stepper->spns * delta;
 	if (stepper->dir == MOVE_DIR_BACK)

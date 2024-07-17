@@ -73,7 +73,6 @@ int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     heater_t *heater = (heater_t *)object;
     struct heater_set_temperature_args *args;
 
-    printf("got command: %u\n", cmd->object_cmd_id);
     if (cmd->object_cmd_id != HEATER_COMMAND_SET_TEMP)
 	return -1;
 
