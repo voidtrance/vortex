@@ -117,4 +117,8 @@ static inline core_object_t *core_id_to_object(core_object_id_t id) {
     return NULL;
 }
 
+static inline void core_object_destroy(core_object_t *object) {
+    free((char *)object->name);
+}
+
 #endif

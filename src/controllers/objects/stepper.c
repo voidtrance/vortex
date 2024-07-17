@@ -172,5 +172,7 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 
 void stepper_destroy(core_object_t *object) {
     stepper_t *stepper = (stepper_t *)object;
+
+    core_object_destroy(object);
     free(stepper);
 }

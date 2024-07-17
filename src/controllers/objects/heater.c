@@ -195,6 +195,7 @@ void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 
 void heater_destroy(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
-    free((void *)heater->object.name);
+
+    core_object_destroy(object);
     free(heater);
 }
