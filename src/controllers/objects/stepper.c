@@ -37,7 +37,7 @@ typedef struct {
     float spns;
     stepper_move_dir_t dir;
     bool enabled;
-} Stepper_t;
+} stepper_t;
 
 struct stepper_enable_args {
     int enable;
@@ -62,9 +62,9 @@ static const command_func_t command_handlers[] = {
     [STEPPER_COMMAND_MOVE] = stepper_move,
 };
 
-Stepper_t *object_create(const char *name, void *config_ptr,
+stepper_t *object_create(const char *name, void *config_ptr,
 			 core_call_data_t *call_data) {
-    Stepper_t *stepper;
+    stepper_t *stepper;
     stepper_config_params_t *config = (stepper_config_params_t *)config_ptr;
     uint32_t clock_speed = 0;
 
@@ -89,13 +89,12 @@ Stepper_t *object_create(const char *name, void *config_ptr,
 	config->steps_per_rotation;
     stepper->spns = (config->steps_per_rotation * stepper->rps) /
 	SEC_TO_NSEC(1);
-    printf("s/ns = %f\n", stepper->spns);
 
     return stepper;
 }
 
 int stepper_enable(core_object_t *object, void *args) {
-    Stepper_t *stepper = (Stepper_t *)object;
+    stepper_t *stepper = (stepper_t *)object;
     struct stepper_enable_args *opts = (struct stepper_enable_args *)args;
 
     stepper->enabled = !!opts->enable;
@@ -107,7 +106,7 @@ int stepper_enable(core_object_t *object, void *args) {
 }
 
 int stepper_move(core_object_t *object, void *args) {
-    Stepper_t *stepper = (Stepper_t *)object;
+    stepper_t *stepper = (stepper_t *)object;
     struct stepper_move_args *opts = (struct stepper_move_args *)args;
 
     if (!stepper->enabled) {
@@ -115,14 +114,13 @@ int stepper_move(core_object_t *object, void *args) {
 	return -1;
     }
 
-    printf("opt: %u %u\n", opts->direction, opts->steps);
     stepper->dir = opts->direction;
     stepper->steps = opts->steps;
     return 0;
 }
 
 int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
-    Stepper_t *stepper = (Stepper_t *)object;
+    stepper_t *stepper = (stepper_t *)object;
     int ret;
 
     if (stepper->current_cmd)
@@ -142,7 +140,7 @@ void stepper_status(core_object_t *object, void *status) {
 }
 
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
-    Stepper_t *stepper = (Stepper_t *)object;
+    stepper_t *stepper = (stepper_t *)object;
     uint64_t delta  = timestep - stepper->last_timestep;
 
     //printf("delta: %lu, %f\n", delta, stepper->spns);
@@ -173,6 +171,6 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 }
 
 void stepper_destroy(core_object_t *object) {
-    Stepper_t *stepper = (Stepper_t *)object;
+    stepper_t *stepper = (stepper_t *)object;
     free(stepper);
 }
