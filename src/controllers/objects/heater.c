@@ -100,8 +100,11 @@ int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
 
     heater->command = *cmd;
     args = (struct heater_set_temperature_args *)cmd->args;
+    if (args->temperature < AMBIENT_TEMP)
+	return -1;
+
     heater->set_temp = args->temperature;
-    if (heater->set_temp) {
+    if (heater->set_temp > AMBIENT_TEMP) {
         heater->base_temp = AMBIENT_TEMP;
         heater->target_temp = heater->set_temp;
     } else {
