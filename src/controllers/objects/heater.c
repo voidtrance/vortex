@@ -39,9 +39,9 @@ typedef struct {
     uint32_t beta_value;
     float set_temp;
     float target_temp;
-    long double base_temp;
-    long double temp;
-    long double resistance;
+    float base_temp;
+    float temp;
+    float resistance;
     uint64_t ramp_duration;
     uint64_t pos;
     float a;
@@ -112,24 +112,23 @@ int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     return 0;
 }
 
-static long double powout(long double value, uint8_t p) {
+static float powout(float value, uint8_t p) {
     if (value == 0 || value == 1)
 	return value;
     return 1 - powl(1 - value, p);
 }
 
-static long double interpolate(uint64_t *p_pos, long double base,
-			       long double limit, uint64_t time_delta,
-			       uint64_t dur) {
-    long double step_val;
+static float interpolate(uint64_t *p_pos, float base, float limit,
+			 uint64_t time_delta, uint64_t dur) {
+    float step_val;
     uint64_t pos = *p_pos;
-    long double val;
+    float val;
 
     if (base <= limit)
 	pos = min(pos + time_delta, dur);
     else
 	pos = max(pos - time_delta, 0);
-    step_val = (long double)pos / dur;
+    step_val = (float)pos / dur;
     if (base <= limit)
 	val = (base + (limit - base) * powout(step_val, 3));
     else
