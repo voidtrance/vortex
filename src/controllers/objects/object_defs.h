@@ -17,6 +17,7 @@ typedef enum {
     OBJECT_TYPE_HEATER,
     OBJECT_TYPE_THERMISTOR,
     OBJECT_TYPE_PROBE,
+    OBJECT_TYPE_AXIS,
     OBJECT_TYPE_MAX
 } core_object_type_t;
 
@@ -30,6 +31,7 @@ static const char *const ObjectTypeExportNames[] = {
     [OBJECT_TYPE_HEATER] = stringify(OBJECT_TYPE_HEATER),
     [OBJECT_TYPE_THERMISTOR] = stringify(OBJECT_TYPE_THERMISTOR),
     [OBJECT_TYPE_PROBE] = stringify(OBJECT_TYPE_PROBE),
+    [OBJECT_TYPE_AXIS] = stringify(OBJECT_TYPE_AXIS),
 };
 
 static const char *const ObjectTypeNames[] = {
@@ -42,6 +44,7 @@ static const char *const ObjectTypeNames[] = {
     [OBJECT_TYPE_HEATER] = "heater",
     [OBJECT_TYPE_THERMISTOR] = "thermistor",
     [OBJECT_TYPE_PROBE] = "probe",
+    [OBJECT_TYPE_AXIS] = "axis",
 };
 
 typedef unsigned long core_object_id_t;

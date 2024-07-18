@@ -64,4 +64,36 @@ class Heater(ObjectDef):
         self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,))]
         self.events = {ModuleEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
 
-__objects__ = [Stepper, Thermistor, Heater]
+class Endstop(ObjectDef):
+    class EndstopConfig(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_char * 4),
+                    ("axis", ctypes.c_char * 64)]
+    class EndstopStatus(ctypes.Structure):
+        _fields_ = [("triggered", ctypes.c_bool)]
+    class EndstopTriggerEvent(ctypes.Structure):
+        _fields_ = [("triggered", ctypes.c_bool)]
+    def __init__(self):
+        super().__init__()
+        self.type = ModuleTypes.ENDSTOP
+        self.config = self.EndstopConfig
+        self.events = {ModuleEvents.ENDSTOP_TRIGGER: self.EndstopTriggerEvent}
+        self.state = self.EndstopStatus
+
+class Axis(ObjectDef):
+    class AxisConfig(ctypes.Structure):
+        _fields_ = [("length", ctypes.c_uint16),
+                    ("mm_per_step", ctypes.c_float),
+                    ("stepper", ctypes.c_char * 64),
+                    ("endstop", ctypes.c_char * 64)]
+    class AxisStatus(ctypes.Structure):
+        _fields_ = [("homed", ctypes.c_bool),
+                    ("length", ctypes.c_float),
+                    ("position", ctypes.c_float)]
+    def __init__(self):
+        super().__init__()
+        self.type = ModuleTypes.AXIS
+        self.config = self.AxisConfig
+        self.state = self.AxisStatus
+
+__objects__ = [Stepper, Thermistor, Heater, Endstop,
+               Axis]

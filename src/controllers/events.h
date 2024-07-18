@@ -11,12 +11,14 @@
 typedef enum {
     OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
     OBJECT_EVENT_HEATER_TEMP_REACHED,
+    OBJECT_EVENT_ENDSTOP_TRIGGER,
     OBJECT_EVENT_MAX,
 } core_object_event_type_t;
 
 const char *OBJECT_EVENT_NAMES[] = {
     [OBJECT_EVENT_STEPPER_MOVE_COMPLETE] = "STEPPER_MOVE_COMPLETE",
     [OBJECT_EVENT_HEATER_TEMP_REACHED] = "HEATER_TEMP_REACHED",
+    [OBJECT_EVENT_ENDSTOP_TRIGGER] = "ENDSTOP_TRIGGER",
 };
 
 /*******
@@ -32,6 +34,10 @@ typedef struct {
 typedef struct {
     float temp;
 } heater_temp_reached_event_data_t;
+
+typedef struct {
+    bool triggered;
+} endstop_trigger_event_data_t;
 
 /*
  * Object event handler type.

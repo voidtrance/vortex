@@ -4,6 +4,7 @@ import shutil
 import glob
 import os.path
 import pathlib
+import regex
 
 class BuildExtension(build_ext):
     #def __init__(self, *args, **kwargs):
@@ -31,13 +32,14 @@ class BuildExtension(build_ext):
       self.move_files(files, "controllers/objects")
 
 def find_all_objects():
+    object_re = r'^__objects__\s*=\s*\[\s*(?:(?P<object>[^,]+),? ?)*\]$'
+    object_reg = regex.compile(object_re, regex.MULTILINE)
     with open("controllers/objects/object_defs.py") as fd:
-        for line in fd:
-            if line.startswith("__objects__"):
-                defs = line.strip()
-                break
-    objects = [x.strip() for x in defs[:-1].partition("[")[2].split(",")]
-    print(objects)
+        content = fd.read()
+    match = object_reg.search(content)
+    if not match:
+        return {}
+    objects = [x.strip() for x in match.allcaptures()[1]]
     source_root = pathlib.PosixPath("src")
     build_objects = {}
     for object in objects:

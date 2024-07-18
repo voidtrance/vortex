@@ -231,6 +231,7 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
 	[OBJECT_TYPE_HEATER] = "controllers/objects/heater.so",
 	[OBJECT_TYPE_THERMISTOR] = "controllers/objects/thermistor.so",
 	[OBJECT_TYPE_PROBE] = "controllers/objects/probe.so",
+	[OBJECT_TYPE_AXIS] = "controllers/objects/axis.so",
     };
 
     if (!core->object_libs[klass]) {
