@@ -145,6 +145,8 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 
     if (stepper->steps > 0.0) {
 	float steps = stepper->spns * delta;
+	if (steps > stepper->steps)
+	    steps = stepper->steps;
 	if (stepper->dir == MOVE_DIR_BACK)
 	    stepper->current_step -= steps;
 	else
