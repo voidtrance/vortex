@@ -35,6 +35,7 @@ class Stepper(ObjectDef):
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
                          (1, "move", self.StepperMoveCommandOpts, (0, 0))]
         self.events = {ModuleEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
+        self.state = self.StepperStatus
         
 class Thermistor(ObjectDef):
     class ThermistorConfig(ctypes.Structure):
@@ -63,6 +64,7 @@ class Heater(ObjectDef):
         self.config = self.HeaterConfig
         self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,))]
         self.events = {ModuleEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
+        self.state = self.HeaterStatus
 
 class Endstop(ObjectDef):
     class EndstopConfig(ctypes.Structure):
