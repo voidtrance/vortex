@@ -1,13 +1,31 @@
 import configparser
 from argparse import Namespace
 from controllers.types import ModuleTypes
+import logging
 
 class Configuration:
     def __init__(self):
-        self._parser = configparser.ConfigParser()
+        self._parser = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
 
+    def _read_file(self, filename):
+        content = []
+        with open(filename, 'r') as fd:
+            for line in fd:
+                line = line.rstrip()
+                if line.startswith("<include ") and \
+                    line[-1] == ">":
+                    include_file = line[9:-1]
+                    content += self._read_file(include_file)
+                    content.append("")
+                else:
+                    content.append(line)
+        return content
     def read(self, filename):
-        self._parser.read(filename)
+        config_content = self._read_file(filename)
+        for line in config_content:
+            logging.debug("CONFIG: " + line)
+        self._parser.read_string("\n".join(config_content))
 
     def __iter__(self):
         for section in self._parser.sections():
