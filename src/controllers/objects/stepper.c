@@ -30,6 +30,8 @@ typedef struct {
     core_object_t object;
     core_call_data_t *call_data;
     core_object_command_t *current_cmd;
+    uint16_t steps_per_rotation;
+    uint8_t microsteps;
     uint64_t last_timestep;
     float current_step;
     float steps;
@@ -74,18 +76,21 @@ stepper_t *object_create(const char *name, void *config_ptr,
 
     stepper->object.type = OBJECT_TYPE_STEPPER;
     stepper->object.update = stepper_update;
+    stepper->object.get_state = stepper_status;
     stepper->object.destroy = stepper_destroy;
     stepper->object.exec_command = stepper_exec;
     stepper->object.name = strdup(name);
     stepper->call_data = call_data;
+    stepper->steps_per_rotation = config->steps_per_rotation;
+    stepper->microsteps = config->microsteps;
 
     clock_speed = str_to_hertz(config->clock_speed);
 
     // TMC2209: RPS = (VACTUAL[2209] * fCLK[Hz] / 2^24) / microsteps / spr
     // TMC5560: RPS = (VACTUAL[5560] *(fCLK[Hz]/2 / 2^23)) / microsteps / spr
-    stepper->rps = (float)clock_speed / config->microsteps /
-	config->steps_per_rotation;
-    stepper->spns = (config->steps_per_rotation * stepper->rps) /
+    stepper->rps = (float)clock_speed / stepper->microsteps /
+	stepper->steps_per_rotation;
+    stepper->spns = (stepper->steps_per_rotation * stepper->rps) /
 	SEC_TO_NSEC(1);
 
     return stepper;
@@ -135,6 +140,8 @@ void stepper_status(core_object_t *object, void *status) {
 
     s->enabled = stepper->enabled;
     s->steps = stepper->current_step;
+    s->spr = stepper->steps_per_rotation;
+    s->microsteps = stepper->microsteps;
 }
 
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {

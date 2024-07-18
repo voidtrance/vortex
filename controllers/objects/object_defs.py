@@ -22,8 +22,10 @@ class Stepper(ObjectDef):
         _fields_ = [("direction", ctypes.c_uint8),
                     ("steps", ctypes.c_uint32)]
     class StepperStatus(ctypes.Structure):
-        _fields_ = [("enabled", ctypes.c_uint8),
-                    ("steps", ctypes.c_uint64)]
+        _fields_ = [("enabled", ctypes.c_bool),
+                    ("steps", ctypes.c_uint64),
+                    ("spr", ctypes.c_uint16),
+                    ("microsteps", ctypes.c_uint8)]
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):

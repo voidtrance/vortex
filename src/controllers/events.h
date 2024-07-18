@@ -1,5 +1,7 @@
 #ifndef __EVENTS_H__
 #define __EVENTS_H__
+#include <stdint.h>
+#include <stdbool.h>
 #include "objects/object_defs.h"
 
 /*
