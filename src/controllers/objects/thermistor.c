@@ -55,7 +55,6 @@ typedef struct {
 
 typedef struct {
     core_object_t object;
-    core_call_data_t *call_data;
     thermistor_type_t type;
     uint16_t beta;
     const char *heater_name;
@@ -72,8 +71,7 @@ static void thermistor_update(core_object_t *object, uint64_t ticks,
 static void thermistor_status(core_object_t *object, void *status);
 static void thermistor_destroy(core_object_t *object);
 
-thermistor_t *object_create(const char *name, void *config_ptr,
-                            core_call_data_t *call_data) {
+thermistor_t *object_create(const char *name, void *config_ptr) {
     thermistor_t *thermistor;
     thermistor_config_params_t *config =
 	(thermistor_config_params_t *)config_ptr;
@@ -88,7 +86,6 @@ thermistor_t *object_create(const char *name, void *config_ptr,
     thermistor->object.destroy = thermistor_destroy;
     thermistor->object.get_state = thermistor_status;
     thermistor->object.name = strdup(name);
-    thermistor->call_data = call_data;
     thermistor->heater_name = strdup(config->heater);
 
     if (!strncmp(config->sensor_type, "pt100", strlen(config->sensor_type)) ||
@@ -110,10 +107,8 @@ thermistor_t *object_create(const char *name, void *config_ptr,
 static int thermistor_init(core_object_t *object) {
     thermistor_t *thermistor = (thermistor_t *)object;
 
-    thermistor->heater =
-	thermistor->call_data->object_lookup(
-	    OBJECT_TYPE_HEATER, thermistor->heater_name,
-	    thermistor->call_data->object_lookup_data);
+    thermistor->heater = CORE_LOOKUP_OBJECT(thermistor, OBJECT_TYPE_HEATER,
+					    thermistor->heater_name);
     if (!thermistor->heater)
 	return -1;
 

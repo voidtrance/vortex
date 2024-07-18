@@ -28,7 +28,6 @@ typedef struct {
 
 typedef struct {
     core_object_t object;
-    core_call_data_t *call_data;
     core_object_command_t *current_cmd;
     uint16_t steps_per_rotation;
     uint8_t microsteps;
@@ -64,8 +63,7 @@ static const command_func_t command_handlers[] = {
     [STEPPER_COMMAND_MOVE] = stepper_move,
 };
 
-stepper_t *object_create(const char *name, void *config_ptr,
-			 core_call_data_t *call_data) {
+stepper_t *object_create(const char *name, void *config_ptr) {
     stepper_t *stepper;
     stepper_config_params_t *config = (stepper_config_params_t *)config_ptr;
     uint32_t clock_speed = 0;
@@ -80,7 +78,6 @@ stepper_t *object_create(const char *name, void *config_ptr,
     stepper->object.destroy = stepper_destroy;
     stepper->object.exec_command = stepper_exec;
     stepper->object.name = strdup(name);
-    stepper->call_data = call_data;
     stepper->steps_per_rotation = config->steps_per_rotation;
     stepper->microsteps = config->microsteps;
 
@@ -101,9 +98,7 @@ int stepper_enable(core_object_t *object, void *args) {
     struct stepper_enable_args *opts = (struct stepper_enable_args *)args;
 
     stepper->enabled = !!opts->enable;
-    stepper->call_data->completion_callback(
-	stepper->current_cmd->command_id, 0,
-	stepper->call_data->completion_data);
+    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
     stepper->current_cmd = NULL;
     return 0;
 }
@@ -160,13 +155,9 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 
 	data.steps = stepper->current_step;
 
-	stepper->call_data->completion_callback(
-	    stepper->current_cmd->command_id, 0,
-	    stepper->call_data->completion_data);
-	stepper->call_data->event_submit(
-	    OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
-	    core_object_to_id((core_object_t *)stepper),
-	    &data, stepper->call_data->event_submit_data);
+	CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
+	CORE_EVENT_SUBMIT(stepper, OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
+			  core_object_to_id((core_object_t *)stepper), data);
 	stepper->current_cmd = NULL;
 	stepper->steps = 0.0;
     }

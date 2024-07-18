@@ -14,8 +14,7 @@
 #include <sys/queue.h>
 
 static PyObject *CoreError;
-typedef core_object_t *(*object_create_func_t)(const char *, void *,
-                                              core_call_data_t *);
+typedef core_object_t *(*object_create_func_t)(const char *, void *);
 
 typedef LIST_HEAD(CoreCmdList, core_object_command) CoreCmdList_t;
 typedef LIST_HEAD(core_objectList, core_object) core_object_list_t;
@@ -250,10 +249,11 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
             return -1UL;
     }
 
-    new_obj = core->object_create[klass](name, config, &core_call_data);
+    new_obj = core->object_create[klass](name, config);
     if (!new_obj)
         return -1UL;
 
+    new_obj->call_data = core_call_data;
     LIST_INSERT_HEAD(&core->objects[klass], new_obj, entry);
     return (core_object_id_t)new_obj;
 }

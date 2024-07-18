@@ -31,7 +31,6 @@ struct heater_status {
 
 typedef struct {
     core_object_t object;
-    core_call_data_t *call_data;
     core_object_command_t command;
     uint64_t timestep;
     float set_temp;
@@ -47,8 +46,7 @@ int heater_set_temp(core_object_t *object, core_object_command_t *cmd);
 void heater_status(core_object_t *object, void *status);
 void heater_destroy(core_object_t *object);
 
-heater_t *object_create(const char *name, void *config_ptr,
-			core_call_data_t *call_data) {
+heater_t *object_create(const char *name, void *config_ptr) {
     heater_t *heater;
     heater_config_params_t *config = (heater_config_params_t *)config_ptr;
 
@@ -62,7 +60,6 @@ heater_t *object_create(const char *name, void *config_ptr,
     heater->object.exec_command = heater_set_temp;
     heater->object.get_state = heater_status;
     heater->object.name = strdup(name);
-    heater->call_data = call_data;
     heater->pos = 0;
     heater->ramp_duration = SEC_TO_NSEC(120.0 * 100 / config->power);
 
@@ -148,12 +145,9 @@ void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 	return;
 
     data.temp = heater->temp;
-    heater->call_data->event_submit(OBJECT_EVENT_HEATER_TEMP_REACHED,
-				    core_object_to_id((core_object_t *)heater),
-				    &data,
-				    heater->call_data->event_submit_data);
-    heater->call_data->completion_callback(heater->command.command_id, 0,
-					   heater->call_data->completion_data);
+    CORE_EVENT_SUBMIT(heater, OBJECT_EVENT_HEATER_TEMP_REACHED,
+		      core_object_to_id((core_object_t *)heater), data);
+    CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
 }
 
 void heater_destroy(core_object_t *object) {
