@@ -94,6 +94,9 @@ struct core_object {
     const char *name;
     LIST_ENTRY(core_object) entry;
 
+    int (*init)(core_object_t *object);
+    int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
+    void (*get_state)(core_object_t *object, void *);
     /*
      * Object update callback. This callback will be called
      * by the timing loop to update the object's state.
@@ -104,8 +107,6 @@ struct core_object {
      *      the emulator.
      */
     void (*update)(core_object_t *object, uint64_t ticks, uint64_t runtime);
-    int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
-    void (*get_state)(core_object_t *object, void *);
     void (*destroy)(core_object_t *object);
 };
 

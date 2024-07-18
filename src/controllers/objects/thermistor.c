@@ -58,6 +58,7 @@ typedef struct {
     core_call_data_t *call_data;
     thermistor_type_t type;
     uint16_t beta;
+    const char *heater_name;
     core_object_t *heater;
     float resistance;
     float a;
@@ -65,6 +66,7 @@ typedef struct {
     float c;
 } thermistor_t;
 
+static int thermistor_init(core_object_t *object);
 static void thermistor_update(core_object_t *object, uint64_t ticks,
                               uint64_t runtime);
 static void thermistor_status(core_object_t *object, void *status);
@@ -81,11 +83,13 @@ thermistor_t *object_create(const char *name, void *config_ptr,
 	return NULL;
 
     thermistor->object.type = OBJECT_TYPE_THERMISTOR;
+    thermistor->object.init = thermistor_init;
     thermistor->object.update = thermistor_update;
     thermistor->object.destroy = thermistor_destroy;
     thermistor->object.get_state = thermistor_status;
     thermistor->object.name = strdup(name);
     thermistor->call_data = call_data;
+    thermistor->heater_name = strdup(config->heater);
 
     if (!strncmp(config->sensor_type, "pt100", strlen(config->sensor_type)) ||
         !strncmp(config->sensor_type, "PT100", strlen(config->sensor_type)))
@@ -98,21 +102,24 @@ thermistor_t *object_create(const char *name, void *config_ptr,
     else {
         thermistor->type = SENSOR_TYPE_B3950;
         thermistor->beta = config->beta_value;
-        calc_coefficiants(b3950_nominal_t, b3950_nominal_r,
-			  thermistor->beta, &thermistor->a,
-			  &thermistor->b, &thermistor->c);
-    }
-
-    thermistor->heater =
-	call_data->object_lookup(OBJECT_TYPE_HEATER, config->heater,
-				 call_data->object_lookup_data);
-    if (!thermistor->heater) {
-	free((char *)thermistor->object.name);
-	free(thermistor);
-	return NULL;
     }
 
     return thermistor;
+}
+
+static int thermistor_init(core_object_t *object) {
+    thermistor_t *thermistor = (thermistor_t *)object;
+
+    thermistor->heater =
+	thermistor->call_data->object_lookup(
+	    OBJECT_TYPE_HEATER, thermistor->heater_name,
+	    thermistor->call_data->object_lookup_data);
+    if (!thermistor->heater)
+	return -1;
+
+    calc_coefficiants(b3950_nominal_t, b3950_nominal_r, thermistor->beta,
+                      &thermistor->a, &thermistor->b, &thermistor->c);
+    return 0;
 }
 
 static void thermistor_status(core_object_t *object, void *status) {
@@ -151,5 +158,6 @@ static void thermistor_destroy(core_object_t *object) {
     thermistor_t *thermistor = (thermistor_t *)object;
 
     core_object_destroy(object);
+    free((char *)thermistor->heater_name);
     free(thermistor);
 }

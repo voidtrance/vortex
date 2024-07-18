@@ -55,6 +55,8 @@ class Controller(controllers.core.Core):
         self.object_defs = {x: None for x in ModuleTypes}
         self._completion_callback = None
         self._load_objects(config)
+        if not self.init_objects():
+            raise controllers.core.CoreError("Failed to initialize objects.")
     def _load_objects(self, config):
         module = importlib.import_module("controllers.objects.object_defs")
         object_defs = getattr(module, "__objects__")

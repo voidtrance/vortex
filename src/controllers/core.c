@@ -282,6 +282,25 @@ static PyObject *core_create_object(PyObject *self, PyObject *args,
     return id;
 }
 
+static PyObject *core_initialize_object(PyObject *self, PyObject *args) {
+    core_t *core = (core_t *)self;
+    core_object_type_t type;
+
+    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+	core_object_t *object;
+
+	LIST_FOREACH(object, &core->objects[type], entry) {
+	    if (!object->init)
+		continue;
+
+	    if (object->init(object))
+		Py_RETURN_FALSE;
+	}
+    }
+
+    Py_RETURN_TRUE;
+}
+
 static PyObject *core_exec_command(PyObject *self, PyObject *args,
 				   PyObject *kwargs) {
     char *kw[] = {"command_id", "object_id", "subcommand_id", "args", NULL};
@@ -621,6 +640,7 @@ static PyObject *core_get_runtime(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef CoreMethods[] = {
+    {"init_objects", core_initialize_object, METH_NOARGS, "Initialize objects"},
     {"start", core_start, METH_VARARGS, "Run the emulator core thread"},
     {"stop", core_stop, METH_NOARGS, "Stop the emulator core thread"},
     {"create_object", (PyCFunction)core_create_object,
