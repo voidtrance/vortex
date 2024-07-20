@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include "thread_control.h"
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
@@ -25,6 +24,9 @@
 #include <math.h>
 #include <sys/resource.h>
 #include "utils.h"
+#include "core.h"
+#include "thread_control.h"
+#include "debug.h"
 
 struct core_thread_control {
     int do_run;
@@ -35,6 +37,7 @@ struct core_thread_args {
     void *callback;
     void *user_data;
     uint64_t frequency;
+    int64_t frequency_match;
     int *control;
     int ret;
 };
@@ -63,7 +66,8 @@ static void *core_update_thread(void *arg) {
     uint64_t runtime = 0;
     int64_t sleep_counter = 0;
 
-    printf("step duration: %f\n", tick);
+    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "threads", "step duration: %f",
+	     tick);
     args->ret = 0;
     while (*(volatile int *)args->control == 1) {
 	int64_t delay;
@@ -86,7 +90,7 @@ static void *core_update_thread(void *arg) {
 	ticks += (uint64_t)(roundf(((float)time / tick) * 100) / 100);
     }
 
-    printf("update time counter: %ld\n", sleep_counter);
+    args->frequency_match = sleep_counter;
     pthread_exit(&args->ret);
 }
 
@@ -179,9 +183,11 @@ int controller_timer_start(update_callback_t update_cb,
     return ret;
 }
 
-void controller_timer_stop(void) {
+int64_t controller_timer_stop(void) {
     core_global_update.control.do_run = 0;
     core_global_work.control.do_run = 0;
     pthread_join(core_global_update.control.thread_id, NULL);
     pthread_join(core_global_work.control.thread_id, NULL);
+
+    return core_global_update.args.frequency_match;
 }

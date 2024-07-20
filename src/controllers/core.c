@@ -16,11 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #define PY_SSIZE_T_CLEAN
-#include "events.h"
-#include "common_defs.h"
-#include "thread_control.h"
-#include "objects/object_defs.h"
-#include "utils.h"
 #include <Python.h>
 #include <dlfcn.h>
 #include <stdbool.h>
@@ -30,6 +25,12 @@
 #include <structmember.h>
 #include <sys/queue.h>
 #include <stdarg.h>
+#include "core.h"
+#include "events.h"
+#include "common_defs.h"
+#include "thread_control.h"
+#include "objects/object_defs.h"
+#include "utils.h"
 
 static PyObject *CoreError;
 typedef core_object_t *(*object_create_func_t)(const char *, void *);
@@ -78,6 +79,11 @@ typedef struct core_command {
     complete_cb_t handler;
     void *caller_data;
 } core_command_t;
+
+typedef struct {
+    PyObject *module;
+    uint8_t level;
+} core_logging_data_t;
 
 #define CMD_ID_MAKE_ERROR(x) ((int64_t)(((uint64_t)CMD_ERROR_PREFIX << 32) | x))
 
@@ -131,6 +137,7 @@ static uint64_t core_object_command_submit(core_object_t *source,
                                            void *user_data);
 
 static core_call_data_t core_call_data = {0};
+static core_logging_data_t logging;
 
 static PyObject *core_new(PyTypeObject *type, PyObject *args,
 			  PyObject *kwargs) {
@@ -158,14 +165,22 @@ static PyObject *core_new(PyTypeObject *type, PyObject *args,
     core_call_data.event_unregister = core_object_event_unregister;
     core_call_data.event_submit = core_object_event_submit;
     core_call_data.cmd_submit = core_object_command_submit;
+    core_call_data.log = core_log;
     core_call_data.cb_data = core;
 
     return (PyObject *)core;
 }
 
 static int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
+    char *kws[] = {"debug",  NULL};
     core_object_type_t type;
     core_object_event_type_t event;
+    uint8_t debug_level = 0;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i", kws, &debug_level))
+	return -1;
+
+    logging.level = debug_level;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++)
         LIST_INIT(&self->objects[type]);
@@ -239,7 +254,15 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
 
 static PyObject *core_stop(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
-    controller_timer_stop();
+    int64_t thread_match;
+
+    /* Allow external threads to avoid deadlocks. */
+    Py_BEGIN_ALLOW_THREADS;
+    thread_match = controller_timer_stop();
+    Py_END_ALLOW_THREADS;
+
+    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+	     "update thread frequency match: %ld", thread_match);
     Py_DECREF(core->python_complete_cb);
     Py_DECREF(self);
     Py_XINCREF(Py_None);
@@ -266,7 +289,8 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
         core->object_libs[klass] = dlopen(libname[klass], RTLD_LAZY);
         if (!core->object_libs[klass]) {
             char *err = dlerror();
-            printf("dlopen: %s\n", err);
+            core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core", "dlopen: %s",
+		     err);
             return -1UL;
         }
     }
@@ -278,6 +302,9 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
             return -1UL;
     }
 
+    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+	     "creating object klass %s, name %s",
+	     ObjectTypeNames[klass], name);
     new_obj = core->object_create[klass](name, config);
     if (!new_obj)
         return -1UL;
@@ -355,7 +382,17 @@ static PyObject *core_exec_command(PyObject *self, PyObject *args,
 	cmd->command_id = cmd_id;
 	cmd->object_cmd_id = obj_cmd_id;
 	cmd->args = cmd_args;
+
+	/*
+	 * Object commands are supposed to be non-blocking -
+	 * they should accept/reject the command and handle
+	 * it in the object's update() handlers.
+	 * However, to avoid deadlocks with logging, release
+	 * the Python GIL around the command execution.
+	 */
+	Py_BEGIN_ALLOW_THREADS;
 	ret = object->exec_command(object, cmd);
+	Py_END_ALLOW_THREADS;
     }
 
     rc = Py_BuildValue("i", ret);
@@ -398,6 +435,10 @@ static void core_process_work(void *arg) {
 	cmd_next = STAILQ_NEXT(cmd, entry);
 	STAILQ_REMOVE(&core->cmds, cmd, core_command, entry);
 	object = core_id_to_object(cmd->target_id);
+	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+		 "issuing command for %lu, id: %lu, cmd: %u",
+		 cmd->target_id, cmd->command.command_id,
+		 cmd->command.object_cmd_id);
 	(void)object->exec_command(object, &cmd->command);
 	STAILQ_INSERT_TAIL(&core->submitted, cmd, entry);
 	cmd = cmd_next;
@@ -411,6 +452,9 @@ static void core_process_work(void *arg) {
     while (event) {
 	event_subscription_t *subscription;
 
+	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+		 "processing event = obj: %u %lu",
+		 event->type, event->object_id);
 	event_next = STAILQ_NEXT(event, entry);
 	STAILQ_FOREACH(subscription, &core->event_handlers[event->type],
 		       entry) {
@@ -516,8 +560,9 @@ static void core_object_command_complete(uint64_t cmd_id, int result,
 	    comps->entries = (struct __comp_entry *)ptr;
 	    comps->size *= 2;
 	} else {
-	    printf("Resizing of completion entries failed! "
-		   "Completions can be missed");
+	    core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+		     "Resizing of completion entries failed! "
+		     "Completions can be missed");
 	}
 
     }
@@ -608,6 +653,8 @@ static int core_object_event_submit(const core_object_event_type_t type,
     if (!event)
 	return -1;
 
+    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+	     "submitting event = %u, %u, %lu", type, object->type, id);
     event->type = type;
     event->object_type = object->type;
     event->object_id = id;
@@ -634,6 +681,9 @@ static uint64_t core_object_command_submit(core_object_t *source,
     cmd->command.object_cmd_id = obj_cmd_id;
     cmd->command.args = args;
     cmd->handler = cb;
+    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+	     "submitting command for %u, id: %lu, cmd: %u", target_id,
+	     cmd->command.command_id, obj_cmd_id);
     STAILQ_INSERT_TAIL(&core->cmds, cmd, entry);
     return (uint64_t)cmd;
 }
@@ -725,6 +775,40 @@ static PyObject *core_get_runtime(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     PyObject *runtime = PyLong_FromUnsignedLongLong(core->runtime);
     return runtime;
+}
+
+void core_log(core_log_level_t level, core_object_type_t type,
+	      const char *name, const char *fmt, ...) {
+    va_list args;
+    PyGILState_STATE state;
+    char msg_str[4096];
+    int size;
+    const char *methods[] = {
+	[LOG_LEVEL_CRITICAL] = "critical",
+	[LOG_LEVEL_ERROR] = "error",
+	[LOG_LEVEL_WARNING] = "warning",
+	[LOG_LEVEL_INFO] = "info",
+	[LOG_LEVEL_DEBUG] = "debug",
+    };
+
+    if (level < logging.level)
+	return;
+
+    if (type != OBJECT_TYPE_NONE)
+        size = snprintf(msg_str, sizeof(msg_str), "[%s:%s] ",
+                        ObjectTypeNames[type], name);
+    else
+        size = snprintf(msg_str, sizeof(msg_str), "[%s] ", name);
+
+    va_start(args, fmt);
+    vsnprintf(msg_str + size, sizeof(msg_str) - size, fmt, args);
+    va_end(args);
+
+    state = PyGILState_Ensure();
+    if (!PyObject_CallMethod(logging.module, methods[level], "(s)", msg_str))
+	PyErr_Print();
+
+    PyGILState_Release(state);
 }
 
 static PyMethodDef CoreMethods[] = {
@@ -856,6 +940,10 @@ PyMODINIT_FUNC PyInit_core(void) {
 	Py_XDECREF(value_dict);
 	goto fail;
     }
+
+    logging.module = PyImport_ImportModule("logging");
+    if (!logging.module)
+	goto fail;
 
     return module;
 

@@ -64,7 +64,12 @@ class Objects:
 class Controller(controllers.core.Core):
     PINS = []
     def __init__(self, config):
-        super().__init__()
+        root = logging.getLogger()
+        debug_level = root.getEffectiveLevel()
+        if debug_level <= logging.DEBUG:
+            logging.warning("With DEBUG and higher logging levels")
+            logging.warning("controller timing will be imprecise!")
+        super().__init__(debug=debug_level)
         self.objects = Objects()
         self.object_defs = {x: None for x in ModuleTypes}
         self._completion_callback = None

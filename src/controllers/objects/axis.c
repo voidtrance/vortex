@@ -24,6 +24,7 @@
 #include "axis.h"
 #include "stepper.h"
 #include "endstop.h"
+#include "../debug.h"
 
 typedef struct {
     uint16_t length;

@@ -15,18 +15,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __TIMING_H__
-#define __TIMING_H__
-#include <stdint.h>
+#ifndef __CORE_H__
+#define __CORE_H__
+#include "debug.h"
+#include "objects/object_defs.h"
 
-typedef void (*update_callback_t)(uint64_t ticks, uint64_t runtime,
-				  void *user_data);
-typedef void (*work_callback_t)(void *user_data);
-
-int controller_timer_start(update_callback_t update_cb,
-			   uint64_t update_frequency,
-			   work_callback_t work_cb, uint64_t work_frequency,
-			   void *user_data);
-int64_t controller_timer_stop(void);
+void core_log(core_log_level_t level, core_object_type_t type,
+	      const char *name, const char *fmt, ...);
 
 #endif

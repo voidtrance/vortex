@@ -19,6 +19,7 @@
 #define __OBJECTS_COMMON_DEFS_H__
 #include "objects/object_defs.h"
 #include "events.h"
+#include "debug.h"
 
 #define CMD_ERROR_PREFIX (0xdeadbeef)
 #define CMD_ID_IS_ERROR(x) ((x) >> 32 == CMD_ERROR_PREFIX)
@@ -29,6 +30,8 @@ typedef core_object_t *(*object_lookup_cb_t)(const core_object_type_t,
 typedef void (*complete_cb_t)(uint64_t, int, void *);
 typedef uint64_t (*cmd_submit_cb_t)(core_object_t *, core_object_id_t, uint16_t,
 				    void *, complete_cb_t, void *);
+typedef void (*log_cb_t)(core_log_level_t, core_object_type_t, const char *,
+			 const char *, ...);
 /*
  * Data structure given to all the objects.
  */
@@ -39,6 +42,7 @@ typedef struct {
     event_register_t event_unregister;
     event_submit_t event_submit;
     cmd_submit_cb_t cmd_submit;
+    log_cb_t log;
     void *cb_data;
 } core_call_data_t;
 

@@ -15,14 +15,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include "object_defs.h"
-#include "../common_defs.h"
-#include "../utils.h"
-#include "stepper.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#define CORE_UPDATE_RATE_LIMIT 40000
+#include "../debug.h"
+#include "object_defs.h"
+#include "../common_defs.h"
+#include "../utils.h"
+#include "stepper.h"
 
 typedef struct {
     uint32_t steps_per_rotation;
@@ -110,6 +112,8 @@ int stepper_move(core_object_t *object, void *args) {
 
     stepper->dir = opts->direction;
     stepper->steps = opts->steps;
+    log_debug(stepper, "Stepper %s moving %f steps in %u",
+	      stepper->object.name, stepper->steps, stepper->dir);
     return 0;
 }
 
@@ -138,6 +142,8 @@ void stepper_status(core_object_t *object, void *status) {
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     stepper_t *stepper = (stepper_t *)object;
     uint64_t delta  = timestep - stepper->last_timestep;
+
+    log_debug(stepper, "stepper: %f", stepper->current_step);
 
     if (stepper->steps > 0.0) {
 	float steps = stepper->spns * delta;
