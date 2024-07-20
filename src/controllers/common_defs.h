@@ -20,40 +20,26 @@
 #include "objects/object_defs.h"
 #include "events.h"
 
-typedef core_object_t *(*object_lookup_cb_t)(const core_object_type_t,
-					     const char *, void *);
-typedef void (*complete_cb_t)(const char *, int, void *);
+#define CMD_ERROR_PREFIX (0xdeadbeef)
+#define CMD_ID_IS_ERROR(x) ((x) >> 32 == CMD_ERROR_PREFIX)
+#define CMD_ID_ERROR(x) ((int32_t)((x) & ~(CMD_ERROR_PREFIX << 32)))
 
+typedef core_object_t *(*object_lookup_cb_t)(const core_object_type_t,
+                                             const char *, void *);
+typedef void (*complete_cb_t)(uint64_t, int, void *);
+typedef uint64_t (*cmd_submit_cb_t)(core_object_t *, core_object_id_t, uint16_t,
+				    void *, complete_cb_t, void *);
 /*
  * Data structure given to all the objects.
  */
 typedef struct {
     object_lookup_cb_t object_lookup;
-    void *object_lookup_data;
-
-    /* Callback that object call when a command is complete */
     complete_cb_t completion_callback;
-
-    /* Data that objects have to pass to the completion callback */
-    void *completion_data;
-
-    /* Function that object can call to register for object events */
     event_register_t event_register;
-
-    /* Data that objects have to pass to the event_register function. */
-    void *event_register_data;
-
-    /* Function to call when unregistering for object events */
     event_register_t event_unregister;
-
-    /* Data that objects have to pass to the event_unregister function. */
-    void *event_unregister_data;
-
-    /* Function to issue an object event. */
     event_submit_t event_submit;
-
-    /* Data that the object has to pass to the event_submit function. */
-    void *event_submit_data;
+    cmd_submit_cb_t cmd_submit;
+    void *cb_data;
 } core_call_data_t;
 
 /*
@@ -87,35 +73,40 @@ struct core_object {
     core_call_data_t call_data;
 };
 
-#define CORE_LOOKUP_OBJECT(obj, type, name)				\
-    (((core_object_t *)(obj))->call_data.object_lookup(			\
-	(type), (name),							\
-	((core_object_t *)(obj))->call_data.object_lookup_data))
-#define CORE_CMD_COMPLETE(obj, id, status)				\
-    (((core_object_t *)(obj))->call_data.completion_callback(		\
-	(id), (status),	((core_object_t *)(obj))->call_data.completion_data))
-#define CORE_EVENT_REGTSIER(obj, type, event, name, handler)		\
-    (((core_object_t *)(obj))->call_data.event_register(		\
-	(type), (event), (name), ((core_object_t *)(obj)), (handler),	\
-	((core_object_t *)(obj))->call_data.event_register_data))
-#define CORE_EVENT_UNREGISTER(obj, type, event, name)			\
-    (((core_object_t *)(obj))->call_data.event_unregister(		\
-	(type), (event), (name), ((core_object_t *)(obj)), (handler),	\
-	((core_object_t *)(obj))->call_data.event_unregister_data))
-#define CORE_EVENT_SUBMIT(obj, type, id, data)				\
-    (((core_object_t *)(obj))->call_data.event_submit(			\
-	(type), (id), &(data),						\
-	((core_object_t *)(obj))->call_data.event_submit_data))
-
 static inline core_object_id_t core_object_to_id(core_object_t *object) {
     return (core_object_id_t)object;
 }
 
 static inline core_object_t *core_id_to_object(core_object_id_t id) {
     if (id != CORE_OBJECT_ID_INVALID)
-	return (core_object_t *)id;
+      return (core_object_t *)id;
     return NULL;
 }
+
+#define CORE_LOOKUP_OBJECT(obj, type, name)				\
+    (((core_object_t *)(obj))->call_data.object_lookup(			\
+	(type), (name),							\
+	((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_CMD_COMPLETE(obj, id, status)				\
+    (((core_object_t *)(obj))->call_data.completion_callback(		\
+	(id), (status),	((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_EVENT_REGISTER(obj, type, event, name, handler)		\
+    (((core_object_t *)(obj))->call_data.event_register(		\
+	(type), (event), (name), ((core_object_t *)(obj)), (handler),	\
+	((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_EVENT_UNREGISTER(obj, type, event, name)			\
+    (((core_object_t *)(obj))->call_data.event_unregister(		\
+	(type), (event), (name), ((core_object_t *)(obj)), (handler),	\
+	((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_EVENT_SUBMIT(obj, type, id, data)				\
+    (((core_object_t *)(obj))->call_data.event_submit(			\
+	(type), (id), &(data),						\
+	((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_CMD_SUBMIT(obj, target, cmd_id, handler, args)		\
+    (((core_object_t *)(obj))->call_data.cmd_submit(			\
+	((core_object_t *)(obj)), core_object_to_id(target), (cmd_id),	\
+	((void *)(args)), (handler),					\
+	((core_object_t *)(obj))->call_data.cb_data))
 
 static inline void core_object_destroy(core_object_t *object) {
     free((char *)object->name);

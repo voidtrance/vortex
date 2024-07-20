@@ -74,31 +74,10 @@ typedef unsigned long core_object_id_t;
  * object.
  */
 typedef struct core_object_command {
-    LIST_ENTRY(core_object_command) entry;
-    const char *command_id;
+    uint64_t command_id;
     uint16_t object_cmd_id;
     void *args;
 } core_object_command_t;
-
-typedef enum {
-    CMD_OPTION_TYPE_NONE,
-    CMD_OPTION_TYPE_INT,
-    CMD_OPTION_TYPE_FLOAT,
-    CMD_OPTION_TYPE_STRING,
-    CMD_OPTION_TYPE_MAX,
-} command_option_type_t;
-
-typedef struct {
-    char name[64];
-    command_option_type_t type;
-} object_command_option_t;
-
-typedef struct {
-    uint16_t id;
-    char name[64];
-    const object_command_option_t *options;
-    size_t n_options;
-} object_command_spec_t;
 
 typedef struct core_object core_object_t;
 

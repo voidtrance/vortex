@@ -29,18 +29,16 @@
 #include <stdlib.h>
 #include <structmember.h>
 #include <sys/queue.h>
+#include <stdarg.h>
 
 static PyObject *CoreError;
 typedef core_object_t *(*object_create_func_t)(const char *, void *);
-
-typedef LIST_HEAD(CoreCmdList, core_object_command) CoreCmdList_t;
-typedef LIST_HEAD(core_objectList, core_object) core_object_list_t;
 
 #define MAX_COMPLETIONS 256
 
 typedef struct {
     struct __comp_entry {
-	const char *id;
+	uint64_t id;
 	int result;
     } *entries;
     size_t size;
@@ -72,6 +70,19 @@ typedef struct event {
     void *data;
 } core_event_t;
 
+typedef struct core_command {
+    STAILQ_ENTRY(core_command) entry;
+    core_object_t *source;
+    core_object_id_t target_id;
+    core_object_command_t command;
+    complete_cb_t handler;
+    void *caller_data;
+} core_command_t;
+
+#define CMD_ID_MAKE_ERROR(x) ((int64_t)(((uint64_t)CMD_ERROR_PREFIX << 32) | x))
+
+typedef LIST_HEAD(core_object_list, core_object) core_object_list_t;
+typedef STAILQ_HEAD(core_command_list, core_command) core_command_list_t;
 typedef STAILQ_HEAD(event_handlers, event_subscription) core_event_handlers_t;
 typedef STAILQ_HEAD(events, event) core_events_t;
 
@@ -80,7 +91,8 @@ typedef struct {
     void *object_libs[OBJECT_TYPE_MAX];
     object_create_func_t object_create[OBJECT_TYPE_MAX];
     core_object_list_t objects[OBJECT_TYPE_MAX];
-    CoreCmdList_t cmds;
+    core_command_list_t cmds;
+    core_command_list_t submitted;
     core_object_completion_data_t *completions;
     uint64_t ticks;
     uint64_t runtime;
@@ -93,13 +105,13 @@ typedef struct {
 
 static core_object_t *core_object_find(const core_object_type_t type,
 				       const char *name, void *data);
-static void core_object_update(uint64_t ticks, uint64_t runtime, void *user_data);
-static void core_process_completions(void *user_data);
-static void core_process_events(void *user_data);
+static void core_object_update(uint64_t ticks, uint64_t runtime,
+			       void *user_data);
+static void core_process_work(void *user_data);
 
 /* Object callbacks */
-static void core_object_command_complete(const char *command_id, int result,
-				  void *data);
+static void core_object_command_complete(uint64_t command_id, int result,
+					 void *data);
 static int core_object_event_register(const core_object_type_t object_type,
 				      const core_object_event_type_t event,
 				      const char *name, core_object_t *object,
@@ -110,10 +122,15 @@ static int core_object_event_unregister(const core_object_type_t object_type,
 					event_handler_t handler,
 					void *user_data);
 static int core_object_event_submit(const core_object_event_type_t event,
-				    const core_object_id_t id,
-				    void *event_data, void *user_data);
+                                    const core_object_id_t id, void *event_data,
+                                    void *user_data);
+static uint64_t core_object_command_submit(core_object_t *source,
+                                           core_object_id_t target_id,
+                                           uint16_t obj_cmd_id, void *args,
+                                           complete_cb_t handler,
+                                           void *user_data);
 
-static core_call_data_t core_call_data = { 0 };
+static core_call_data_t core_call_data = {0};
 
 static PyObject *core_new(PyTypeObject *type, PyObject *args,
 			  PyObject *kwargs) {
@@ -136,15 +153,12 @@ static PyObject *core_new(PyTypeObject *type, PyObject *args,
     }
 
     core_call_data.object_lookup = core_object_find;
-    core_call_data.object_lookup_data = core;
     core_call_data.completion_callback = core_object_command_complete;
-    core_call_data.completion_data = core;
     core_call_data.event_register = core_object_event_register;
-    core_call_data.event_register_data = core;
     core_call_data.event_unregister = core_object_event_unregister;
-    core_call_data.event_unregister_data = core;
     core_call_data.event_submit = core_object_event_submit;
-    core_call_data.event_submit_data = core;
+    core_call_data.cmd_submit = core_object_command_submit;
+    core_call_data.cb_data = core;
 
     return (PyObject *)core;
 }
@@ -160,6 +174,8 @@ static int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
 	STAILQ_INIT(&self->event_handlers[event]);
 
     STAILQ_INIT(&self->events);
+    STAILQ_INIT(&self->cmds);
+    STAILQ_INIT(&self->submitted);
 
     self->ticks = 0;
     self->runtime = 0;
@@ -208,13 +224,8 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
 
     Py_INCREF(core->python_complete_cb);
 
-    ret = controller_timer_start(core_object_update,
-				 frequency,
-				 core_process_completions,
-				 str_to_hertz("20HZ"),
-				 core_process_events,
-				 str_to_hertz("20HZ"),
-				 self);
+    ret = controller_timer_start(core_object_update, frequency,
+				 core_process_work, 20, self);
     if (ret) {
 	PyErr_Format(CoreError, "Failed to start core threads: %s",
 		     strerror(ret));
@@ -322,8 +333,7 @@ static PyObject *core_initialize_object(PyObject *self, PyObject *args) {
 static PyObject *core_exec_command(PyObject *self, PyObject *args,
 				   PyObject *kwargs) {
     char *kw[] = {"command_id", "object_id", "subcommand_id", "args", NULL};
-    core_t *core = (core_t *)self;
-    char *cmd_id = NULL;
+    uint64_t cmd_id = -1UL;
     uint16_t obj_cmd_id = 0;
     void *cmd_args = NULL;
     core_object_t *object;
@@ -331,7 +341,7 @@ static PyObject *core_exec_command(PyObject *self, PyObject *args,
     PyObject *rc;
     int ret = -1;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "skHk:exec_command", kw,
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "kkHk:exec_command", kw,
                                      &cmd_id, &object, &obj_cmd_id, &cmd_args))
         return NULL;
 
@@ -345,8 +355,6 @@ static PyObject *core_exec_command(PyObject *self, PyObject *args,
 	cmd->command_id = cmd_id;
 	cmd->object_cmd_id = obj_cmd_id;
 	cmd->args = cmd_args;
-	LIST_INSERT_HEAD(&core->cmds, cmd, entry);
-
 	ret = object->exec_command(object, cmd);
     }
 
@@ -373,14 +381,108 @@ static void core_object_update(uint64_t ticks, uint64_t runtime,
     }
 }
 
-static void core_process_completions(void *arg) {
+static void core_process_work(void *arg) {
     core_t *core = (core_t *)arg;
-    core_object_completion_data_t *comps = core->completions;
+    core_object_completion_data_t *comps;
+    core_command_t *cmd, *cmd_next;
+    core_event_t *event, *event_next;
 
+    /* First, process any submitted commands. */
+    if (STAILQ_EMPTY(&core->cmds))
+	goto do_events;
+
+    cmd = STAILQ_FIRST(&core->cmds);
+    while (cmd) {
+	core_object_t *object;
+
+	cmd_next = STAILQ_NEXT(cmd, entry);
+	STAILQ_REMOVE(&core->cmds, cmd, core_command, entry);
+	object = core_id_to_object(cmd->target_id);
+	(void)object->exec_command(object, &cmd->command);
+	STAILQ_INSERT_TAIL(&core->submitted, cmd, entry);
+	cmd = cmd_next;
+    }
+
+  do_events:
+    if (STAILQ_EMPTY(&core->events))
+	goto do_completions;
+
+    event = STAILQ_FIRST(&core->events);
+    while (event) {
+	event_subscription_t *subscription;
+
+	event_next = STAILQ_NEXT(event, entry);
+	STAILQ_FOREACH(subscription, &core->event_handlers[event->type],
+		       entry) {
+	    if (subscription->object_type == event->object_type) {
+		core_object_t *object;
+
+		if (subscription->object_id != CORE_OBJECT_ID_INVALID &&
+		    subscription->object_id != event->object_id)
+		    continue;
+
+		object = core_id_to_object(event->object_id);
+		if (!subscription->is_python)
+		    subscription->core.handler(subscription->core.object,
+					       object->name, event->type,
+					       event->data);
+		else {
+		    PyGILState_STATE state = PyGILState_Ensure();
+		    PyObject *args = Py_BuildValue("(isik)", object->type,
+						   object->name, event->type,
+						   event->data);
+		    if (!args) {
+			PyErr_Print();
+			continue;
+		    }
+
+		    (void)PyObject_Call(subscription->python.handler,
+					args, NULL);
+		    Py_DECREF(args);
+		    if (PyErr_Occurred())
+			PyErr_Print();
+		    PyGILState_Release(state);
+		}
+	    }
+	}
+
+	STAILQ_REMOVE(&core->events, event, event, entry);
+	free(event);
+	event = event_next;
+    }
+
+  do_completions:
+    comps = core->completions;
     while (comps->tail != comps->head) {
-        PyGILState_STATE state = PyGILState_Ensure();
-        PyObject *args = Py_BuildValue("(si)", comps->entries[comps->tail].id,
-                                       comps->entries[comps->tail].result);
+	PyGILState_STATE state;
+	PyObject *args;
+	bool handled = false;
+
+	if (!STAILQ_EMPTY(&core->submitted)) {
+	    cmd = STAILQ_FIRST(&core->submitted);
+	    while (cmd) {
+		cmd_next = STAILQ_NEXT(cmd, entry);
+		if (cmd->command.command_id == comps->entries[comps->tail].id) {
+		    if (cmd->handler)
+			cmd->handler(comps->entries[comps->tail].id,
+				     comps->entries[comps->tail].result,
+				     cmd->source);
+		    STAILQ_REMOVE(&core->submitted, cmd, core_command, entry);
+		    free(cmd->command.args);
+		    free(cmd);
+		    handled = true;
+		    break;
+		}
+		cmd = cmd_next;
+	    }
+	}
+
+	if (handled)
+	    goto next;
+
+        state = PyGILState_Ensure();
+        args = Py_BuildValue("(ki)", comps->entries[comps->tail].id,
+			     comps->entries[comps->tail].result);
 	if (!args) {
 	    PyErr_Print();
 	    goto next;
@@ -395,10 +497,9 @@ static void core_process_completions(void *arg) {
       next:
 	comps->tail = (comps->tail + 1) % comps->size;
     }
-
 }
 
-static void core_object_command_complete(const char *cmd_id, int result,
+static void core_object_command_complete(uint64_t cmd_id, int result,
 					 void *data) {
     core_t *core = (core_t *)data;
     core_object_completion_data_t *comps = core->completions;
@@ -515,57 +616,26 @@ static int core_object_event_submit(const core_object_event_type_t type,
     return 0;
 }
 
-static void core_process_events(void *user_data) {
+static uint64_t core_object_command_submit(core_object_t *source,
+					   core_object_id_t target_id,
+					   uint16_t obj_cmd_id, void *args,
+					   complete_cb_t cb,
+					   void *user_data) {
     core_t *core = (core_t *)user_data;
-    core_event_t *event;
-    core_event_t *event_next;
+    core_command_t *cmd;
 
-    if (STAILQ_EMPTY(&core->events))
-	return;
+    cmd = malloc(sizeof(*cmd));
+    if (!cmd)
+	return CMD_ID_MAKE_ERROR(-1);
 
-    event = STAILQ_FIRST(&core->events);
-    while (event) {
-	event_subscription_t *subscription;
-
-	event_next = STAILQ_NEXT(event, entry);
-	STAILQ_FOREACH(subscription, &core->event_handlers[event->type],
-		       entry) {
-	    if (subscription->object_type == event->object_type) {
-		core_object_t *object;
-
-		if (subscription->object_id != CORE_OBJECT_ID_INVALID &&
-		    subscription->object_id != event->object_id)
-		    continue;
-
-		object = core_id_to_object(event->object_id);
-		if (!subscription->is_python)
-		    subscription->core.handler(subscription->core.object,
-					       object->name, event->type,
-					       event->data);
-		else {
-		    PyGILState_STATE state = PyGILState_Ensure();
-		    PyObject *args = Py_BuildValue("(isik)", object->type,
-						   object->name, event->type,
-						   event->data);
-		    if (!args) {
-			PyErr_Print();
-			continue;
-		    }
-
-		    (void)PyObject_Call(subscription->python.handler,
-					args, NULL);
-		    Py_DECREF(args);
-		    if (PyErr_Occurred())
-			PyErr_Print();
-		    PyGILState_Release(state);
-		}
-	    }
-	}
-
-	STAILQ_REMOVE(&core->events, event, event, entry);
-	free(event);
-	event = event_next;
-    }
+    cmd->source = source;
+    cmd->target_id = target_id;
+    cmd->command.command_id = (uint64_t)cmd;
+    cmd->command.object_cmd_id = obj_cmd_id;
+    cmd->command.args = args;
+    cmd->handler = cb;
+    STAILQ_INSERT_TAIL(&core->cmds, cmd, entry);
+    return (uint64_t)cmd;
 }
 
 static PyObject *core_python_event_register(PyObject *self, PyObject *args) {

@@ -18,6 +18,15 @@
 #ifndef __HEATER_H__
 #define __HEATER_H__
 
+enum {
+    HEATER_COMMAND_SET_TEMP,
+    HEATER_COMMAND_MAX,
+};
+
+struct heater_set_temperature_args {
+    uint32_t temperature;
+};
+
 typedef struct {
     float temperature;
 } heater_status_t;

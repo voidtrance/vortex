@@ -46,8 +46,7 @@ struct core_control_data {
 };
 
 static struct core_control_data core_global_update;
-static struct core_control_data core_global_complete;
-static struct core_control_data core_global_events;
+static struct core_control_data core_global_work;
 
 #define DEFAULT_SCHED_POLICY SCHED_FIFO
 
@@ -93,7 +92,7 @@ static void *core_update_thread(void *arg) {
 
 static void *core_generic_thread(void *arg) {
     struct core_thread_args *args = (struct core_thread_args *)arg;
-    completion_callback_t callback = (completion_callback_t)args->callback;
+    work_callback_t callback = (work_callback_t)args->callback;
     float step_duration = ((float)1000 / (args->frequency / 1000000));
     struct timespec sleep_time = {0};
     struct timespec ts, te;
@@ -154,10 +153,7 @@ int start_thread(struct core_control_data *thread_data) {
 
 int controller_timer_start(update_callback_t update_cb,
 			   uint64_t update_frequency,
-			   completion_callback_t completion_cb,
-			   uint64_t completion_frequency,
-			   event_callback_t event_cb,
-			   uint64_t event_frequency,
+			   work_callback_t work_cb, uint64_t work_frequency,
                            void *user_data) {
     int ret;
 
@@ -169,28 +165,23 @@ int controller_timer_start(update_callback_t update_cb,
     if (ret)
 	return ret;
 
-    core_global_complete.args.frequency = completion_frequency;
-    core_global_complete.args.callback = completion_cb;
-    core_global_complete.args.user_data = user_data;
-    core_global_complete.thread_func = core_generic_thread;
-    ret = start_thread(&core_global_complete);
-    if (ret)
+    core_global_work.args.frequency = work_frequency;
+    core_global_work.args.callback = work_cb;
+    core_global_work.args.user_data = user_data;
+    core_global_work.thread_func = core_generic_thread;
+    ret = start_thread(&core_global_work);
+    if (ret) {
+	core_global_update.control.do_run = 0;
+	pthread_join(core_global_update.control.thread_id, NULL);
 	return ret;
-
-    core_global_events.args.frequency = event_frequency;
-    core_global_events.args.callback = event_cb;
-    core_global_events.args.user_data = user_data;
-    core_global_events.thread_func = core_generic_thread;
-    ret = start_thread(&core_global_events);
+    }
 
     return ret;
 }
 
 void controller_timer_stop(void) {
     core_global_update.control.do_run = 0;
-    core_global_complete.control.do_run = 0;
-    core_global_events.control.do_run = 0;
+    core_global_work.control.do_run = 0;
     pthread_join(core_global_update.control.thread_id, NULL);
-    pthread_join(core_global_complete.control.thread_id, NULL);
-    pthread_join(core_global_events.control.thread_id, NULL);
+    pthread_join(core_global_work.control.thread_id, NULL);
 }

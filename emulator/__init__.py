@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import queue
-import uuid
 from collections import OrderedDict
 import logging
 from lib.constants import *
@@ -30,9 +29,9 @@ class Command:
     def __init__(self, obj_id, cmd_id, opts, timestamp=None):
         self.obj_id, self.cmd_id, self.opts, self.time = \
             obj_id, cmd_id, opts, timestamp
-        self.id = uuid.uuid4().hex
+        self.id = id(self)
     def __str__(self):
-        return f"[{self.obj_id}:{self.cmd_id}@{self.time}"
+        return f"Command({self.id}, {self.obj_id}:{self.cmd_id}@{self.time})"
         
 class CommandQueue(queue.Queue):
     def put(self, command):
@@ -172,7 +171,8 @@ class Emulator:
         for command in self._scheduled_queue.get_all(timestamp):
             ret = self._controller.exec_command(command.id, command.obj_id,
                                                 command.cmd_id,
-                                                ctypes.addressof(command.opts))
+                                                0 if command.opts is None else \
+                                                    ctypes.addressof(command.opts))
             if ret:
                 logging.error("Failed to execute command")
             time.sleep(0.001)

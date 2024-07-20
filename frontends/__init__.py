@@ -58,6 +58,8 @@ class BaseFrontend:
             continue
 
     def convert_opts(self, klass, cmd_id, opts):
+        if not self._cmd_id_2_cmd[klass][cmd_id][1]:
+            return None
         opts_struct = self._cmd_id_2_cmd[klass][cmd_id][1]()
         opts_defaults = self._cmd_id_2_cmd[klass][cmd_id][2]
         for i, (name, ftype) in enumerate(opts_struct._fields_):

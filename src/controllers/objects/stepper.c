@@ -24,18 +24,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum {
-    MOVE_DIR_NONE,
-    MOVE_DIR_FWD,
-    MOVE_DIR_BACK
-} stepper_move_dir_t;
-
-enum {
-    STEPPER_COMMAND_ENABLE,
-    STEPPER_COMMAND_MOVE,
-    STEPPER_COMMAND_MAX,
-};
-
 typedef struct {
     uint32_t steps_per_rotation;
     uint32_t microsteps;
@@ -56,15 +44,6 @@ typedef struct {
     stepper_move_dir_t dir;
     bool enabled;
 } stepper_t;
-
-struct stepper_enable_args {
-    int enable;
-};
-
-struct stepper_move_args {
-    stepper_move_dir_t direction;
-    uint32_t steps;
-};
 
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep);
 int stepper_exec(core_object_t *object, core_object_command_t *cmd);

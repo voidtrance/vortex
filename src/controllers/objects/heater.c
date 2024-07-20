@@ -28,23 +28,9 @@
 
 #define AMBIENT_TEMP 25
 
-enum {
-  HEATER_COMMAND_SET_TEMP,
-  HEATER_COMMAND_MAX,
-};
-
 typedef struct {
     uint16_t power;
 } heater_config_params_t;
-
-struct heater_set_temperature_args {
-    uint32_t temperature;
-};
-
-struct heater_status {
-    uint32_t tmeperature;
-    uint16_t power;
-};
 
 typedef struct {
     core_object_t object;
