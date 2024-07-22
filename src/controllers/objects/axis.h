@@ -20,6 +20,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+enum {
+    AXIS_COMMAND_MOVE,
+    AXIS_COMMAND_HOME,
+    AXIS_COMMAND_MAX,
+};
+
+typedef struct {
+    float distance;
+} axis_move_command_opts_t;
+
 typedef struct {
     bool homed;
     float length;

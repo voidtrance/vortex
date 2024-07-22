@@ -102,6 +102,8 @@ class Axis(ObjectDef):
                     ("mm_per_step", ctypes.c_float),
                     ("stepper", ctypes.c_char * 64),
                     ("endstop", ctypes.c_char * 64)]
+    class AxisMoveCommandOpts(ctypes.Structure):
+        _fields_ = [("distance", ctypes.c_float)]
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
                     ("length", ctypes.c_float),
@@ -111,6 +113,8 @@ class Axis(ObjectDef):
         self.type = ModuleTypes.AXIS
         self.config = self.AxisConfig
         self.state = self.AxisStatus
+        self.commands = [(0, "move", self.AxisMoveCommandOpts, (0., )),
+                         (1, "home", None, None)]
 
 __objects__ = [Stepper, Thermistor, Heater, Endstop,
                Axis]

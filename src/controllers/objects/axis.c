@@ -18,13 +18,17 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
+#include <errno.h>
+#include <math.h>
+#include <time.h>
+#define CORE_UPDATE_RATE_LIMIT 40000
+#include "../debug.h"
 #include "../common_defs.h"
 #include "../events.h"
-#include "object_defs.h"
 #include "axis.h"
-#include "stepper.h"
 #include "endstop.h"
-#include "../debug.h"
+#include "object_defs.h"
+#include "stepper.h"
 
 typedef struct {
     uint16_t length;
@@ -41,11 +45,26 @@ typedef struct {
     const char *endstop_name;
     core_object_t *endstop;
     bool homed;
+    uint64_t command_id;
+    uint16_t axis_command_id;
+    bool waiting_to_move;
     bool endstop_is_max;
     float length;
     float mm_per_step;
     float position;
 } axis_t;
+
+typedef int (*command_func_t)(core_object_t *object, void *args);
+
+static int axis_move(core_object_t *object, void *args);
+static int axis_home(core_object_t *object, void *args);
+static void axis_event_handler(core_object_t *object, const char *name,
+			       const core_object_event_type_t type, void *args);
+
+static const command_func_t command_handlers[] = {
+    [AXIS_COMMAND_MOVE] = axis_move,
+    [AXIS_COMMAND_HOME] = axis_home,
+};
 
 static int axis_init(core_object_t *object) {
     axis_t *axis = (axis_t *)object;
@@ -54,20 +73,91 @@ static int axis_init(core_object_t *object) {
     axis->motor = CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_STEPPER,
 				     axis->motor_name);
     if (!axis->motor)
-	return -1;
+	return -ENODEV;
 
     if (axis->endstop_name) {
 	axis->endstop = CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_ENDSTOP,
 					   axis->endstop_name);
 	if (!axis->endstop)
-	    return -1;
+	    return -ENODEV;
     }
 
     axis->endstop->get_state(axis->endstop, &status);
     if (strncmp(status.type, "max", 3))
 	axis->endstop_is_max = true;
 
+    if (CORE_EVENT_REGISTER(axis, OBJECT_TYPE_STEPPER,
+			    OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
+			    axis->motor_name, axis_event_handler))
+	return -EINVAL;
+
+    axis->axis_command_id = AXIS_COMMAND_MAX;
     return 0;
+}
+
+static void axis_stepper_command_handler(uint64_t cmd_id, int result,
+					 void *arg) {
+    axis_t *axis = (axis_t *)arg;
+    axis->axis_command_id = AXIS_COMMAND_MAX;
+    axis->command_id = 0;
+}
+
+static int axis_move(core_object_t *object, void *args) {
+    axis_t *axis = (axis_t *)object;
+    axis_move_command_opts_t *opts = (axis_move_command_opts_t *)args;
+    struct stepper_move_args *stepper_args;
+
+    if (opts->distance == 0)
+	return 0;
+
+    stepper_args = calloc(1, sizeof(*stepper_args));
+    if (!stepper_args)
+        return -ENOMEM;
+
+    stepper_args->steps = fabs(opts->distance) / axis->mm_per_step;
+    log_debug(axis, "move: distance: %f, steps: %u",
+	      opts->distance, stepper_args->steps);
+    stepper_args->direction = opts->distance < 0 ? MOVE_DIR_BACK : MOVE_DIR_FWD;
+
+    /* We don't care for the command ID.  */
+    (void)CORE_CMD_SUBMIT(axis, axis->motor, STEPPER_COMMAND_MOVE,
+			  axis_stepper_command_handler, stepper_args);
+    return 0;
+}
+
+static void axis_event_handler(core_object_t *object, const char *name,
+			       const core_object_event_type_t type,
+			       void *args) {
+    axis_t *axis = (axis_t *)object;
+
+    if (axis->homed)
+	return;
+
+    if (strncmp(name, axis->motor_name, strlen(name)) ||
+	type != OBJECT_EVENT_STEPPER_MOVE_COMPLETE)
+	return;
+
+    axis->waiting_to_move = false;
+}
+
+static int axis_home(core_object_t *object, void *args) {
+    axis_t *axis = (axis_t *)object;
+
+    log_debug(axis, "homing axis: %u, %u, %f, %f", axis->homed,
+	      axis->waiting_to_move, axis->position, axis->length);
+    return 0;
+}
+
+static int axis_exec_command(core_object_t *object,
+			     core_object_command_t *cmd) {
+    axis_t *axis = (axis_t *)object;
+
+    if (axis->command_id)
+	return -EBUSY;
+
+    axis->command_id = cmd->command_id;
+    axis->axis_command_id = cmd->object_cmd_id;
+    return command_handlers[cmd->object_cmd_id](object, cmd->args);
 }
 
 static void axis_update(core_object_t *object, uint64_t ticks,
@@ -83,12 +173,39 @@ static void axis_update(core_object_t *object, uint64_t ticks,
      */
     axis->motor->get_state(axis->motor, &stepper_status);
     axis->position = stepper_status.steps * axis->mm_per_step;
-    if (!axis->endstop_is_max && axis->position <= 0) {
-	axis->homed = true;
+    if (!axis->endstop_is_max && axis->position <= 0)
 	axis->position = 0;
-    } else if (axis->endstop_is_max && axis->position >= axis->length) {
-	axis->homed = true;
+    else if (axis->endstop_is_max && axis->position >= axis->length)
 	axis->position = axis->length;
+
+    log_debug(axis, "position: %f", axis->position);
+
+    switch (axis->axis_command_id) {
+    case AXIS_COMMAND_HOME:
+	if (!axis->homed) {
+            if ((axis->endstop_is_max && axis->position == axis->length) ||
+                (axis->position == 0)) {
+              axis->homed = true;
+              axis->axis_command_id = AXIS_COMMAND_MAX;
+	      CORE_CMD_COMPLETE(axis, axis->command_id, 0);
+	      axis->command_id = 0;
+            } else {
+		axis_move_command_opts_t opts;
+
+		if (!axis->waiting_to_move) {
+		    if (axis->endstop_is_max)
+			opts.distance = (axis->length - axis->position);
+		    else
+			opts.distance = -axis->position;
+
+		    log_debug(axis, "distance: %f", opts.distance);
+		    axis->waiting_to_move = true;
+		    axis_move(object, &opts);
+		}
+            }
+        }
+    default:
+        break;
     }
 }
 
@@ -122,6 +239,7 @@ axis_t *object_create(const char *name, void *config_ptr) {
     axis->object.name = strdup(name);
     axis->object.init = axis_init;
     axis->object.update = axis_update;
+    axis->object.exec_command = axis_exec_command;
     axis->object.get_state = axis_status;
     axis->object.destroy = axis_destroy;
     axis->endstop_name = strdup(config->endstop);
