@@ -47,29 +47,30 @@ class Configuration:
             klass, name = section.split(maxsplit=1)
             yield ModuleTypes[klass], name, self.__parse_section(section)
 
-    def _get(self, value, conv):
-        if conv == list:
-            if ',' in value:
-                value = [x.strip() for x in value.split(',')]
+    def _get(self, value):
+        def convert(v, t):
+            if t == list:
+                if ',' in value:
+                    v = [self._get(x.strip()) for x in value.split(',')]
+                else:
+                    raise ValueError
+            elif t == bool:
+                v = self._parser._convert_to_boolean(v)
             else:
-                raise ValueError
-        elif conv == bool:
-            value = self._parser._convert_to_boolean(value)
-        else:
-            value = conv(value)
-
+                v = t(v)
+            return v
+        for type in (list, int, float, bool, str):
+            try:
+                value = convert(value, type)
+                break
+            except ValueError:
+                continue
         return value
     
     def __parse_section(self, section):
         section_config = Namespace()
         for option, value in self._parser.items(section):
-            for type in (list, int, float, bool, str):
-                try:
-                    value = self._get(value, type)
-                except ValueError:
-                    continue
-                else:
-                    setattr(section_config, option, value)
-                    break
+            value = self._get(value)
+            setattr(section_config, option, value)
         return section_config
     

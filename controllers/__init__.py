@@ -18,6 +18,7 @@ import importlib
 import logging
 import ctypes
 from controllers.types import ModuleTypes
+import lib.ctypes_helpers
 
 class Counter:
     def __init__(self):
@@ -82,21 +83,18 @@ class Controller(controllers.core.Core):
         available_objects = [x() for x in object_defs]
         self.object_defs.update({ModuleTypes[x.__class__.__name__.lower()]: x \
                                     for x in available_objects})
-        self.object_defs
         for klass, name, options in config:
             if klass not in self.object_defs or \
                 self.object_defs[klass] is None:
                 logging.error(f"No definitions for klass '{klass}'")
                 continue
             obj_conf = self.object_defs[klass].config()
-            for field in obj_conf._fields_:
-                value = vars(options).get(field[0], None)
-                if value is None:
-                    logging.error(f"Object config missing option '{field[0]}'")
-                    continue
-                if field[1]._type_ == ctypes.c_char:
-                    value = bytes(value, "ascii")
-                setattr(obj_conf, field[0], value)
+            try:
+                lib.ctypes_helpers.fill_ctypes_struct(obj_conf, vars(options))
+            except TypeError as e:
+                logging.error("Could not create object configuration!")
+                logging.error(f"   klass={klass}, name={name}: {str(e)}")
+                continue
             object_id = self.create_object(klass, name, ctypes.addressof(obj_conf))
             self.objects.add_object(klass, name, object_id)
     def get_params(self):

@@ -16,6 +16,8 @@
 import threading
 import os
 import importlib
+import logging
+from lib import ctypes_helpers
 from controllers.types import ModuleTypes
 
 class BaseFrontend:
@@ -62,14 +64,10 @@ class BaseFrontend:
             return None
         opts_struct = self._cmd_id_2_cmd[klass][cmd_id][1]()
         opts_defaults = self._cmd_id_2_cmd[klass][cmd_id][2]
-        for i, (name, ftype) in enumerate(opts_struct._fields_):
-            value = opts.get(name, opts_defaults[i])
-            value_type = type(opts_defaults[i])
-            if value_type == str:
-                value = bytes(value, "ascii")
-            else:
-                value = value_type(value)
-            setattr(opts_struct, name, value)
+        try:
+            ctypes_helpers.fill_ctypes_struct(opts_struct, opts)
+        except TypeError as e:
+            logging.error(f"Failed to convert command options: {str(e)}")
         return opts_struct
     
     def queue_command(self, klass, cmd, name, opts, timestamp):
