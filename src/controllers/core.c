@@ -99,9 +99,11 @@ typedef struct {
     core_object_list_t objects[OBJECT_TYPE_MAX];
     core_command_list_t cmds;
     core_command_list_t submitted;
-    core_object_completion_data_t *completions;
     uint64_t ticks;
     uint64_t runtime;
+
+    /* Command completion */
+    core_object_completion_data_t *completions;
     PyObject *python_complete_cb;
 
     /* Event handling */
@@ -412,9 +414,8 @@ static void core_object_update(uint64_t ticks, uint64_t runtime,
         if (LIST_EMPTY(&self->objects[type]))
             continue;
 
-        LIST_FOREACH(object, &self->objects[type], entry) {
+        LIST_FOREACH(object, &self->objects[type], entry)
             object->update(object, ticks, runtime);
-        }
     }
 }
 
