@@ -21,7 +21,6 @@
 #include <errno.h>
 #include <math.h>
 #include <time.h>
-#define CORE_UPDATE_RATE_LIMIT 40000
 #include "../debug.h"
 #include "../common_defs.h"
 #include "../events.h"
@@ -234,8 +233,6 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 	axis->position = 0;
     else if (axis->endstop_is_max && axis->position >= axis->length)
 	axis->position = axis->length;
-
-    log_debug(axis, "position: %f", axis->position);
 
     switch (axis->axis_command_id) {
     case AXIS_COMMAND_HOME:
