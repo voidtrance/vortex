@@ -273,7 +273,7 @@ static PyObject *core_stop(PyObject *self, PyObject *args) {
 
 static core_object_id_t load_object(core_t *core, core_object_type_t klass,
 				    const char *name, void *config) {
-    core_object_t *new_obj;
+    core_object_t *obj;
     char *libname[] = {
 	[OBJECT_TYPE_NONE] = NULL,
 	[OBJECT_TYPE_STEPPER] = "controllers/objects/stepper.so",
@@ -293,7 +293,7 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
             char *err = dlerror();
             core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core", "dlopen: %s",
 		     err);
-            return -1UL;
+            return CORE_OBJECT_ID_INVALID;
         }
     }
 
@@ -301,19 +301,32 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
         core->object_create[klass] = dlsym(core->object_libs[klass],
                                            "object_create");
         if (!core->object_create[klass])
-            return -1UL;
+            return CORE_OBJECT_ID_INVALID;
+    }
+
+    /*
+     * Check if an object with the same name exists in the
+     * same klass.
+     */
+    LIST_FOREACH(obj, &core->objects[klass], entry) {
+	if (!strncmp(obj->name, name, strlen(obj->name))) {
+	    core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+		     "object of klass %s and name %s already exists",
+		     klass, name);
+	    return CORE_OBJECT_ID_INVALID;
+	}
     }
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
 	     "creating object klass %s, name %s",
 	     ObjectTypeNames[klass], name);
-    new_obj = core->object_create[klass](name, config);
-    if (!new_obj)
-        return -1UL;
+    obj = core->object_create[klass](name, config);
+    if (!obj)
+        return CORE_OBJECT_ID_INVALID;
 
-    new_obj->call_data = core_call_data;
-    LIST_INSERT_HEAD(&core->objects[klass], new_obj, entry);
-    return (core_object_id_t)new_obj;
+    obj->call_data = core_call_data;
+    LIST_INSERT_HEAD(&core->objects[klass], obj, entry);
+    return (core_object_id_t)obj;
 }
 
 static PyObject *core_create_object(PyObject *self, PyObject *args,
@@ -330,7 +343,7 @@ static PyObject *core_create_object(PyObject *self, PyObject *args,
         return NULL;
 
     object_id = load_object((core_t *)self, klass, name, options);
-    if (object_id == -1UL) {
+    if (object_id == CORE_OBJECT_ID_INVALID) {
         PyErr_Format(CoreError, "Failed to create object %s of klass %s", name,
                      ObjectTypeNames[klass]);
         return NULL;
