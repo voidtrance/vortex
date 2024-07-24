@@ -100,7 +100,7 @@ class Axis(ObjectDef):
     class AxisConfig(ctypes.Structure):
         _fields_ = [("length", ctypes.c_uint16),
                     ("mm_per_step", ctypes.c_float),
-                    ("stepper", ctypes.c_char * 64),
+                    ("stepper", ctypes.POINTER(ctypes.c_char_p)),
                     ("endstop", ctypes.c_char * 64)]
     class AxisMoveCommandOpts(ctypes.Structure):
         _fields_ = [("distance", ctypes.c_float)]

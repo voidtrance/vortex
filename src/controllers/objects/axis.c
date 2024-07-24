@@ -31,17 +31,24 @@
 #include "stepper.h"
 
 typedef struct {
+    const char *name;
+    core_object_t *obj;
+    float position;
+    bool move_complete;
+} axis_motor_t;
+
+typedef struct {
     uint16_t length;
     float mm_per_step;
-    const char stepper[64];
+    const char **steppers;
     const char endstop[64];
 } axis_config_params_t;
 
 typedef struct {
     core_object_t object;
     core_call_data_t *call_data;
-    const char *motor_name;
-    core_object_t *motor;
+    axis_motor_t *motors;
+    size_t n_motors;
     const char *endstop_name;
     core_object_t *endstop;
     bool homed;
@@ -69,11 +76,19 @@ static const command_func_t command_handlers[] = {
 static int axis_init(core_object_t *object) {
     axis_t *axis = (axis_t *)object;
     endstop_status_t status;
+    size_t i;
 
-    axis->motor = CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_STEPPER,
-				     axis->motor_name);
-    if (!axis->motor)
-	return -ENODEV;
+    for (i = 0; i < axis->n_motors; i++) {
+	axis->motors[i].obj = CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_STEPPER,
+						 axis->motors[i].name);
+	if (!axis->motors[i].obj)
+	    return -ENODEV;
+
+        if (CORE_EVENT_REGISTER(axis, OBJECT_TYPE_STEPPER,
+                                OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
+                                axis->motors[i].name, axis_event_handler))
+            return -EINVAL;
+    }
 
     if (axis->endstop_name) {
 	axis->endstop = CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_ENDSTOP,
@@ -86,11 +101,6 @@ static int axis_init(core_object_t *object) {
     if (strncmp(status.type, "max", 3))
 	axis->endstop_is_max = true;
 
-    if (CORE_EVENT_REGISTER(axis, OBJECT_TYPE_STEPPER,
-			    OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
-			    axis->motor_name, axis_event_handler))
-	return -EINVAL;
-
     axis->axis_command_id = AXIS_COMMAND_MAX;
     return 0;
 }
@@ -98,30 +108,57 @@ static int axis_init(core_object_t *object) {
 static void axis_stepper_command_handler(uint64_t cmd_id, int result,
 					 void *arg) {
     axis_t *axis = (axis_t *)arg;
+    log_debug(axis, "Command %lu complete: %d", cmd_id, result);
     axis->axis_command_id = AXIS_COMMAND_MAX;
     axis->command_id = 0;
+}
+
+static int axis_motor_move(axis_t *axis, axis_motor_t *motor,
+                           struct stepper_move_args *args) {
+    return CORE_CMD_SUBMIT(axis, motor->obj, STEPPER_COMMAND_MOVE,
+			   axis_stepper_command_handler, args);
 }
 
 static int axis_move(core_object_t *object, void *args) {
     axis_t *axis = (axis_t *)object;
     axis_move_command_opts_t *opts = (axis_move_command_opts_t *)args;
     struct stepper_move_args *stepper_args;
+    stepper_status_t motor_status;
+    size_t i;
+
+    if (!axis->homed) {
+	log_error(axis, "Axis '%s' is not homed.", axis->object.name);
+	return -EINVAL;
+    }
 
     if (opts->distance == 0)
 	return 0;
 
-    stepper_args = calloc(1, sizeof(*stepper_args));
-    if (!stepper_args)
-        return -ENOMEM;
+    /* Check that all motors are enabled. */
+    for (i = 0; i < axis->n_motors; i++) {
+	axis->motors[i].obj->get_state(axis->motors[i].obj, &motor_status);
+	if (!motor_status.enabled) {
+	    log_error(axis, "Axis motor '%s' is not enabled.",
+		      axis->motors[i].name);
+	    return -1;
+	}
+    }
 
-    stepper_args->steps = fabs(opts->distance) / axis->mm_per_step;
-    log_debug(axis, "move: distance: %f, steps: %u",
-	      opts->distance, stepper_args->steps);
-    stepper_args->direction = opts->distance < 0 ? MOVE_DIR_BACK : MOVE_DIR_FWD;
+    for (i = 0; i < axis->n_motors; i++) {
+        stepper_args = calloc(1, sizeof(*stepper_args));
+        if (!stepper_args)
+            return -ENOMEM;
 
-    /* We don't care for the command ID.  */
-    (void)CORE_CMD_SUBMIT(axis, axis->motor, STEPPER_COMMAND_MOVE,
-			  axis_stepper_command_handler, stepper_args);
+        stepper_args->steps = fabs(opts->distance) / axis->mm_per_step;
+        log_debug(axis, "move: distance: %f, steps: %u", opts->distance,
+                  stepper_args->steps);
+        stepper_args->direction =
+            opts->distance < 0 ? MOVE_DIR_BACK : MOVE_DIR_FWD;
+
+        /* We don't care for the command ID.  */
+        (void)axis_motor_move(axis, &axis->motors[i], stepper_args);
+    }
+
     return 0;
 }
 
@@ -129,15 +166,17 @@ static void axis_event_handler(core_object_t *object, const char *name,
 			       const core_object_event_type_t type,
 			       void *args) {
     axis_t *axis = (axis_t *)object;
+    size_t i;
 
     if (axis->homed)
 	return;
 
-    if (strncmp(name, axis->motor_name, strlen(name)) ||
-	type != OBJECT_EVENT_STEPPER_MOVE_COMPLETE)
-	return;
-
-    axis->waiting_to_move = false;
+    for (i = 0; i < axis->n_motors; i++) {
+	if (strncmp(name, axis->motors[i].name, strlen(name)) ||
+	    type != OBJECT_EVENT_STEPPER_MOVE_COMPLETE)
+	    continue;
+	axis->motors[i].move_complete = true;
+    }
 }
 
 static int axis_home(core_object_t *object, void *args) {
@@ -151,19 +190,24 @@ static int axis_home(core_object_t *object, void *args) {
 static int axis_exec_command(core_object_t *object,
 			     core_object_command_t *cmd) {
     axis_t *axis = (axis_t *)object;
+    int ret;
 
     if (axis->command_id)
 	return -EBUSY;
 
     axis->command_id = cmd->command_id;
     axis->axis_command_id = cmd->object_cmd_id;
-    return command_handlers[cmd->object_cmd_id](object, cmd->args);
+    ret = command_handlers[cmd->object_cmd_id](object, cmd->args);
+    if (ret != 0)
+	axis->command_id = 0;
+    return ret;
 }
 
 static void axis_update(core_object_t *object, uint64_t ticks,
 			uint64_t runtime) {
     axis_t *axis = (axis_t *)object;
     stepper_status_t stepper_status;
+    size_t i;
 
     /* TODO: need to figure out how to limit the stepper
      * from going past the axis length. Some possibilities:
@@ -171,8 +215,21 @@ static void axis_update(core_object_t *object, uint64_t ticks,
      *    - have the axis somehow set limits on the number of
      *      steps the stepper can perform.
      */
-    axis->motor->get_state(axis->motor, &stepper_status);
-    axis->position = stepper_status.steps * axis->mm_per_step;
+
+    for (i = 0; i < axis->n_motors; i++) {
+	axis->motors[i].obj->get_state(axis->motors[i].obj, &stepper_status);
+	axis->motors[i].position = stepper_status.steps * axis->mm_per_step;
+    }
+
+    /*
+     * Average out the axis position based on the position of
+     * motor.
+     */
+    axis->position = 0;
+    for (i = 0; i < axis->n_motors; i++)
+	axis->position += axis->motors[i].position;
+    axis->position /= axis->n_motors;
+
     if (!axis->endstop_is_max && axis->position <= 0)
 	axis->position = 0;
     else if (axis->endstop_is_max && axis->position >= axis->length)
@@ -190,20 +247,32 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 	      CORE_CMD_COMPLETE(axis, axis->command_id, 0);
 	      axis->command_id = 0;
             } else {
-		axis_move_command_opts_t opts;
+		for (i = 0; i < axis->n_motors; i++) {
+                  struct stepper_move_args *args;
 
-		if (!axis->waiting_to_move) {
-		    if (axis->endstop_is_max)
-			opts.distance = (axis->length - axis->position);
-		    else
-			opts.distance = -axis->position;
+		  args = calloc(1, sizeof(*args));
+		  if (!args)
+		      continue;
 
-		    log_debug(axis, "distance: %f", opts.distance);
-		    axis->waiting_to_move = true;
-		    axis_move(object, &opts);
+                  if (axis->motors[i].move_complete) {
+		      if (axis->endstop_is_max) {
+			  args->steps = (axis->length -
+					 axis->motors[i].position) /
+			      axis->mm_per_step;
+			  args->direction = MOVE_DIR_FWD;
+		      } else {
+			  args->steps = axis->motors[i].position;
+			  args->direction = MOVE_DIR_BACK;
+		      }
+
+		      log_debug(axis, "motor %s distance: %lu",
+				axis->motors[i].name, args->steps);
+		      axis->motors[i].move_complete = false;
+		      axis_motor_move(axis, &axis->motors[i], args);
+                  }
 		}
-            }
-        }
+	    }
+	}
     default:
         break;
     }
@@ -220,16 +289,21 @@ static void axis_status(core_object_t *object, void *status) {
 
 static void axis_destroy(core_object_t *object) {
     axis_t *axis = (axis_t *)object;
+    size_t i;
 
     core_object_destroy(object);
     free((char *)axis->endstop_name);
-    free((char *)axis->motor_name);
+    for (i = 0; i < axis->n_motors; i++)
+	free((char *)axis->motors[i].name);
+    free(axis->motors);
     free(axis);
 }
 
 axis_t *object_create(const char *name, void *config_ptr) {
     axis_t *axis;
     axis_config_params_t *config = (axis_config_params_t *)config_ptr;
+    const char *stepper;
+    size_t i = 0;
 
     axis = calloc(1, sizeof(*axis));
     if (!axis)
@@ -243,7 +317,26 @@ axis_t *object_create(const char *name, void *config_ptr) {
     axis->object.get_state = axis_status;
     axis->object.destroy = axis_destroy;
     axis->endstop_name = strdup(config->endstop);
-    axis->motor_name = strdup(config->stepper);
+
+    /* First, we have to find out how many motors are
+     * defined.
+     */
+    stepper = *config->steppers;
+    while (stepper) {
+	stepper = config->steppers[++i];
+    }
+
+    axis->motors = calloc(i, sizeof(*axis->motors));
+    if (!axis->motors) {
+	free((char *)axis->endstop_name);
+	free(axis);
+	return NULL;
+    }
+
+    axis->n_motors = i;
+    for (i = 0; i < axis->n_motors; i++)
+	axis->motors[i].name = strdup(config->steppers[i]);
+
     axis->mm_per_step = config->mm_per_step;
 
     return axis;
