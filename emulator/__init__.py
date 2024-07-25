@@ -145,7 +145,8 @@ class Emulator:
     def run(self):
         try:
            self._controller.start(self._frequency, self._command_complete)
-        except CoreError:
+        except CoreError as e:
+            print(str(e))
             self._controller.stop()
             return
         self._frontend.run()

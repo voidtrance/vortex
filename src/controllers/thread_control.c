@@ -186,8 +186,10 @@ int controller_timer_start(update_callback_t update_cb,
 int64_t controller_timer_stop(void) {
     core_global_update.control.do_run = 0;
     core_global_work.control.do_run = 0;
-    pthread_join(core_global_update.control.thread_id, NULL);
-    pthread_join(core_global_work.control.thread_id, NULL);
+    if (core_global_update.control.thread_id)
+        pthread_join(core_global_update.control.thread_id, NULL);
+    if (core_global_work.control.thread_id)
+	pthread_join(core_global_work.control.thread_id, NULL);
 
     return core_global_update.args.frequency_match;
 }
