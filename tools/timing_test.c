@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <string.h>
 
 static bool do_run = true;
 
@@ -34,7 +35,7 @@ static void *thread_func(void *arg) {
         clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
         nanosleep(&sleep, &rem);
         clock_gettime(CLOCK_MONOTONIC_RAW, &te);
-        duration = ((te.tv_sec - ts.tv_sec) * SEC2NSEC) + 
+        duration = ((te.tv_sec - ts.tv_sec) * SEC2NSEC) +
             (te.tv_nsec - ts.tv_nsec);
         args->total += duration;
         args->count++;
@@ -49,6 +50,7 @@ int main(int argc, char **argv) {
     uint32_t sleeptime;
     void *res;
     int opt;
+    int ret;
     int min_priority, max_priority, priority;
     unsigned int relative = 0;
     struct sched_param sparam;
@@ -81,21 +83,38 @@ int main(int argc, char **argv) {
     printf("run priority: %d\n", priority);
     sparam.sched_priority = priority;
 
-    if (pthread_attr_init(&attrs))
-        perror("pthread_attr_init");
+    ret = pthread_attr_init(&attrs);
+    if (ret) {
+	printf("pthread_attr_init: %s\n", strerror(ret));
+	return ret;
+    }
 
-    if (pthread_attr_setschedpolicy(&attrs, SCHED_POLICY))
-        perror("pthread_attr_setschedpolicy");
+    ret = pthread_attr_setschedpolicy(&attrs, SCHED_POLICY);
+    if (ret) {
+	printf("pthread_attr_setschedpolicy: %s\n", strerror(ret));
+	return ret;
+    }
 
-    if (pthread_attr_setinheritsched(&attrs, PTHREAD_EXPLICIT_SCHED))
-        perror("pthread_attr_setinheritsched");
+    ret = pthread_attr_setinheritsched(&attrs, PTHREAD_EXPLICIT_SCHED);
+    if (ret) {
+	printf("pthread_attr_setinheritsched: %s\n", strerror(ret));
+	return ret;
+    }
 
     args.sleep_time = sleeptime;
-    if (pthread_create(&thread, &attrs, &thread_func, &args))
-        perror("pthread_create");
+    ret = pthread_create(&thread, &attrs, &thread_func, &args);
+    if (ret) {
+	printf("pthread_create: %s\n", strerror(ret));
+	return ret;
+    }
 
-    if (pthread_setschedparam(thread, SCHED_POLICY, &sparam))
-        perror("pthread_setschedparam");
+    ret = pthread_setschedparam(thread, SCHED_POLICY, &sparam);
+    if (ret) {
+	printf("pthread_setschedparam: %s\n", strerror(ret));
+	do_run = false;
+	pthread_join(thread, NULL);
+	return ret;
+    }
 
     sleep(runtime);
     do_run = false;
