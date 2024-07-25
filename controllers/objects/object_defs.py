@@ -107,5 +107,18 @@ class Axis(ObjectDef):
                          (1, "home", None, None)]
         self.events = {ModuleEvents.AXIS_HOMED : self.AxisEventHomed}
 
+class Probe(ObjectDef):
+    class ProbeConfig(ctypes.Structure):
+        _fields_ = [("z_offset", ctypes.c_float),
+                    ("range", ctypes.c_float)]
+    class ProbeStatus(ctypes.Structure):
+        _fields_ = [("triggered", ctypes.c_bool),
+                    ("position", ctypes.c_float)]
+    class ProbeEventTriggered(ctypes.Structure):
+        _fields_ = [("position", ctypes.c_float)]
+    def __init__(self):
+        super().__init__(ModuleTypes.PROBE)
+        self.events = {ModuleEvents.PROBE_TRIGGERED: self.ProbeEventTriggered}
+
 __objects__ = [Stepper, Thermistor, Heater, Endstop,
-               Axis]
+               Axis, Probe]
