@@ -108,6 +108,8 @@ class Axis(ObjectDef):
         _fields_ = [("homed", ctypes.c_bool),
                     ("length", ctypes.c_float),
                     ("position", ctypes.c_float)]
+    class AxisEventHomed(ctypes.Structure):
+        _fields_ = [("axis", ctypes.c_char_p)]
     def __init__(self):
         super().__init__()
         self.type = ModuleTypes.AXIS
@@ -115,6 +117,7 @@ class Axis(ObjectDef):
         self.state = self.AxisStatus
         self.commands = [(0, "move", self.AxisMoveCommandOpts, (0., )),
                          (1, "home", None, None)]
+        self.events = {ModuleEvents.AXIS_HOMED : self.AxisEventHomed}
 
 __objects__ = [Stepper, Thermistor, Heater, Endstop,
                Axis]

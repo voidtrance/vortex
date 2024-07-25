@@ -36,4 +36,8 @@ typedef struct {
     float position;
 } axis_status_t;
 
+typedef struct {
+    const char *axis;
+} axis_homed_event_data_t;
+
 #endif

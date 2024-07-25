@@ -45,7 +45,6 @@ typedef struct {
 
 typedef struct {
     core_object_t object;
-    core_call_data_t *call_data;
     axis_motor_t *motors;
     size_t n_motors;
     const char *endstop_name;
@@ -239,10 +238,16 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 	if (!axis->homed) {
             if ((axis->endstop_is_max && axis->position == axis->length) ||
                 (axis->position == 0)) {
-              axis->homed = true;
-              axis->axis_command_id = AXIS_COMMAND_MAX;
-	      CORE_CMD_COMPLETE(axis, axis->command_id, 0);
-	      axis->command_id = 0;
+		axis_homed_event_data_t data;
+
+		data.axis = axis->object.name;
+		axis->homed = true;
+		axis->axis_command_id = AXIS_COMMAND_MAX;
+		CORE_EVENT_SUBMIT(axis, OBJECT_EVENT_AXIS_HOMED,
+				  core_object_to_id((core_object_t *)axis),
+				  data);
+		CORE_CMD_COMPLETE(axis, axis->command_id, 0);
+		axis->command_id = 0;
             } else {
 		for (i = 0; i < axis->n_motors; i++) {
                   struct stepper_move_args *args;
