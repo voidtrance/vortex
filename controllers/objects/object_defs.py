@@ -18,12 +18,12 @@ from ..types import ModuleTypes, ModuleEvents
 import ctypes
 
 class ObjectDef(Namespace):
-    def __init__(self):
-        self.config = None
+    def __init__(self, type=ModuleTypes.NONE):
+        self.type = type
+        self.config = getattr(self, str(type).capitalize() + "Config", None)
+        self.state = getattr(self, str(type).capitalize() + "Status", None)
         self.commands = []
-        self.state = None
         self.events = {}
-        self.type = ModuleTypes.NONE
 
 class Stepper(ObjectDef):
     class StepperConfig(ctypes.Structure):
@@ -44,13 +44,10 @@ class Stepper(ObjectDef):
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
-        super().__init__()
-        self.type = ModuleTypes.STEPPER
-        self.config = self.StepperConfig
+        super().__init__(ModuleTypes.STEPPER)
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
                          (1, "move", self.StepperMoveCommandOpts, (0, 0))]
         self.events = {ModuleEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
-        self.state = self.StepperStatus
         
 class Thermistor(ObjectDef):
     class ThermistorConfig(ctypes.Structure):
@@ -60,10 +57,7 @@ class Thermistor(ObjectDef):
     class ThermistorStatus(ctypes.Structure):
         _fields_ = [("resistance", ctypes.c_float)]
     def __init__(self):
-        super().__init__()
-        self.type = ModuleTypes.THERMISTOR
-        self.config = self.ThermistorConfig
-        self.state = self.ThermistorStatus
+        super().__init__(ModuleTypes.THERMISTOR)
 class Heater(ObjectDef):
     class HeaterConfig(ctypes.Structure):
         _fields_ = [("power", ctypes.c_uint16)]
@@ -74,12 +68,9 @@ class Heater(ObjectDef):
     class HeaterEventTempReached(ctypes.Structure):
         _fields_ = [("temp", ctypes.c_float)]
     def __init__(self):
-        super().__init__()
-        self.type = ModuleTypes.HEATER
-        self.config = self.HeaterConfig
+        super().__init__(ModuleTypes.HEATER)
         self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,))]
         self.events = {ModuleEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
-        self.state = self.HeaterStatus
 
 class Endstop(ObjectDef):
     class EndstopConfig(ctypes.Structure):
@@ -111,10 +102,7 @@ class Axis(ObjectDef):
     class AxisEventHomed(ctypes.Structure):
         _fields_ = [("axis", ctypes.c_char_p)]
     def __init__(self):
-        super().__init__()
-        self.type = ModuleTypes.AXIS
-        self.config = self.AxisConfig
-        self.state = self.AxisStatus
+        super().__init__(ModuleTypes.AXIS)
         self.commands = [(0, "move", self.AxisMoveCommandOpts, (0., )),
                          (1, "home", None, None)]
         self.events = {ModuleEvents.AXIS_HOMED : self.AxisEventHomed}
