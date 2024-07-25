@@ -92,7 +92,7 @@ class BaseFrontend:
         print(event, owner.config.name, timestamp)
     
 def create_frontend(name):
-    if not os.path.isfile(f"./frontends/{name}.py"):
+    if not os.path.isdir(f"./frontends/{name}"):
         return None
     module = importlib.import_module(f"frontends.{name}")
     if hasattr(module, "create") and callable(module.create):

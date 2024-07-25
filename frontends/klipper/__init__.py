@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from frontends import BaseFrontend
-import frontends.klippy.msgproto as msgproto
+import frontends.klipper as msgproto
 import frontends.lib
 import ctypes
 import select
