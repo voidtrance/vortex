@@ -96,8 +96,10 @@ static int axis_init(core_object_t *object) {
     }
 
     axis->endstop->get_state(axis->endstop, &status);
-    if (strncmp(status.type, "max", 3))
+    if (!strncmp(status.type, "max", 3))
 	axis->endstop_is_max = true;
+    else
+	axis->endstop_is_max = false;
 
     axis->axis_command_id = AXIS_COMMAND_MAX;
     return 0;
@@ -179,9 +181,18 @@ static void axis_event_handler(core_object_t *object, const char *name,
 
 static int axis_home(core_object_t *object, void *args) {
     axis_t *axis = (axis_t *)object;
+    struct stepper_enable_args *enable_args;
+    size_t i;
 
     log_debug(axis, "homing axis: %u, %u, %f, %f", axis->homed,
 	      axis->waiting_to_move, axis->position, axis->length);
+    for (i = 0; i < axis->n_motors; i++) {
+	enable_args = malloc(sizeof(*enable_args));
+        enable_args->enable = true;
+        (void)CORE_CMD_SUBMIT(axis,
+			axis->motors[i].obj,
+			STEPPER_COMMAND_ENABLE, NULL, enable_args);
+    }
     return 0;
 }
 
@@ -226,7 +237,9 @@ static void axis_update(core_object_t *object, uint64_t ticks,
     axis->position = 0;
     for (i = 0; i < axis->n_motors; i++)
 	axis->position += axis->motors[i].position;
+
     axis->position /= axis->n_motors;
+    log_debug(axis, "axis %s position: %f", axis->object.name, axis->position);
 
     if (!axis->endstop_is_max && axis->position <= 0)
 	axis->position = 0;
@@ -267,8 +280,6 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 			  args->direction = MOVE_DIR_BACK;
 		      }
 
-		      log_debug(axis, "motor %s distance: %lu",
-				axis->motors[i].name, args->steps);
 		      axis->motors[i].move_complete = false;
 		      axis_motor_move(axis, &axis->motors[i], args);
                   }
