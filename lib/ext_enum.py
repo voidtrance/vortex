@@ -1,4 +1,4 @@
-# gEmulator - GCode machine emulator
+# vortex - GCode machine emulator
 # Copyright (C) 2024  Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
