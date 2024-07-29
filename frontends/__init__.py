@@ -21,13 +21,29 @@ from lib import ctypes_helpers
 from controllers.types import ModuleTypes
 
 class BaseFrontend:
-    def __init__(self):
+    def __init__(self, event_register=None, event_unregister=None):
         self._raw_controller_params = {}
         self._cmd_id_2_cmd = {x: {} for x in ModuleTypes}
         self._cmd_name_2_id = {x: {} for x in ModuleTypes}
         self._obj_name_2_id = {x: {} for x in ModuleTypes}
+        self._obj_id_2_name = {x: {} for x in ModuleTypes}
         self._command_completion = {}
         self._run = True
+        self._run_sequential = False
+        if event_register:
+            self.event_register = event_register
+        else:
+            self.event_register = lambda a, b, c, d: False
+        if event_unregister:
+            self.event_unregister = event_unregister
+        else:
+            self.event_unregister = lambda a, b, c, d: False
+
+    def _find_object(self, klass, *seq):
+        for s in seq:
+            if s in self._obj_name_2_id[klass]:
+                return s
+        return None
 
     def set_command_queue(self, queue):
         self._queue = queue
@@ -45,7 +61,19 @@ class BaseFrontend:
             for klass in objects:
                 for obj in objects[klass]:
                     self._obj_name_2_id[klass][obj[0]] = obj[1]
-    
+                    self._obj_id_2_name[klass][obj[1]] = obj[0]
+
+    def get_object_id(self, klass, name):
+        return self._obj_name_2_id[klass].get(name, None)
+
+    def get_object_name(self, klass, id):
+        return self._obj_id_2_name[klass].get(id, None)
+
+    def get_object_command(self, klass, name):
+        cmd = self._cmd_name_2_id[klass].get(name, None)
+        if cmd is None:
+            return self._cmd_id_2_cmd[klass].get(name, None)
+
     def run(self):
         self._thread = threading.Thread(None, self._process_commands, "frontend")
         self._run = True
@@ -54,6 +82,9 @@ class BaseFrontend:
     def stop(self):
         self._run = False
         self._thread.join()
+
+    def set_sequential_mode(self, mode):
+        self._run_sequential = mode
 
     def _process_commands(self):
         while self._run:
@@ -70,26 +101,27 @@ class BaseFrontend:
             logging.error(f"Failed to convert command options: {str(e)}")
         return opts_struct
     
-    def queue_command(self, klass, cmd, name, opts, timestamp):
-        cmd_id = self._cmd_name_2_id[klass].get(cmd, (None,))[0]
-        if cmd_id is None:
-            return
-        obj_id = self._obj_name_2_id[klass].get(name, None)
+    def queue_command(self, klass, object, cmd, opts, timestamp):
+        if isinstance(cmd, str):
+            cmd_id = self._cmd_name_2_id[klass].get(cmd, (None,))[0]
+            if cmd_id is None:
+                return False
+        obj_id = self._obj_name_2_id[klass].get(object, None)
         if obj_id is None:
-            return
-        klass_cmds = self._cmd_name_2_id.get(klass, {})
-        if cmd not in klass_cmds:
-            return
+            return False
         opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
         opts = self.convert_opts(klass, cmd_id, opts)
-        cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
-        self._command_completion[cmd_id] = cmd
+        if not self._run_sequential or not self._command_completion:
+            cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
+            self._command_completion[cmd_id] = cmd
+            return True
+        return False
 
     def complete_command(self, id, result):
-        pass
+        self._command_completion.pop(id)
 
     def event_handler(self, event, owner, timestamp, *args):
-        print(event, owner.config.name, timestamp)
+        pass
     
 def create_frontend(name):
     if not os.path.isdir(f"./frontends/{name}"):

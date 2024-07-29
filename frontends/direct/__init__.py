@@ -46,7 +46,7 @@ class DirectFrontend(BaseFrontend):
             logging.debug(f"Received command: {cmd.strip()}")
             try:
                 parts = cmd.strip().split(':', maxsplit=4)
-                klass, name, cmd = parts[:3]
+                klass, object, cmd = parts[:3]
                 opts = ""
                 timestamp = 0
                 if len(parts) == 4:
@@ -58,7 +58,7 @@ class DirectFrontend(BaseFrontend):
                 continue
 
             klass = ModuleTypes[klass]
-            self.queue_command(klass, cmd, name, opts, timestamp)
+            self.queue_command(klass, object, cmd, opts, timestamp)
 
     def __del__(self):
         self._fd.close()
@@ -66,7 +66,7 @@ class DirectFrontend(BaseFrontend):
 
     def complete_command(self, id, result):
         logging.debug(f"Command {id} complete: {result}")
-        self._command_completion.pop(id)
+        super().complete_command(id, result)
 
     def event_handler(self, event, owner, timestamp, *args):
         super().event_handler(event, owner, timestamp, *args)
