@@ -15,7 +15,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
+from distutils import sysconfig
 import shutil
+import sys
+import re
 import glob
 import os.path
 import pathlib
@@ -43,7 +46,6 @@ class BuildExtension(build_ext):
       files = glob.glob(os.path.join(self.build_lib, "core.*.so"))
       self.move_files(files, "controllers")
       files = glob.glob(os.path.join(self.build_lib, "*.so"))
-      print(files)
       self.move_files(files, "controllers/objects")
 
 def find_all_objects():
@@ -63,19 +65,51 @@ def find_all_objects():
             [(source_root / "controllers" / "objects" / f"{object}.c").as_posix()]
     return build_objects
 
-object_extensions = []
-for object, sources in find_all_objects().items():
-     e = Extension(name=object,
-                   sources=sources + ["src/controllers/utils.c"],
-                   include_dirs=["src/controllers"])
-     object_extensions.append(e)
+def run_distutils(flags, debug=False, mem_leak_debug=False):
+    object_extensions = []
+    debug_sources = ["src/controllers/mem_debug.c"] if mem_leak_debug else []
+    for object, sources in find_all_objects().items():
+        e = Extension(name=object,
+                      sources=sources + debug_sources + \
+                      ["src/controllers/utils.c"],
+                      include_dirs=["src/controllers"],
+                      extra_compile_args=flags)
+        object_extensions.append(e)
 
-setup(name="emulator", version="0.0.1",
-      packages=find_packages("."),
-      ext_modules=[Extension(name="core",
-                            sources=["src/controllers/core.c",
-                                     "src/controllers/thread_control.c",
-                                     "src/controllers/utils.c"],
-                            libraries=["dl", "pthread"])] + \
-                   object_extensions,
-      cmdclass={"build_py": BuildExtension})
+    core = Extension(name="core",
+                     sources=["src/controllers/core.c",
+                              "src/controllers/thread_control.c",
+                              "src/controllers/utils.c"] + \
+                              debug_sources,
+                                libraries=["dl", "pthread"],
+                                extra_compile_args=flags)
+    setup(name="emulator", version="0.0.1",
+          packages=find_packages("."),
+          ext_modules=[core] + object_extensions,
+          cmdclass={"build_py": BuildExtension})
+
+def modify_flags(debug, mem_leak_debug):
+    flags = []
+    if sys.platform == 'linux' or sys.platform == 'darwin':
+        if debug:
+            flags.append("-DVORTEX_DEBUG")
+        else:
+            sysconfig.get_config_var(None)  # to fill up _config_vars
+            d = sysconfig._config_vars
+            for x in ['OPT', 'CFLAGS', 'PY_CFLAGS', 'PY_CORE_CFLAGS', 'CONFIGURE_CFLAGS', 'LDSHARED']:
+                d[x] = re.sub(' -g ', ' ', d[x])
+                d[x] = re.sub('^-g ', '',  d[x])
+                d[x] = re.sub(' -g$', '',  d[x])
+        if mem_leak_debug:
+            flags.append("-DVORTEX_MEM_LEAK")
+    return flags
+
+is_debug = "--debug" in sys.argv
+is_mem_leak_debug = False
+if "--mem-leak-debug" in sys.argv:
+    is_mem_leak_debug = True
+    sys.argv.remove("--mem-leak-debug")
+flags = modify_flags(is_debug, is_mem_leak_debug)
+run_distutils(flags, is_debug, is_mem_leak_debug)
+
+

@@ -25,6 +25,7 @@
 #include <structmember.h>
 #include <sys/queue.h>
 #include <stdarg.h>
+#include <pthread.h>
 #include "core.h"
 #include "events.h"
 #include "common_defs.h"
@@ -88,9 +89,19 @@ typedef struct {
 #define CMD_ID_MAKE_ERROR(x) ((int64_t)(((uint64_t)CMD_ERROR_PREFIX << 32) | x))
 
 typedef LIST_HEAD(core_object_list, core_object) core_object_list_t;
-typedef STAILQ_HEAD(core_command_list, core_command) core_command_list_t;
-typedef STAILQ_HEAD(event_handlers, event_subscription) core_event_handlers_t;
-typedef STAILQ_HEAD(events, event) core_events_t;
+
+#define STAILQ_DEFINE(name, type)		\
+    typedef struct {				\
+	pthread_mutex_t lock;			\
+	struct {				\
+	    struct type *stqh_first;		\
+	    struct type **stqh_last;		\
+	} list;					\
+    } name;
+
+STAILQ_DEFINE(core_command_list_t, core_command);
+STAILQ_DEFINE(core_events_t, event);
+STAILQ_DEFINE(core_event_handlers_t, event_subscription);
 
 typedef struct {
     PyObject_HEAD
@@ -187,12 +198,19 @@ static int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++)
         LIST_INIT(&self->objects[type]);
 
-    for (event = 0; event < OBJECT_EVENT_MAX; event++)
-	STAILQ_INIT(&self->event_handlers[event]);
+    for (event = 0; event < OBJECT_EVENT_MAX; event++) {
+	pthread_mutex_init(&self->event_handlers[event].lock, NULL);
+	STAILQ_INIT(&self->event_handlers[event].list);
+    }
 
-    STAILQ_INIT(&self->events);
-    STAILQ_INIT(&self->cmds);
-    STAILQ_INIT(&self->submitted);
+    pthread_mutex_init(&self->events.lock, NULL);
+    STAILQ_INIT(&self->events.list);
+
+    pthread_mutex_init(&self->cmds.lock, NULL);
+    STAILQ_INIT(&self->cmds.list);
+
+    pthread_mutex_init(&self->submitted.lock, NULL);
+    STAILQ_INIT(&self->submitted.list);
 
     self->ticks = 0;
     self->runtime = 0;
@@ -221,6 +239,8 @@ static void core_dealloc(core_t *self) {
 
 	dlclose(self->object_libs[type]);
     }
+
+    free(self->completions->entries);
 
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
@@ -257,11 +277,74 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
 static PyObject *core_stop(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     int64_t thread_match;
+    core_object_event_type_t type;
 
     /* Allow external threads to avoid deadlocks. */
     Py_BEGIN_ALLOW_THREADS;
     thread_match = controller_timer_stop();
     Py_END_ALLOW_THREADS;
+
+    pthread_mutex_lock(&core->cmds.lock);
+    if (!STAILQ_EMPTY(&core->cmds.list)) {
+        core_command_t *cmd, *cmd_next;
+
+        cmd = STAILQ_FIRST(&core->cmds.list);
+        while (cmd) {
+	    cmd_next = STAILQ_NEXT(cmd, entry);
+	    STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
+	    free(cmd->command.args);
+	    free(cmd);
+	    cmd = cmd_next;
+	}
+    }
+    pthread_mutex_unlock(&core->cmds.lock);
+
+    pthread_mutex_lock(&core->submitted.lock);
+    if (!STAILQ_EMPTY(&core->submitted.list)) {
+        core_command_t *cmd, *cmd_next;
+
+        cmd = STAILQ_FIRST(&core->submitted.list);
+        while (cmd) {
+	    cmd_next = STAILQ_NEXT(cmd, entry);
+	    STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
+	    free(cmd->command.args);
+	    free(cmd);
+	    cmd = cmd_next;
+	}
+    }
+    pthread_mutex_unlock(&core->submitted.lock);
+
+    pthread_mutex_lock(&core->events.lock);
+    if (!STAILQ_EMPTY(&core->events.list)) {
+        core_event_t *event, *event_next;
+
+        event = STAILQ_FIRST(&core->events.list);
+	while (event) {
+	    event_next = STAILQ_NEXT(event, entry);
+	    STAILQ_REMOVE(&core->events.list, event, event, entry);
+	    free(event->data);
+	    free(event);
+	    event = event_next;
+	}
+    }
+    pthread_mutex_unlock(&core->events.lock);
+
+    for (type = 0; type < OBJECT_EVENT_MAX; type++) {
+	pthread_mutex_lock(&core->event_handlers[type].lock);
+	if (!STAILQ_EMPTY(&core->event_handlers[type].list)) {
+	    event_subscription_t *subscription, *next;
+
+	    subscription = STAILQ_FIRST(&core->event_handlers[type].list);
+	    while (subscription) {
+		next = STAILQ_NEXT(subscription, entry);
+		STAILQ_REMOVE(&core->event_handlers[type].list, subscription,
+			      event_subscription, entry);
+		free(subscription);
+                subscription = next;
+            }
+        }
+	pthread_mutex_unlock(&core->event_handlers[type].lock);
+    }
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
 	     "update thread frequency match: %ld", thread_match);
@@ -437,32 +520,48 @@ static void core_process_work(void *arg) {
     core_object_completion_data_t *comps;
     core_command_t *cmd, *cmd_next;
     core_event_t *event, *event_next;
+    bool empty;
 
     /* First, process any submitted commands. */
-    if (STAILQ_EMPTY(&core->cmds))
+    pthread_mutex_lock(&core->cmds.lock);
+    empty = STAILQ_EMPTY(&core->cmds.list);
+    pthread_mutex_unlock(&core->cmds.lock);
+    if (empty)
 	goto do_events;
 
-    cmd = STAILQ_FIRST(&core->cmds);
+    pthread_mutex_lock(&core->cmds.lock);
+    cmd = STAILQ_FIRST(&core->cmds.list);
+    pthread_mutex_unlock(&core->cmds.lock);
     while (cmd) {
 	core_object_t *object;
 
 	cmd_next = STAILQ_NEXT(cmd, entry);
-	STAILQ_REMOVE(&core->cmds, cmd, core_command, entry);
+        pthread_mutex_lock(&core->cmds.lock);
+        STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
+        pthread_mutex_lock(&core->cmds.lock);
+
 	object = core_id_to_object(cmd->target_id);
 	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
 		 "issuing command for %lu, id: %lu, cmd: %u",
 		 cmd->target_id, cmd->command.command_id,
 		 cmd->command.object_cmd_id);
 	(void)object->exec_command(object, &cmd->command);
-	STAILQ_INSERT_TAIL(&core->submitted, cmd, entry);
+	pthread_mutex_lock(&core->submitted.lock);
+	STAILQ_INSERT_TAIL(&core->submitted.list, cmd, entry);
+	pthread_mutex_unlock(&core->submitted.lock);
 	cmd = cmd_next;
     }
 
   do_events:
-    if (STAILQ_EMPTY(&core->events))
+    pthread_mutex_lock(&core->events.lock);
+    empty = STAILQ_EMPTY(&core->events.list);
+    pthread_mutex_unlock(&core->events.lock);
+    if (empty)
 	goto do_completions;
 
-    event = STAILQ_FIRST(&core->events);
+    pthread_mutex_lock(&core->events.lock);
+    event = STAILQ_FIRST(&core->events.list);
+    pthread_mutex_unlock(&core->events.lock);
     while (event) {
 	event_subscription_t *subscription;
 
@@ -470,7 +569,12 @@ static void core_process_work(void *arg) {
 		 "processing event = obj: %u %lu",
 		 event->type, event->object_id);
 	event_next = STAILQ_NEXT(event, entry);
-	STAILQ_FOREACH(subscription, &core->event_handlers[event->type],
+        pthread_mutex_lock(&core->events.lock);
+        STAILQ_REMOVE(&core->events.list, event, event, entry);
+        pthread_mutex_unlock(&core->events.lock);
+
+	pthread_mutex_lock(&core->event_handlers[event->type].lock);
+	STAILQ_FOREACH(subscription, &core->event_handlers[event->type].list,
 		       entry) {
 	    if (subscription->object_type == event->object_type) {
 		core_object_t *object;
@@ -503,8 +607,9 @@ static void core_process_work(void *arg) {
 		}
 	    }
 	}
+        pthread_mutex_unlock(&core->event_handlers[event->type].lock);
 
-	STAILQ_REMOVE(&core->events, event, event, entry);
+        free(event->data);
 	free(event);
 	event = event_next;
     }
@@ -516,28 +621,37 @@ static void core_process_work(void *arg) {
 	PyObject *args;
 	bool handled = false;
 
-	if (!STAILQ_EMPTY(&core->submitted)) {
-	    cmd = STAILQ_FIRST(&core->submitted);
-	    while (cmd) {
-		cmd_next = STAILQ_NEXT(cmd, entry);
-		if (cmd->command.command_id == comps->entries[comps->tail].id) {
-		    if (cmd->handler)
-			cmd->handler(comps->entries[comps->tail].id,
-				     comps->entries[comps->tail].result,
-				     cmd->source);
-		    STAILQ_REMOVE(&core->submitted, cmd, core_command, entry);
-		    free(cmd->command.args);
-		    free(cmd);
-		    handled = true;
-		    break;
-		}
-		cmd = cmd_next;
+	pthread_mutex_lock(&core->submitted.lock);
+	empty = STAILQ_EMPTY(&core->submitted.list);
+	pthread_mutex_unlock(&core->submitted.lock);
+	if (empty)
+	    goto python;
+
+	pthread_mutex_lock(&core->submitted.lock);
+	cmd = STAILQ_FIRST(&core->submitted.list);
+	pthread_mutex_unlock(&core->submitted.lock);
+	while (cmd) {
+	    cmd_next = STAILQ_NEXT(cmd, entry);
+	    if (cmd->command.command_id == comps->entries[comps->tail].id) {
+		if (cmd->handler)
+		    cmd->handler(comps->entries[comps->tail].id,
+				 comps->entries[comps->tail].result,
+				 cmd->source);
+		pthread_mutex_lock(&core->submitted.lock);
+		STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
+		pthread_mutex_unlock(&core->submitted.lock);
+		free(cmd->command.args);
+		free(cmd);
+		handled = true;
+		break;
 	    }
+	    cmd = cmd_next;
 	}
 
 	if (handled)
 	    goto next;
 
+      python:
         state = PyGILState_Ensure();
         args = Py_BuildValue("(ki)", comps->entries[comps->tail].id,
 			     comps->entries[comps->tail].result);
@@ -624,7 +738,9 @@ static int core_object_event_register(const core_object_type_t object_type,
     subscription->is_python = false;
     subscription->core.handler = handler;
     subscription->core.object = object;
-    STAILQ_INSERT_TAIL(&core->event_handlers[event], subscription, entry);
+    pthread_mutex_lock(&core->event_handlers[event].lock);
+    STAILQ_INSERT_TAIL(&core->event_handlers[event].list, subscription, entry);
+    pthread_mutex_unlock(&core->event_handlers[event].lock);
     return 0;
 }
 
@@ -637,16 +753,20 @@ static int core_object_event_unregister(const core_object_type_t object_type,
     event_subscription_t *next;
     core_object_t *obj = core_object_find(object_type, name, core);
 
-    subscription = STAILQ_FIRST(&core->event_handlers[event]);
+    pthread_mutex_lock(&core->event_handlers[event].lock);
+    subscription = STAILQ_FIRST(&core->event_handlers[event].list);
+    pthread_mutex_unlock(&core->event_handlers[event].lock);
     while (subscription != NULL) {
 	next = STAILQ_NEXT(subscription, entry);
 	if (subscription->object_type == object_type &&
 	    (subscription->object_id == CORE_OBJECT_ID_INVALID ||
 	     (object && subscription->object_id ==
 	      core_object_to_id(obj)))) {
-	    STAILQ_REMOVE(&core->event_handlers[event], subscription,
-			  event_subscription, entry);
-	    free(subscription);
+            pthread_mutex_lock(&core->event_handlers[event].lock);
+            STAILQ_REMOVE(&core->event_handlers[event].list, subscription,
+                          event_subscription, entry);
+	    pthread_mutex_unlock(&core->event_handlers[event].lock);
+            free(subscription);
 	    return 0;
 	}
 
@@ -673,7 +793,9 @@ static int core_object_event_submit(const core_object_event_type_t type,
     event->object_type = object->type;
     event->object_id = id;
     event->data = event_data;
-    STAILQ_INSERT_TAIL(&core->events, event, entry);
+    pthread_mutex_lock(&core->events.lock);
+    STAILQ_INSERT_TAIL(&core->events.list, event, entry);
+    pthread_mutex_unlock(&core->events.lock);
     return 0;
 }
 
@@ -698,7 +820,9 @@ static uint64_t core_object_command_submit(core_object_t *source,
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
 	     "submitting command for %u, id: %lu, cmd: %u", target_id,
 	     cmd->command.command_id, obj_cmd_id);
-    STAILQ_INSERT_TAIL(&core->cmds, cmd, entry);
+    pthread_mutex_lock(&core->cmds.lock);
+    STAILQ_INSERT_TAIL(&core->cmds.list, cmd, entry);
+    pthread_mutex_unlock(&core->cmds.lock);
     return (uint64_t)cmd;
 }
 
@@ -736,7 +860,9 @@ static PyObject *core_python_event_register(PyObject *self, PyObject *args) {
     subscription->object_type = object_type;
     subscription->is_python = true;
     subscription->python.handler = callback;
-    STAILQ_INSERT_TAIL(&core->event_handlers[type], subscription, entry);
+    pthread_mutex_lock(&core->event_handlers[type].lock);
+    STAILQ_INSERT_TAIL(&core->event_handlers[type].list, subscription, entry);
+    pthread_mutex_unlock(&core->event_handlers[type].lock);
     Py_RETURN_TRUE;
 }
 
@@ -759,14 +885,19 @@ static PyObject *core_python_event_unregister(PyObject *self, PyObject *args) {
 	    object_id = core_object_to_id(object);
     }
 
-    subscription = STAILQ_FIRST(&core->event_handlers[type]);
+    pthread_mutex_lock(&core->event_handlers[type].lock);
+    subscription = STAILQ_FIRST(&core->event_handlers[type].list);
+    pthread_mutex_unlock(&core->event_handlers[type].lock);
+
     while (subscription != NULL) {
 	next = STAILQ_NEXT(subscription, entry);
 	if (subscription->object_type == object_type &&
 	    (subscription->object_id == CORE_OBJECT_ID_INVALID ||
 	     subscription->object_id == object_id)) {
-	    STAILQ_REMOVE(&core->event_handlers[type], subscription,
+	    pthread_mutex_lock(&core->event_handlers[type].lock);
+	    STAILQ_REMOVE(&core->event_handlers[type].list, subscription,
 			  event_subscription, entry);
+	    pthread_mutex_unlock(&core->event_handlers[type].lock);
 	    if (subscription->is_python)
 		Py_DECREF(subscription->python.handler);
 	    free(subscription);
@@ -907,11 +1038,10 @@ PyMODINIT_FUNC PyInit_core(void) {
         }
 
         ret = PyDict_SetItem(value_dict, key, value);
-        if (ret == -1) {
-          Py_XDECREF(key);
-          Py_XDECREF(value);
-          goto fail;
-        }
+        Py_XDECREF(key);
+        Py_XDECREF(value);
+        if (ret == -1)
+            goto fail;
     }
 
     if (PyModule_AddObject(module, "OBJECT_TYPE_NAMES", value_dict) == -1) {
@@ -943,11 +1073,10 @@ PyMODINIT_FUNC PyInit_core(void) {
 	}
 
 	ret = PyDict_SetItem(value_dict, key, value);
-	if (ret == -1) {
-	    Py_XDECREF(key);
-	    Py_XDECREF(value);
-	    goto fail;
-	}
+        Py_XDECREF(key);
+        Py_XDECREF(value);
+        if (ret == -1)
+            goto fail;
     }
 
     if (PyModule_AddObject(module, "OBJECT_EVENT_NAMES", value_dict) == -1) {

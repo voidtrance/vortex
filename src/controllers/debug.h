@@ -17,6 +17,9 @@
  */
 #ifndef __DEBUG_H__
 #define __DEBUG_H__
+#ifdef VORTEX_MEM_LEAK
+#include "mem_debug.h"
+#endif
 
 typedef enum {
     LOG_LEVEL_NOTSET = 0,
