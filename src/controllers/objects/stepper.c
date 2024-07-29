@@ -153,15 +153,19 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 	    stepper->current_step += steps;
 	stepper->steps -= steps;
     } else if (stepper->current_cmd) {
-	stepper_move_comeplete_event_data_t data;
-
-	data.steps = stepper->current_step;
+	stepper_move_comeplete_event_data_t *data;
 
 	CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
-	CORE_EVENT_SUBMIT(stepper, OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
-			  core_object_to_id((core_object_t *)stepper), data);
-	stepper->current_cmd = NULL;
-	stepper->steps = 0.0;
+        stepper->current_cmd = NULL;
+        stepper->steps = 0.0;
+
+        data = malloc(sizeof(*data));
+	if (data) {
+	    data->steps = stepper->current_step;
+	    CORE_EVENT_SUBMIT(stepper, OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
+			      core_object_to_id((core_object_t *)stepper),
+			      data);
+	}
     }
 
     stepper->last_timestep = timestep;

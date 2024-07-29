@@ -251,16 +251,20 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 	if (!axis->homed) {
             if ((axis->endstop_is_max && axis->position == axis->length) ||
                 (axis->position == 0)) {
-		axis_homed_event_data_t data;
+		axis_homed_event_data_t *data;
 
-		data.axis = axis->object.name;
 		axis->homed = true;
 		axis->axis_command_id = AXIS_COMMAND_MAX;
-		CORE_EVENT_SUBMIT(axis, OBJECT_EVENT_AXIS_HOMED,
-				  core_object_to_id((core_object_t *)axis),
-				  data);
 		CORE_CMD_COMPLETE(axis, axis->command_id, 0);
 		axis->command_id = 0;
+
+		data = malloc(sizeof(*data));
+		if (data) {
+		    data->axis = axis->object.name;
+		    CORE_EVENT_SUBMIT(axis, OBJECT_EVENT_AXIS_HOMED,
+				      core_object_to_id((core_object_t *)axis),
+				      data);
+		}
             } else {
 		for (i = 0; i < axis->n_motors; i++) {
                   struct stepper_move_args *args;

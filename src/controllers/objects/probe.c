@@ -76,13 +76,16 @@ static void probe_update(core_object_t *object, uint64_t ticks,
     probe->z_axis->get_state(probe->z_axis, &status);
     log_debug(probe, "z axis position: %f", status.position);
     if (status.position <= probe->z_offset + fuzz) {
-	probe_trigger_event_data_t data;
+	probe_trigger_event_data_t *data;
 
 	probe->triggered = true;
 	probe->position = status.position;
-	data.position = probe->position;
-	CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED,
-			  core_object_to_id((core_object_t *)probe), data);
+        data = calloc(1, sizeof(*data));
+	if (data) {
+	    data->position = probe->position;
+	    CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED,
+			      core_object_to_id((core_object_t *)probe), data);
+	}
     }
 }
 

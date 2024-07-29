@@ -129,7 +129,7 @@ static float interpolate(uint64_t *p_pos, float base, float limit,
 void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     heater_t *heater = (heater_t *)object;
     uint64_t time_delta = timestep - heater->timestep;
-    heater_temp_reached_event_data_t data;
+    heater_temp_reached_event_data_t *data;
 
     heater->timestep = timestep;
     if (heater->set_temp == 0.0 || heater->temp == heater->set_temp)
@@ -143,14 +143,19 @@ void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 			       heater->target_temp, time_delta,
 			       heater->ramp_duration);
     heater->temp = roundl(heater->temp * 100) / 100;
+    log_debug(heater, "heater %s temp: %f", heater->object.name, heater->temp);
 
     if (heater->temp != heater->target_temp)
 	return;
 
-    data.temp = heater->temp;
-    CORE_EVENT_SUBMIT(heater, OBJECT_EVENT_HEATER_TEMP_REACHED,
-		      core_object_to_id((core_object_t *)heater), data);
     CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
+
+    data = malloc(sizeof(*data));
+    if (data) {
+        data->temp = heater->temp;
+        CORE_EVENT_SUBMIT(heater, OBJECT_EVENT_HEATER_TEMP_REACHED,
+                          core_object_to_id((core_object_t *)heater), data);
+    }
 }
 
 void heater_destroy(core_object_t *object) {
