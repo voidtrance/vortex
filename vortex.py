@@ -99,6 +99,8 @@ def main():
     if frontend is None:
         return 1
 
+    frontend.set_sequential_mode(opts.sequential)
+
     controller = load_mcu(opts.controller, config)
     if controller is None:
         print(f"Did not fine controller '{opts.controller}'", file=sys.stderr)
