@@ -25,13 +25,28 @@ import logging
 
 def create_arg_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-f", "--frontend", default="direct")
+    frontend = parser.add_argument_group("Frontend Options")
+    frontend.add_argument("-f", "--frontend", default="direct",
+                        help="""Select frontend.""")
+    frontend.add_argument("-s", action="store_true", dest="sequential",
+                          help="""Enable sequential mode. In this
+                          mode, the frontent will execute one command
+                          at a time rather than submit commands to the
+                          command queue as they are received.""")
+
+    controller = parser.add_argument_group("Controller Options")
+    controller.add_argument("-c", "--controller", required=True)
+    controller.add_argument("-F", "--frequency", default=0)
+
+    debug = parser.add_argument_group("Debug Options")
+    debug.add_argument("-d", "--debug", choices=logging._nameToLevel.keys(),
+                        default="INFO",
+                        help="""Set logging level. Higher logging levels will
+                        provide more information but will also affect
+                        conroller timing more.""")
+    debug.add_argument("-l", "--logfile", type=str, default=None)
+
     parser.add_argument("-C", "--config", required=True)
-    parser.add_argument("-c", "--controller", required=True)
-    parser.add_argument("-F", "--frequency", default=0)
-    parser.add_argument("-d", "--debug", choices=logging._nameToLevel.keys(),
-                        default="INFO")
-    parser.add_argument("-l", "--logfile", type=str, default=None)
     return parser
 
 
