@@ -97,11 +97,14 @@ static void *core_update_thread(void *arg) {
 static void *core_generic_thread(void *arg) {
     struct core_thread_args *args = (struct core_thread_args *)arg;
     work_callback_t callback = (work_callback_t)args->callback;
-    float step_duration = ((float)1000 / (args->frequency / 1000000));
+    float step_duration = 0.0;
     struct timespec sleep_time = {0};
     struct timespec ts, te;
 
     args->ret = 0;
+    if (args->frequency)
+	step_duration = ((float)1000 / (args->frequency / 1000000));
+
     while (*(volatile int *)args->control == 1) {
 	long delay;
 
@@ -109,7 +112,7 @@ static void *core_generic_thread(void *arg) {
 	callback(args->user_data);
 	clock_gettime(CLOCK_MONOTONIC_RAW, &te);
         delay = max((long)step_duration - timespec_delta(ts, te), 0);
-        if (delay < 0 || delay > step_duration)
+        if (delay <= 0 || delay > step_duration)
 	    continue;
         sleep_time.tv_nsec = delay;
         nanosleep(&sleep_time, NULL);

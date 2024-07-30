@@ -273,7 +273,7 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
     Py_INCREF(core->python_complete_cb);
 
     ret = controller_timer_start(core_object_update, frequency,
-				 core_process_work, 20, self);
+				 core_process_work, 0, self);
     if (ret) {
 	PyErr_Format(CoreError, "Failed to start core threads: %s",
 		     strerror(ret));
