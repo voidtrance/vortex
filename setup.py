@@ -67,22 +67,31 @@ def find_all_objects():
 
 def run_distutils(flags, debug=False, mem_leak_debug=False):
     object_extensions = []
+
+    #lib = Extension(name="cache",
+    #                 sources=["src/controllers/objects/cache.c"],
+    #                 libraries=["pthread"],
+    #                 extra_compile_args=flags)
+
     debug_sources = ["src/controllers/mem_debug.c"] if mem_leak_debug else []
     for object, sources in find_all_objects().items():
         e = Extension(name=object,
                       sources=sources + debug_sources + \
-                      ["src/controllers/utils.c"],
+                            ["src/controllers/utils.c", "src/controllers/objects/cache.c"],
                       include_dirs=["src/controllers"],
+                      #libraries=["cache"],
+                      #library_dirs=["."],
                       extra_compile_args=flags)
         object_extensions.append(e)
 
     core = Extension(name="core",
                      sources=["src/controllers/core.c",
                               "src/controllers/thread_control.c",
-                              "src/controllers/utils.c"] + \
+                              "src/controllers/utils.c",
+                              "src/controllers/objects/cache.c"] + \
                               debug_sources,
-                                libraries=["dl", "pthread"],
-                                extra_compile_args=flags)
+                     libraries=["dl", "pthread"],
+                     extra_compile_args=flags)
     setup(name="emulator", version="0.0.1",
           packages=find_packages("."),
           ext_modules=[core] + object_extensions,

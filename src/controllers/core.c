@@ -32,6 +32,7 @@
 #include "thread_control.h"
 #include "objects/object_defs.h"
 #include "utils.h"
+#include "objects/cache.h"
 
 static PyObject *CoreError;
 typedef core_object_t *(*object_create_func_t)(const char *, void *);
@@ -119,6 +120,7 @@ typedef struct {
 
     /* Event handling */
     core_event_handlers_t event_handlers[OBJECT_EVENT_MAX];
+    object_cache_t *event_cache;
     core_events_t events;
 } core_t;
 
@@ -167,6 +169,13 @@ static PyObject *core_new(PyTypeObject *type, PyObject *args,
     core->completions->entries = calloc(core->completions->size,
 					sizeof(*core->completions->entries));
     if (!core->completions->entries) {
+	free(core->completions);
+	type->tp_free((PyObject *)core);
+	return NULL;
+    }
+
+    if (object_cache_create(&core->event_cache, sizeof(core_event_t))) {
+	free(core->completions->entries);
 	free(core->completions);
 	type->tp_free((PyObject *)core);
 	return NULL;
@@ -241,6 +250,8 @@ static void core_dealloc(core_t *self) {
     }
 
     free(self->completions->entries);
+    free(self->completions);
+    object_cache_destroy(self->event_cache);
 
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
@@ -292,7 +303,7 @@ static PyObject *core_stop(PyObject *self, PyObject *args) {
         while (cmd) {
 	    cmd_next = STAILQ_NEXT(cmd, entry);
 	    STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
-	    free(cmd->command.args);
+	    object_cache_free(cmd->command.args);
 	    free(cmd);
 	    cmd = cmd_next;
 	}
@@ -307,7 +318,7 @@ static PyObject *core_stop(PyObject *self, PyObject *args) {
         while (cmd) {
 	    cmd_next = STAILQ_NEXT(cmd, entry);
 	    STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
-	    free(cmd->command.args);
+	    object_cache_free(cmd->command.args);
 	    free(cmd);
 	    cmd = cmd_next;
 	}
@@ -322,8 +333,8 @@ static PyObject *core_stop(PyObject *self, PyObject *args) {
 	while (event) {
 	    event_next = STAILQ_NEXT(event, entry);
 	    STAILQ_REMOVE(&core->events.list, event, event, entry);
-	    free(event->data);
-	    free(event);
+	    object_cache_free(event->data);
+	    object_cache_free(event);
 	    event = event_next;
 	}
     }
@@ -609,8 +620,8 @@ static void core_process_work(void *arg) {
 	}
         pthread_mutex_unlock(&core->event_handlers[event->type].lock);
 
-        free(event->data);
-	free(event);
+	object_cache_free(event->data);
+	object_cache_free(event);
 	event = event_next;
     }
 
@@ -640,7 +651,7 @@ static void core_process_work(void *arg) {
 		pthread_mutex_lock(&core->submitted.lock);
 		STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
 		pthread_mutex_unlock(&core->submitted.lock);
-		free(cmd->command.args);
+		object_cache_free(cmd->command.args);
 		free(cmd);
 		handled = true;
 		break;
@@ -783,7 +794,7 @@ static int core_object_event_submit(const core_object_event_type_t type,
     core_event_t *event;
     core_object_t *object = (core_object_t *)id;
 
-    event = calloc(1, sizeof(*event));
+    event = object_cache_alloc(core->event_cache);
     if (!event)
 	return -1;
 

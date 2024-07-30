@@ -28,6 +28,7 @@
 #include "endstop.h"
 #include "object_defs.h"
 #include "stepper.h"
+#include "cache.h"
 
 typedef struct {
     const char *name;
@@ -60,6 +61,9 @@ typedef struct {
 } axis_t;
 
 typedef int (*command_func_t)(core_object_t *object, void *args);
+
+static object_cache_t *stepper_args_cache = NULL;
+static object_cache_t *axis_event_cache = NULL;
 
 static int axis_move(core_object_t *object, void *args);
 static int axis_home(core_object_t *object, void *args);
@@ -258,7 +262,7 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 		CORE_CMD_COMPLETE(axis, axis->command_id, 0);
 		axis->command_id = 0;
 
-		data = malloc(sizeof(*data));
+		data = object_cache_alloc(axis_event_cache);
 		if (data) {
 		    data->axis = axis->object.name;
 		    CORE_EVENT_SUBMIT(axis, OBJECT_EVENT_AXIS_HOMED,
@@ -269,7 +273,7 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 		for (i = 0; i < axis->n_motors; i++) {
                   struct stepper_move_args *args;
 
-		  args = calloc(1, sizeof(*args));
+		  args = object_cache_alloc(stepper_args_cache);
 		  if (!args)
 		      continue;
 
@@ -309,6 +313,8 @@ static void axis_destroy(core_object_t *object) {
     size_t i;
 
     core_object_destroy(object);
+    object_cache_destroy(stepper_args_cache);
+    object_cache_destroy(axis_event_cache);
     free((char *)axis->endstop_name);
     for (i = 0; i < axis->n_motors; i++)
 	free((char *)axis->motors[i].name);
@@ -321,6 +327,16 @@ axis_t *object_create(const char *name, void *config_ptr) {
     axis_config_params_t *config = (axis_config_params_t *)config_ptr;
     const char *stepper;
     size_t i = 0;
+
+    if (object_cache_create(&stepper_args_cache,
+			    sizeof(struct stepper_move_args)))
+	    return NULL;
+
+    if (object_cache_create(&axis_event_cache,
+			    sizeof(axis_homed_event_data_t))) {
+	object_cache_destroy(stepper_args_cache);
+	return NULL;
+    }
 
     axis = calloc(1, sizeof(*axis));
     if (!axis)

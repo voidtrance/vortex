@@ -24,6 +24,7 @@
 #include "../common_defs.h"
 #include "../utils.h"
 #include "stepper.h"
+#include "cache.h"
 
 typedef struct {
     uint32_t steps_per_rotation;
@@ -45,6 +46,8 @@ typedef struct {
     stepper_move_dir_t dir;
     bool enabled;
 } stepper_t;
+
+static object_cache_t *stepper_event_cache = NULL;
 
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep);
 int stepper_exec(core_object_t *object, core_object_command_t *cmd);
@@ -86,6 +89,13 @@ stepper_t *object_create(const char *name, void *config_ptr) {
 	stepper->steps_per_rotation;
     stepper->spns = (stepper->steps_per_rotation * stepper->rps) /
 	SEC_TO_NSEC(1);
+
+    if (object_cache_create(&stepper_event_cache,
+			    sizeof(stepper_move_comeplete_event_data_t))) {
+	core_object_destroy(&stepper->object);
+	free(stepper);
+	return NULL;
+    }
 
     return stepper;
 }
@@ -159,7 +169,7 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
         stepper->current_cmd = NULL;
         stepper->steps = 0.0;
 
-        data = malloc(sizeof(*data));
+        data = object_cache_alloc(stepper_event_cache);
 	if (data) {
 	    data->steps = stepper->current_step;
 	    CORE_EVENT_SUBMIT(stepper, OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
@@ -175,5 +185,6 @@ void stepper_destroy(core_object_t *object) {
     stepper_t *stepper = (stepper_t *)object;
 
     core_object_destroy(object);
+    object_cache_destroy(stepper_event_cache);
     free(stepper);
 }

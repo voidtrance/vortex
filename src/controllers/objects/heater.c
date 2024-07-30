@@ -25,6 +25,7 @@
 #include "thermistor.h"
 #include "../utils.h"
 #include "heater.h"
+#include "cache.h"
 
 #define AMBIENT_TEMP 25
 
@@ -43,6 +44,8 @@ typedef struct {
     uint64_t ramp_duration;
     uint64_t pos;
 } heater_t;
+
+static object_cache_t *heater_event_cache = NULL;
 
 void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestamp);
 int heater_set_temp(core_object_t *object, core_object_command_t *cmd);
@@ -65,6 +68,13 @@ heater_t *object_create(const char *name, void *config_ptr) {
     heater->object.name = strdup(name);
     heater->pos = 0;
     heater->ramp_duration = SEC_TO_NSEC(120.0 * 100 / config->power);
+
+    if (object_cache_create(&heater_event_cache,
+			    sizeof(heater_temp_reached_event_data_t))) {
+	core_object_destroy(&heater->object);
+	free(heater);
+	return NULL;
+    }
 
     return heater;
 }
@@ -150,7 +160,7 @@ void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 
     CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
 
-    data = malloc(sizeof(*data));
+    data = object_cache_alloc(heater_event_cache);
     if (data) {
         data->temp = heater->temp;
         CORE_EVENT_SUBMIT(heater, OBJECT_EVENT_HEATER_TEMP_REACHED,
@@ -162,5 +172,6 @@ void heater_destroy(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
 
     core_object_destroy(object);
+    object_cache_destroy(heater_event_cache);
     free(heater);
 }

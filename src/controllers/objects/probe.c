@@ -27,6 +27,7 @@
 #include "object_defs.h"
 #include "probe.h"
 #include "axis.h"
+#include "cache.h"
 
 typedef struct {
     float z_offset;
@@ -41,6 +42,8 @@ typedef struct {
     float range;
     bool triggered;
 } probe_t;
+
+static object_cache_t *probe_event_cache = NULL;
 
 static int probe_init(core_object_t *object) {
     probe_t *probe = (probe_t *)object;
@@ -80,7 +83,7 @@ static void probe_update(core_object_t *object, uint64_t ticks,
 
 	probe->triggered = true;
 	probe->position = status.position;
-        data = calloc(1, sizeof(*data));
+        data = object_cache_alloc(probe_event_cache);
 	if (data) {
 	    data->position = probe->position;
 	    CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED,
@@ -93,6 +96,7 @@ static void probe_destroy(core_object_t *object) {
     probe_t *probe = (probe_t *)object;
 
     core_object_destroy(object);
+    object_cache_destroy(probe_event_cache);
     free(probe);
 }
 
@@ -112,6 +116,13 @@ probe_t *object_create(const char *name, void *config_ptr) {
     probe->object.destroy = probe_destroy;
     probe->z_offset = config->z_offset;
     probe->range = config->range;
+
+    if (object_cache_create(&probe_event_cache,
+			    sizeof(probe_trigger_event_data_t))) {
+	core_object_destroy(&probe->object);
+	free(probe);
+	return NULL;
+    }
 
     return probe;
 }
