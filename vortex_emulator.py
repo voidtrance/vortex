@@ -15,13 +15,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import sys
-import emulator
-import emulator.config
-import frontends
 import argparse
-import os
 import importlib
 import logging
+import vortex.emulator
+import vortex.emulator.config
+import vortex.frontends
 
 def create_arg_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -49,41 +48,16 @@ def create_arg_parser():
     parser.add_argument("-C", "--config", required=True)
     return parser
 
-
-#    def load_modules(self):
-#        for filename in os.listdir("./modules"):
-#            if os.path.isfile(f"./modules/{filename}") and \
-#                filename.endswith(".py"):
-#                module = importlib.import_module(f"modules.{filename[:-3]}")
-#                module_objects = getattr(module, "__module_objects__", None)
-#                if module_objects:
-#                    self._module_lib.update(module_objects)
-#
-#    def initialize_module(self, klass, name, config):
-#        module = None
-#        if klass in self._module_lib:
-#            mod_conf = ModuleConfig(name, self, config)
-#            self._modules.append(self._module_lib[klass](name, mod_conf))
-#            module = self._modules[-1]
-#        return module
-#    
-#    def lookup_object(self, object_class, object_name):
-#        for module in self._modules:
-#            if module._class == object_class:
-#                if module.config.name == object_name:
-#                    return module
-#        return None
-#
-#    def queue_event(self, event, *args):
-#        assert isinstance(event, events.Event)
-#        self.event_queue.queue_event(event)
-
 def load_mcu(name, config):
-    if os.path.isfile(f"./controllers/{name}.py"):
-        module = importlib.import_module(f"controllers.{name}")
-        module_object = getattr(module, "__controller__", None)
-        if module_object:
-            return module_object(config)
+    try:
+        module = importlib.import_module(f"vortex.controllers.{name}")
+    except ImportError as e:
+        logging.error(f"Failed to create {name} controller: {str(e)}")
+        logging.error(sys.path)
+        return None
+    module_object = getattr(module, "__controller__", None)
+    if module_object:
+        return module_object(config)
     return None
 
 def main():
@@ -92,10 +66,10 @@ def main():
 
     logging.basicConfig(filename=opts.logfile, level=opts.debug)
 
-    config = emulator.config.Configuration()
+    config = vortex.emulator.config.Configuration()
     config.read(opts.config)
 
-    frontend = frontends.create_frontend(opts.frontend)
+    frontend = vortex.frontends.create_frontend(opts.frontend)
     if frontend is None:
         return 1
 
@@ -103,10 +77,10 @@ def main():
 
     controller = load_mcu(opts.controller, config)
     if controller is None:
-        print(f"Did not fine controller '{opts.controller}'", file=sys.stderr)
+        logging.error(f"Did not find controller '{opts.controller}'")
         return 1
     
-    emulation = emulator.Emulator(controller, frontend)
+    emulation = vortex.emulator.Emulator(controller, frontend)
     emulation.set_frequency(opts.frequency)
 
     try:

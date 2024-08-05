@@ -23,9 +23,9 @@
 #include "object_defs.h"
 #include "../common_defs.h"
 #include "thermistor.h"
-#include "../utils.h"
+#include <utils.h>
 #include "heater.h"
-#include "cache.h"
+#include <cache.h>
 
 #define AMBIENT_TEMP 25
 

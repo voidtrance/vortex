@@ -13,12 +13,12 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-from frontends import BaseFrontend
-import frontends.klipper as msgproto
-import frontends.lib
 import ctypes
 import select
 import os
+from vortex.frontends import BaseFrontend
+import vortex.frontends.klipper as msgproto
+import vortex.frontends.lib
 
 def create_message(size):
     class MessageBlock(ctypes.Structure):
@@ -39,7 +39,7 @@ class KlipperFrontend(BaseFrontend):
 
     def __init__(self):
         super().__init__()
-        mfd, sfd = frontends.lib.create_pty(self.DEV)
+        mfd, sfd = vortex.frontends.lib.create_pty(self.DEV)
         self.serial = os.fdopen(mfd, "wb+", buffering=0)
         self.next_sequence = self.SEQ_DEST
         self._poll = select.poll()

@@ -13,11 +13,14 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.lib.ext_enum
-import vortex.core as cc
-
-ModuleTypes = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleTypes", {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()})
-
-ModuleEvents = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleEvents", {n.upper(): (v, n) for v, n in cc.OBJECT_EVENT_NAMES.items()})
+core_include = include_directories('.')
+pthreads = dependency('threads')
+py.extension_module('_vortex_core',
+                    ['core.c', 'thread_control.c'],
+                    include_directories: core_utils_include,
+                    dependencies: [core_utils_dep, pthreads],
+                    link_with: core_utils,
+                    install: true,
+                    install_dir: py.get_install_dir(pure: false) / 'vortex/core',
+                    install_rpath: '$ORIGIN/lib')
+py.install_sources(['__init__.py'], subdir: 'vortex/core')

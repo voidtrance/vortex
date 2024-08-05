@@ -21,7 +21,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <sys/queue.h>
-#include "object_defs.h"
+#include <stdint.h>
 #include "cache.h"
 #ifdef VORTEX_DEBUG
 #include <stdio.h>

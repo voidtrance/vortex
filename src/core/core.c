@@ -22,6 +22,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <libgen.h>
 #include <structmember.h>
 #include <sys/queue.h>
 #include <stdarg.h>
@@ -31,10 +32,11 @@
 #include "common_defs.h"
 #include "thread_control.h"
 #include "objects/object_defs.h"
-#include "utils.h"
-#include "objects/cache.h"
+#include <utils.h>
+#include <cache.h>
 
-static PyObject *CoreError;
+static const char *module_path = NULL;
+static PyObject *VortexCoreError;
 typedef core_object_t *(*object_create_func_t)(const char *, void *);
 
 #define MAX_COMPLETIONS 256
@@ -154,8 +156,8 @@ static uint64_t core_object_command_submit(core_object_t *source,
 static core_call_data_t core_call_data = {0};
 static core_logging_data_t logging;
 
-static PyObject *core_new(PyTypeObject *type, PyObject *args,
-			  PyObject *kwargs) {
+static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
+				 PyObject *kwargs) {
     core_t *core;
 
     core = (core_t *)type->tp_alloc(type, 0);
@@ -193,7 +195,7 @@ static PyObject *core_new(PyTypeObject *type, PyObject *args,
     return (PyObject *)core;
 }
 
-static int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
+static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     char *kws[] = {"debug",  NULL};
     core_object_type_t type;
     core_object_event_type_t event;
@@ -229,7 +231,7 @@ static int core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     return 0;
 }
 
-static void core_dealloc(core_t *self) {
+static void vortex_core_dealloc(core_t *self) {
     core_object_type_t type;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
@@ -266,7 +268,7 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
         return NULL;
 
     if (!PyCallable_Check(core->python_complete_cb)) {
-        PyErr_Format(CoreError, "Completion callback is not callable");
+        PyErr_Format(VortexCoreError, "Completion callback is not callable");
         return NULL;
     }
 
@@ -275,7 +277,7 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
     ret = controller_timer_start(core_object_update, frequency,
 				 core_process_work, 0, self);
     if (ret) {
-	PyErr_Format(CoreError, "Failed to start core threads: %s",
+	PyErr_Format(VortexCoreError, "Failed to start core threads: %s",
 		     strerror(ret));
 	return NULL;
     }
@@ -368,21 +370,29 @@ static PyObject *core_stop(PyObject *self, PyObject *args) {
 static core_object_id_t load_object(core_t *core, core_object_type_t klass,
 				    const char *name, void *config) {
     core_object_t *obj;
+    char object_path[PATH_MAX];
     char *libname[] = {
 	[OBJECT_TYPE_NONE] = NULL,
-	[OBJECT_TYPE_STEPPER] = "controllers/objects/stepper.so",
-	[OBJECT_TYPE_DIGITAL_PIN] = "controllers/objects/dpin.so",
-	[OBJECT_TYPE_PWM_PIN] = "controllers/objects/pwmpin.so",
-	[OBJECT_TYPE_ENDSTOP] = "controllers/objects/endstop.so",
-	[OBJECT_TYPE_FAN] = "controllers/objects/fan.so",
-	[OBJECT_TYPE_HEATER] = "controllers/objects/heater.so",
-	[OBJECT_TYPE_THERMISTOR] = "controllers/objects/thermistor.so",
-	[OBJECT_TYPE_PROBE] = "controllers/objects/probe.so",
-	[OBJECT_TYPE_AXIS] = "controllers/objects/axis.so",
+	[OBJECT_TYPE_STEPPER] = "stepper.so",
+	[OBJECT_TYPE_DIGITAL_PIN] = "dpin.so",
+	[OBJECT_TYPE_PWM_PIN] = "pwmpin.so",
+	[OBJECT_TYPE_ENDSTOP] = "endstop.so",
+	[OBJECT_TYPE_FAN] = "fan.so",
+	[OBJECT_TYPE_HEATER] = "heater.so",
+	[OBJECT_TYPE_THERMISTOR] = "thermistor.so",
+	[OBJECT_TYPE_PROBE] = "probe.so",
+	[OBJECT_TYPE_AXIS] = "axis.so",
     };
 
     if (!core->object_libs[klass]) {
-        core->object_libs[klass] = dlopen(libname[klass], RTLD_LAZY);
+	char *path, *dir;
+
+	path = strdup(module_path);
+	dir = dirname(path);
+	snprintf(object_path, sizeof(object_path), "%s/objects/%s", dir,
+		 libname[klass]);
+	free(path);
+        core->object_libs[klass] = dlopen(object_path, RTLD_LAZY);
         if (!core->object_libs[klass]) {
             char *err = dlerror();
             core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core", "dlopen: %s",
@@ -427,7 +437,7 @@ static PyObject *core_create_object(PyObject *self, PyObject *args,
 				    PyObject *kwargs) {
     char *kw[] = {"klass", "name", "options", NULL};
     int klass;
-    char *name;
+    const char *name;
     void *options = NULL;
     core_object_id_t object_id;
     PyObject *id;
@@ -438,8 +448,8 @@ static PyObject *core_create_object(PyObject *self, PyObject *args,
 
     object_id = load_object((core_t *)self, klass, name, options);
     if (object_id == CORE_OBJECT_ID_INVALID) {
-        PyErr_Format(CoreError, "Failed to create object %s of klass %s", name,
-                     ObjectTypeNames[klass]);
+        PyErr_Format(VortexCoreError, "Failed to create object %s of klass %s",
+		     name, ObjectTypeNames[klass]);
         return NULL;
     }
 
@@ -483,7 +493,7 @@ static PyObject *core_exec_command(PyObject *self, PyObject *args,
 
     cmd = calloc(1, sizeof(*cmd));
     if (!cmd) {
-        PyErr_Format(CoreError, "Could not allocate command structure");
+        PyErr_Format(VortexCoreError, "Could not allocate command structure");
         return NULL;
     }
 
@@ -967,7 +977,7 @@ void core_log(core_log_level_t level, core_object_type_t type,
     PyGILState_Release(state);
 }
 
-static PyMethodDef CoreMethods[] = {
+static PyMethodDef VortexCoreMethods[] = {
     {"init_objects", core_initialize_object, METH_NOARGS, "Initialize objects"},
     {"start", core_start, METH_VARARGS, "Run the emulator core thread"},
     {"stop", core_stop, METH_NOARGS, "Stop the emulator core thread"},
@@ -984,45 +994,44 @@ static PyMethodDef CoreMethods[] = {
     {NULL, NULL, 0, NULL}
 };
 
-static PyTypeObject Core_Type = {
+static PyTypeObject Vortex_Core_Type = {
     .ob_base = PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "Core",
     .tp_doc = PyDoc_STR("HW Core"),
     .tp_basicsize = sizeof(core_t),
     .tp_itemsize = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
-    .tp_new = core_new,
-    .tp_init = (initproc)core_init,
-    .tp_dealloc = (destructor)core_dealloc,
-    .tp_methods = CoreMethods,
+    .tp_new = vortex_core_new,
+    .tp_init = (initproc)vortex_core_init,
+    .tp_dealloc = (destructor)vortex_core_dealloc,
+    .tp_methods = VortexCoreMethods,
 };
 
-static struct PyModuleDef Core_module = {
-    .m_base = PyModuleDef_HEAD_INIT,
-    .m_name = "core",
-    .m_doc = PyDoc_STR("HW controller core module"),
-    .m_size = -1
-};
 
-PyMODINIT_FUNC PyInit_core(void) {
-    PyObject *module = PyModule_Create(&Core_module);
+static int vortex_core_module_exec(PyObject *module) {
     core_object_type_t type;
     core_object_event_type_t event;
     PyObject *value_dict;
+    PyObject *path;
 
-    if (PyType_Ready(&Core_Type) == -1) {
+    path = PyModule_GetFilenameObject(module);
+    module_path = PyUnicode_AsUTF8(path);
+
+    if (PyType_Ready(&Vortex_Core_Type) == -1) {
         Py_XDECREF(module);
-        return NULL;
+        return -1;
     }
 
-    if (PyModule_AddObject(module, "Core", (PyObject *)&Core_Type) == -1) {
+    if (PyModule_AddObject(module, "VortexCore",
+			   (PyObject *)&Vortex_Core_Type) == -1) {
         Py_XDECREF(module);
-        return NULL;
+        return -1;
     }
 
-    CoreError = PyErr_NewException("core.CoreError", NULL, NULL);
-    Py_XINCREF(CoreError);
-    if (PyModule_AddObject(module, "CoreError", CoreError) < 0)
+    VortexCoreError = PyErr_NewException("votex_core.VortexCoreError", NULL,
+					 NULL);
+    Py_XINCREF(VortexCoreError);
+    if (PyModule_AddObject(module, "VortexCoreError", VortexCoreError) < 0)
         goto fail;
 
     value_dict = PyDict_New();
@@ -1099,11 +1108,29 @@ PyMODINIT_FUNC PyInit_core(void) {
     if (!logging.module)
 	goto fail;
 
-    return module;
+    return 0;
 
   fail:
-    Py_XDECREF(CoreError);
-    Py_CLEAR(CoreError);
+    Py_XDECREF(VortexCoreError);
+    Py_CLEAR(VortexCoreError);
     Py_XDECREF(module);
-    return NULL;
+    return -1;
+}
+
+static PyModuleDef_Slot Vortex_Core_Slots[] = {
+    {Py_mod_exec, vortex_core_module_exec},
+    {0, NULL},
+};
+
+static struct PyModuleDef Vortex_Core_module = {
+    .m_base = PyModuleDef_HEAD_INIT,
+    .m_name = "_vortex_core",
+    .m_doc = PyDoc_STR("HW controller core module"),
+    .m_size = 0,
+    .m_slots = Vortex_Core_Slots,
+};
+
+PyMODINIT_FUNC PyInit__vortex_core(void) {
+    PyObject *module = PyModuleDef_Init(&Vortex_Core_module);
+    return module;
 }

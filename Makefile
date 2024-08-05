@@ -13,11 +13,24 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.lib.ext_enum
-import vortex.core as cc
+#
+# This project uses Meson and meson-python as the build system.
+# However, to simplify development, this Makefile is here for
+# convinience and to record the require build commands.
+PYTHON ?= $(shell which python3)
 
-ModuleTypes = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleTypes", {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()})
+DEBUG_OPTS :=
+ifeq ($(DEBUG),1)
+	DEBUG_OPTS=--config-settings=setup-args=-Dbuildtype=debug
+endif
 
-ModuleEvents = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleEvents", {n.upper(): (v, n) for v, n in cc.OBJECT_EVENT_NAMES.items()})
+all:
+	$(PYTHON) -m pip install --no-build-isolation \
+		--editable . $(DEBUG_OPTS)
+
+wheel:
+	$(PYTHON) -m build -w .
+	$(PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
+
+clean:
+	rm -rf build dist

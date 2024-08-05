@@ -28,7 +28,7 @@
 #include "endstop.h"
 #include "object_defs.h"
 #include "stepper.h"
-#include "cache.h"
+#include <cache.h>
 
 typedef struct {
     const char *name;
@@ -106,6 +106,7 @@ static int axis_init(core_object_t *object) {
 	axis->endstop_is_max = false;
 
     axis->axis_command_id = AXIS_COMMAND_MAX;
+    axis->position = 0;
     return 0;
 }
 

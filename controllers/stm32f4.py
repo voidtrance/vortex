@@ -13,9 +13,9 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-from controllers.objects import *
-from controllers import Pins
-from controllers import Controller
+from vortex.controllers.objects import *
+from vortex.controllers import Pins
+from vortex.controllers import Controller
 
 class STM32F446(Controller):
     PINS = [Pins("PA", 0, 15), Pins("PB", 0, 15),

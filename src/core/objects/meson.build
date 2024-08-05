@@ -13,11 +13,19 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.lib.ext_enum
-import vortex.core as cc
+r = run_command(py, root / 'tools/find_modules.py', root, check: true)
+objects = r.stdout().strip()
 
-ModuleTypes = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleTypes", {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()})
+cc = meson.get_compiler('c')
+math = cc.find_library('m')
 
-ModuleEvents = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleEvents", {n.upper(): (v, n) for v, n in cc.OBJECT_EVENT_NAMES.items()})
+foreach object : objects.split()
+    lib = library(object, object + '.c',
+                         include_directories: [core_utils_include, core_include],
+                         dependencies: [core_utils_dep, math],
+                         name_prefix: '',
+                         link_with: core_utils,
+                         install: true,
+                         install_dir: py.get_install_dir(pure: false) / 'vortex/core/objects',
+                         install_rpath: '$ORIGIN/../lib')
+endforeach

@@ -15,8 +15,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import configparser
 from argparse import Namespace
-from controllers.types import ModuleTypes
 import logging
+from vortex.controllers.types import ModuleTypes
 
 class Configuration:
     def __init__(self):

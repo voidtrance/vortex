@@ -13,12 +13,12 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-from frontends import BaseFrontend
-from controllers.types import ModuleTypes
-import frontends.lib
 import select
 import os
 import logging
+from vortex.frontends import BaseFrontend
+from vortex.controllers.types import ModuleTypes
+import vortex.frontends.lib
 
 class DirectFrontend(BaseFrontend):
     FIFO = "/tmp/direct_frontend_fifo"
@@ -28,7 +28,7 @@ class DirectFrontend(BaseFrontend):
             os.mkfifo(self.FIFO)
         except FileExistsError:
             pass
-        mfd, sfd = frontends.lib.create_pty(self.FIFO)
+        mfd, sfd = vortex.frontends.lib.create_pty(self.FIFO)
         self._fd = os.fdopen(mfd, 'r')
         self._poll = select.poll()
         self._poll.register(self._fd, select.POLLIN|select.POLLHUP)

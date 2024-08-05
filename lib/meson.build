@@ -13,11 +13,5 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.lib.ext_enum
-import vortex.core as cc
-
-ModuleTypes = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleTypes", {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()})
-
-ModuleEvents = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleEvents", {n.upper(): (v, n) for v, n in cc.OBJECT_EVENT_NAMES.items()})
+py.install_sources(['constants.py', 'ctypes_helpers.py',
+                    'ext_enum.py'], subdir: 'vortex/lib')

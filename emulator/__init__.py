@@ -16,12 +16,12 @@
 import queue
 from collections import OrderedDict
 import logging
-from lib.constants import *
-from controllers.core import CoreError
 import ctypes
 import time
-from controllers.types import ModuleTypes, ModuleEvents
-import controllers.objects.object_defs as odefs
+from vortex.lib.constants import *
+from vortex.core import VortexCoreError
+from vortex.controllers.types import ModuleTypes, ModuleEvents
+import vortex.controllers.objects.object_defs as odefs
 
 __all__ = ["Emulator"]
 
@@ -145,7 +145,7 @@ class Emulator:
     def run(self):
         try:
            self._controller.start(self._frequency, self._command_complete)
-        except CoreError as e:
+        except VortexCoreError as e:
             print(str(e))
             self._controller.stop()
             return

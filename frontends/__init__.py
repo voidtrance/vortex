@@ -14,11 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import threading
-import os
 import importlib
 import logging
-from lib import ctypes_helpers
-from controllers.types import ModuleTypes
+from vortex.lib import ctypes_helpers
+from vortex.controllers.types import ModuleTypes
 
 class BaseFrontend:
     def __init__(self, event_register=None, event_unregister=None):
@@ -124,10 +123,11 @@ class BaseFrontend:
         pass
     
 def create_frontend(name):
-    if not os.path.isdir(f"./frontends/{name}"):
-        return None
-    module = importlib.import_module(f"frontends.{name}")
-    if hasattr(module, "create") and callable(module.create):
-        frontend = module.create()
-        return frontend
+    try:
+        module = importlib.import_module(f"vortex.frontends.{name}")
+        if hasattr(module, "create") and callable(module.create):
+            frontend = module.create()
+            return frontend
+    except ImportError as e:
+        logging.error(f"Failed to create frontend '{name}': {str(e)}")
     return None

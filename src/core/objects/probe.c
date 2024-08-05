@@ -27,7 +27,7 @@
 #include "object_defs.h"
 #include "probe.h"
 #include "axis.h"
-#include "cache.h"
+#include <cache.h>
 
 typedef struct {
     float z_offset;

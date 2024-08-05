@@ -13,11 +13,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.lib.ext_enum
-import vortex.core as cc
+[build-system]
+build-backend = 'mesonpy'
+requires = ['meson-python', 'regex']
 
-ModuleTypes = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleTypes", {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()})
-
-ModuleEvents = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleEvents", {n.upper(): (v, n) for v, n in cc.OBJECT_EVENT_NAMES.items()})
+[project]
+name = 'vortex'
+version = '0.0.1'
+description = 'GCode machine emulator'
+requires-python = '>=3.11'
+authors = [
+  {name = 'Mitko Haralanov', email = 'voidtrance@gmail.com'},
+]

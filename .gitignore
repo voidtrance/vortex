@@ -1,4 +1,6 @@
 __pycache__
 *.so
 build/
+dist/
 .vscode/
+.cache/

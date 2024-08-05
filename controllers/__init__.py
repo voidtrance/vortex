@@ -13,12 +13,12 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import controllers.core
 import importlib
 import logging
 import ctypes
-from controllers.types import ModuleTypes
-import lib.ctypes_helpers
+import vortex.core as core
+from vortex.controllers.types import ModuleTypes
+import vortex.lib.ctypes_helpers
 
 class Counter:
     def __init__(self):
@@ -62,7 +62,7 @@ class Objects:
         for name, id in self.__objects[klass]:
             yield klass, name, id
 
-class Controller(controllers.core.Core):
+class Controller(core.VortexCore):
     PINS = []
     def __init__(self, config):
         root = logging.getLogger()
@@ -76,9 +76,9 @@ class Controller(controllers.core.Core):
         self._completion_callback = None
         self._load_objects(config)
         if not self.init_objects():
-            raise controllers.core.CoreError("Failed to initialize objects.")
+            raise core.VortexCoreError("Failed to initialize objects.")
     def _load_objects(self, config):
-        module = importlib.import_module("controllers.objects.object_defs")
+        module = importlib.import_module("vortex.controllers.objects.object_defs")
         object_defs = getattr(module, "__objects__")
         available_objects = [x() for x in object_defs]
         self.object_defs.update({ModuleTypes[x.__class__.__name__.lower()]: x \
@@ -90,7 +90,7 @@ class Controller(controllers.core.Core):
                 continue
             obj_conf = self.object_defs[klass].config()
             try:
-                lib.ctypes_helpers.fill_ctypes_struct(obj_conf, vars(options))
+                vortex.lib.ctypes_helpers.fill_ctypes_struct(obj_conf, vars(options))
             except TypeError as e:
                 logging.error("Could not create object configuration!")
                 logging.error(f"   klass={klass}, name={name}: {str(e)}")

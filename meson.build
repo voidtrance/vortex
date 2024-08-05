@@ -13,11 +13,21 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.lib.ext_enum
-import vortex.core as cc
+project('vortex', 'c')
 
-ModuleTypes = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleTypes", {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()})
+py = import('python').find_installation(pure: false)
+root = meson.project_source_root()
 
-ModuleEvents = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleEvents", {n.upper(): (v, n) for v, n in cc.OBJECT_EVENT_NAMES.items()})
+# Build the core utils library
+subdir('src/lib')
+
+# Build core module and objects
+subdir('src/core')
+subdir('src/core/objects')
+
+# Install Python source
+subdir('emulator')
+subdir('controllers')
+subdir('frontends')
+subdir('lib')
+install_data('vortex_emulator.py', install_dir: get_option('bindir'))

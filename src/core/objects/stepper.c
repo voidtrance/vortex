@@ -22,9 +22,9 @@
 #include "../debug.h"
 #include "object_defs.h"
 #include "../common_defs.h"
-#include "../utils.h"
+#include <utils.h>
 #include "stepper.h"
-#include "cache.h"
+#include <cache.h>
 
 typedef struct {
     uint32_t steps_per_rotation;
