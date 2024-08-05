@@ -74,6 +74,7 @@ static void probe_update(core_object_t *object, uint64_t ticks,
     probe_t *probe = (probe_t *)object;
     axis_status_t status;
     float fuzz = probe->range * ((float)random() / (float)((1UL << 32) - 1));
+    bool state = probe->triggered;
 
     probe->triggered = false;
     probe->z_axis->get_state(probe->z_axis, &status);
@@ -83,11 +84,16 @@ static void probe_update(core_object_t *object, uint64_t ticks,
 
 	probe->triggered = true;
 	probe->position = status.position;
-        data = object_cache_alloc(probe_event_cache);
-	if (data) {
-	    data->position = probe->position;
-	    CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED,
-			      core_object_to_id((core_object_t *)probe), data);
+
+	// Send event only when probe is triggered.
+	if (!state) {
+	    data = object_cache_alloc(probe_event_cache);
+	    if (data) {
+		data->position = probe->position;
+		CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED,
+				  core_object_to_id((core_object_t *)probe),
+				  data);
+	    }
 	}
     }
 }
