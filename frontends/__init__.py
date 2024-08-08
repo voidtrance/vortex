@@ -110,11 +110,12 @@ class BaseFrontend:
             return False
         opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
         opts = self.convert_opts(klass, cmd_id, opts)
-        if not self._run_sequential or not self._command_completion:
-            cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
-            self._command_completion[cmd_id] = cmd
-            return True
-        return False
+        if self._run_sequential and self._command_completion:
+            return False
+
+        cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
+        self._command_completion[cmd_id] = cmd
+        return True
 
     def complete_command(self, id, result):
         self._command_completion.pop(id)
