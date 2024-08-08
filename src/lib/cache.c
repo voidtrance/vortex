@@ -27,11 +27,14 @@
 #include <stdio.h>
 #endif
 
+#define OBJECT_CACHE_TAG 0xdeadbeefc0dedead
+
 #define container_of(ptr, member, type) \
     ({ void *__ptr = (void *)ptr; ((type *)(__ptr - offsetof(type, member))); })
 
 struct cache_object {
     STAILQ_ENTRY(cache_object) entry;
+    uint64_t tag;
     object_cache_t *cache;
     void *ptr;
 };
@@ -88,6 +91,7 @@ static bool object_cache_fill(object_cache_t *cache) {
 	struct cache_object *object_entry = (struct cache_object *)ptr;
 
 	ptr += sizeof(struct cache_object);
+	object_entry->tag = OBJECT_CACHE_TAG;
 	object_entry->ptr = ptr;
         object_entry->cache = cache;
         ptr += cache->object_size;
@@ -153,11 +157,22 @@ void *object_cache_alloc(object_cache_t *cache) {
 }
 
 void object_cache_free(void *object) {
-    struct cache_object *obj = object - sizeof(struct cache_object);
-    object_cache_t *cache = obj->cache;
+    struct cache_object *obj;
+    object_cache_t *cache;
 #ifdef VORTEX_DEBUG
     bool found = false;
 #endif
+
+    if (!object)
+	return;
+
+    obj = object - sizeof(struct cache_object);
+    if (obj->tag != OBJECT_CACHE_TAG || obj->ptr != object) {
+	free(object);
+	return;
+    }
+
+    cache = obj->cache;
 
     pthread_mutex_lock(&cache->lock);
 #ifdef VORTEX_DEBUG
