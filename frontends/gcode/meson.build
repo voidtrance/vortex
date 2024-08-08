@@ -13,8 +13,4 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-python_sources = ['__init__.py', 'lib.py']
-py.install_sources(python_sources, subdir: 'vortex/frontends')
-subdir('direct')
-subdir('gcode')
-subdir('klipper')
+py.install_sources(['__init__.py', 'gcmd.py'], subdir: 'vortex/frontends/gcode')
