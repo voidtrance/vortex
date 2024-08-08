@@ -224,6 +224,9 @@ static void axis_update(core_object_t *object, uint64_t ticks,
     stepper_status_t stepper_status;
     size_t i;
 
+    if (!axis->homed && axis->axis_command_id != AXIS_COMMAND_HOME)
+	return;
+
     /* TODO: need to figure out how to limit the stepper
      * from going past the axis length. Some possibilities:
      *    - have the stepper query the endstop trigger status.
@@ -373,6 +376,7 @@ axis_t *object_create(const char *name, void *config_ptr) {
 	axis->motors[i].name = strdup(config->steppers[i]);
 
     axis->mm_per_step = config->mm_per_step;
+    axis->length = config->length;
 
     return axis;
 }

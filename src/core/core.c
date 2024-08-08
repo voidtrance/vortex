@@ -559,7 +559,7 @@ static void core_process_work(void *arg) {
 	cmd_next = STAILQ_NEXT(cmd, entry);
         pthread_mutex_lock(&core->cmds.lock);
         STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
-        pthread_mutex_lock(&core->cmds.lock);
+        pthread_mutex_unlock(&core->cmds.lock);
 
 	object = core_id_to_object(cmd->target_id);
 	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
