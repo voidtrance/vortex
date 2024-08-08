@@ -29,6 +29,7 @@
 #include "object_defs.h"
 #include "stepper.h"
 #include <cache.h>
+#include <random.h>
 
 typedef struct {
     const char *name;
@@ -106,7 +107,7 @@ static int axis_init(core_object_t *object) {
 	axis->endstop_is_max = false;
 
     axis->axis_command_id = AXIS_COMMAND_MAX;
-    axis->position = 0;
+    axis->position = random_float_limit(0, axis->length);
     return 0;
 }
 

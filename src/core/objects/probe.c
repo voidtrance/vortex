@@ -28,6 +28,7 @@
 #include "probe.h"
 #include "axis.h"
 #include <cache.h>
+#include <random.h>
 
 typedef struct {
     float z_offset;
@@ -47,16 +48,12 @@ static object_cache_t *probe_event_cache = NULL;
 
 static int probe_init(core_object_t *object) {
     probe_t *probe = (probe_t *)object;
-    struct timespec ts;
 
     probe->z_axis = CORE_LOOKUP_OBJECT(probe, OBJECT_TYPE_AXIS, "z");
     if (!probe->z_axis) {
 	log_error(probe, "Did not find a Z axis");
 	return -ENOENT;
     }
-
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    srandom((unsigned int)ts.tv_nsec);
 
     return 0;
 }
@@ -73,7 +70,7 @@ static void probe_update(core_object_t *object, uint64_t ticks,
 			 uint64_t runtime) {
     probe_t *probe = (probe_t *)object;
     axis_status_t status;
-    float fuzz = probe->range * ((float)random() / (float)((1UL << 32) - 1));
+    float fuzz = random_float_limit(0, probe->range);
     bool state = probe->triggered;
 
     probe->triggered = false;
