@@ -30,9 +30,11 @@ class Stepper(ObjectDef):
         _fields_ = [("steps_per_rotation", ctypes.c_uint32),
                     ("microsteps", ctypes.c_uint32),
                     ("clock_speed", ctypes.c_char * 64),
-                     ("driver", ctypes.c_char * 16)]
+                    ("driver", ctypes.c_char * 16)]
     class StepperEnableCommandOpts(ctypes.Structure):
         _fields_ = [("enable", ctypes.c_bool)]
+    class StepperSetSpeedCommandOpts(ctypes.Structure):
+        _fields_ = [("steps_per_second", ctypes.c_float)]
     class StepperMoveCommandOpts(ctypes.Structure):
         _fields_ = [("direction", ctypes.c_uint8),
                     ("steps", ctypes.c_uint32)]
@@ -46,7 +48,8 @@ class Stepper(ObjectDef):
     def __init__(self):
         super().__init__(ModuleTypes.STEPPER)
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
-                         (1, "move", self.StepperMoveCommandOpts, (0, 0))]
+                         (1, "set_speed", self.StepperSetSpeedCommandOpts, (0., )),
+                         (2, "move", self.StepperMoveCommandOpts, (0, 0))]
         self.events = {ModuleEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
         
 class Thermistor(ObjectDef):

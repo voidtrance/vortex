@@ -52,6 +52,7 @@ static object_cache_t *stepper_event_cache = NULL;
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep);
 int stepper_exec(core_object_t *object, core_object_command_t *cmd);
 int stepper_enable(core_object_t *object, void *args);
+int stepper_set_speed(core_object_t *object, void *args);
 int stepper_move(core_object_t *object, void *args);
 void stepper_reset(core_object_t *object);
 void stepper_status(core_object_t *object, void *status);
@@ -61,6 +62,7 @@ typedef int (*command_func_t)(core_object_t *object, void *args);
 
 static const command_func_t command_handlers[] = {
     [STEPPER_COMMAND_ENABLE] = stepper_enable,
+    [STEPPER_COMMAND_SET_SPEED] = stepper_set_speed,
     [STEPPER_COMMAND_MOVE] = stepper_move,
 };
 
@@ -118,6 +120,17 @@ int stepper_enable(core_object_t *object, void *args) {
     struct stepper_enable_args *opts = (struct stepper_enable_args *)args;
 
     stepper->enabled = !!opts->enable;
+    log_debug(stepper, "Enabling %s %u", stepper->object.name, stepper->enabled);
+    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
+    stepper->current_cmd = NULL;
+    return 0;
+}
+
+int stepper_set_speed(core_object_t *object, void *args) {
+    stepper_t *stepper = (stepper_t *)object;
+    struct stepper_set_speed_args *opts = (struct stepper_set_speed_args *)args;
+
+    stepper->spns = SEC_TO_NSEC(opts->steps_per_second);
     CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
     stepper->current_cmd = NULL;
     return 0;

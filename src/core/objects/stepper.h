@@ -28,12 +28,17 @@ typedef enum {
 
 enum {
     STEPPER_COMMAND_ENABLE,
+    STEPPER_COMMAND_SET_SPEED,
     STEPPER_COMMAND_MOVE,
     STEPPER_COMMAND_MAX,
 };
 
 struct stepper_enable_args {
     int enable;
+};
+
+struct stepper_set_speed_args {
+    float steps_per_second;
 };
 
 struct stepper_move_args {
