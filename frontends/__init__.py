@@ -39,12 +39,6 @@ class BaseFrontend:
         else:
             self.event_unregister = lambda a, b, c, d: False
 
-    def _find_object(self, klass, *seq):
-        for s in seq:
-            if s in self._obj_name_2_id[klass]:
-                return s
-        return None
-
     def set_command_queue(self, queue):
         self._queue = queue
 
@@ -62,6 +56,14 @@ class BaseFrontend:
                 for obj in objects[klass]:
                     self._obj_name_2_id[klass][obj[0]] = obj[1]
                     self._obj_id_2_name[klass][obj[1]] = obj[0]
+
+    def find_object(self, klass, *seq):
+        '''Find object ID for object of type klass.
+        The object name can be any of the values in seq.'''
+        for s in seq:
+            if s in self._obj_name_2_id[klass]:
+                return s
+        return None
 
     def query_object(self, objects):
         return self._query(objects)

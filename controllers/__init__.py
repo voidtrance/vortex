@@ -61,7 +61,12 @@ class Objects:
     def iter_klass(self, klass):
         for name, id in self.__objects[klass]:
             yield klass, name, id
-
+    def find_object_by_id(self, obj_id):
+        for klass in self.__objects:
+            for name, id in self.__objects[klass]:
+                if id == obj_id:
+                    return klass, name
+        return None, None
 class Controller(core.VortexCore):
     PINS = []
     _libc = ctypes.CDLL("libc.so.6")
