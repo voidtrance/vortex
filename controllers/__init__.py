@@ -64,6 +64,7 @@ class Objects:
 
 class Controller(core.VortexCore):
     PINS = []
+    _libc = ctypes.CDLL("libc.so.6")
     def __init__(self, config):
         root = logging.getLogger()
         debug_level = root.getEffectiveLevel()
@@ -113,3 +114,19 @@ class Controller(core.VortexCore):
             objects[klass].append((name, id))
         params["objects"] = objects
         return params
+    def query_objects(self, objects):
+        _status = self.get_status(objects)
+        object_status = dict.fromkeys(objects, None)
+        for i, id  in enumerate(objects):
+            klass, name = self.objects.find_object_by_id(id)
+            if not klass:
+                logging.error(f"Could not find klass for object id {id}")
+                continue
+            if _status[i]:
+                status_struct = self.object_defs[klass].state
+                status = ctypes.cast(_status[i], ctypes.POINTER(status_struct)).contents
+                object_status[id] = vortex.lib.ctypes_helpers.parse_ctypes_struct(status)
+                self._libc.free(ctypes.c_void_p(_status[i]))
+            else:
+                object_status[id] = None
+        return object_status

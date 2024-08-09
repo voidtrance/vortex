@@ -76,3 +76,23 @@ def fill_ctypes_struct(instance, data):
         instance.contents = arr
     else:
         raise TypeError(f"Unknown ctypes type {t}")
+
+def parse_ctypes_struct(instance):
+    data = {}
+    t = type(instance)
+    if issubclass(t, ctypes.Structure):
+        for key, expected_type in t._fields_:
+            if is_simple(expected_type):
+                data[key] = getattr(instance, key)
+            else:
+                data[key] = parse_ctypes_struct(getattr(instance, key))
+    elif issubclass(t, ctypes.Array):
+        if is_simple_char_array(t):
+            return ctypes.string_at(instance).decode('ascii')
+        elif issubclass(t._type_, ctypes._SimpleCData):
+            return list(instance)
+        return [parse_ctypes_struct(x) for x in instance]
+    elif is_simple_pointer(instance):
+        return instance.contents
+    return data
+

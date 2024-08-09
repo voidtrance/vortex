@@ -34,6 +34,8 @@
 #define max(a, b) ((a <= (typeof(a))b) ? b : a)
 #define min(a, b) ((a <= (typeof(a))b) ? a : b)
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
+
 uint32_t str_to_hertz(const char *str);
 
 #endif

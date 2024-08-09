@@ -28,6 +28,7 @@
 #include "endstop.h"
 #include "object_defs.h"
 #include "stepper.h"
+#include <utils.h>
 #include <cache.h>
 #include <random.h>
 
@@ -307,10 +308,16 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 static void axis_status(core_object_t *object, void *status) {
     axis_t *axis = (axis_t *)object;
     axis_status_t *s = (axis_status_t *)status;
+    size_t i;
 
     s->homed = axis->homed;
     s->length = axis->length;
     s->position = axis->position;
+    s->ratio = axis->mm_per_step;
+    memset(s->motors, 0, sizeof(s->motors));
+    for (i = 0; i < axis->n_motors; i++) {
+        strncpy(s->motors[i], axis->motors[i].name, ARRAY_SIZE(s->motors[i]));
+    }
 }
 
 static void axis_destroy(core_object_t *object) {

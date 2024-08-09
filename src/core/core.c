@@ -17,23 +17,30 @@
  */
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <cache.h>
 #include <dlfcn.h>
+#include <libgen.h>
+#include <pthread.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <libgen.h>
 #include <structmember.h>
 #include <sys/queue.h>
-#include <stdarg.h>
-#include <pthread.h>
+#include <utils.h>
+
 #include "core.h"
 #include "events.h"
 #include "common_defs.h"
 #include "thread_control.h"
 #include "objects/object_defs.h"
-#include <utils.h>
-#include <cache.h>
+#include "objects/axis.h"
+#include "objects/endstop.h"
+#include "objects/heater.h"
+#include "objects/probe.h"
+#include "objects/stepper.h"
+#include "objects/thermistor.h"
 
 static const char *module_path = NULL;
 static PyObject *VortexCoreError;
@@ -943,6 +950,91 @@ static PyObject *core_get_runtime(PyObject *self, PyObject *args) {
     return runtime;
 }
 
+static PyObject *core_get_status(PyObject *self, PyObject *args) {
+    PyObject *object_list;
+    PyObject *result_list = NULL;
+    Py_ssize_t size;
+    Py_ssize_t i;
+    Py_ssize_t result_idx = 0;
+
+    if (!PyArg_ParseTuple(args, "O", &object_list))
+	return NULL;
+
+    if (!PyList_Check(object_list)) {
+	PyErr_SetString(VortexCoreError, "Argument should be a list of IDs");
+	return NULL;
+    }
+
+    size = PyList_Size(object_list);
+    result_list = PyList_New(size);
+    if (!result_list)
+	return NULL;
+
+    for (i = 0; i < size; i++) {
+	PyObject *item;
+	PyObject *status = NULL;
+	core_object_id_t id;
+	core_object_t *object;
+	void *state;
+
+	item = PyList_GetItem(object_list, i);
+	if (!PyLong_Check(item)) {
+	    PyErr_SetString(VortexCoreError, "Expected object id");
+	    goto fail;
+	}
+
+	state = NULL;
+	id = PyLong_AsUnsignedLong(item);
+	object = core_id_to_object(id);
+	if (!object->get_state)
+	    continue;
+
+	switch (object->type) {
+	case OBJECT_TYPE_AXIS:
+	    state = calloc(1, sizeof(axis_status_t));
+	    break;
+        case OBJECT_TYPE_ENDSTOP:
+            state = calloc(1, sizeof(endstop_status_t));
+            break;
+	case OBJECT_TYPE_HEATER:
+	    state = calloc(1, sizeof(heater_status_t));
+	    break;
+	case OBJECT_TYPE_PROBE:
+	    state = calloc(1, sizeof(probe_status_t));
+	    break;
+        case OBJECT_TYPE_STEPPER:
+            state = calloc(1, sizeof(stepper_status_t));
+            break;
+        case OBJECT_TYPE_THERMISTOR:
+            state = calloc(1, sizeof(thermistor_status_t));
+	    break;
+	default:
+	    break;
+	}
+
+	if (!state) {
+	    Py_INCREF(Py_None);
+	    status = Py_None;
+	} else {
+	    object->get_state(object, state);
+	    status = Py_BuildValue("k", state);
+	}
+
+	if (PyList_SetItem(result_list, result_idx, status)) {
+            Py_XDECREF(status);
+            goto fail;
+	}
+
+	result_idx++;
+    }
+
+    return result_list;
+
+  fail:
+    Py_DECREF(result_list);
+    return NULL;
+}
+
 void core_log(core_log_level_t level, core_object_type_t type,
 	      const char *name, const char *fmt, ...) {
     va_list args;
@@ -987,6 +1079,7 @@ static PyMethodDef VortexCoreMethods[] = {
      METH_VARARGS | METH_KEYWORDS, "Execute command"},
     {"get_clock_ticks", core_get_ticks, METH_NOARGS, "Get current tick count"},
     {"get_runtime", core_get_runtime, METH_NOARGS, "Get controller runtime"},
+    {"get_status", core_get_status, METH_VARARGS, "Get object(s) status"},
     {"event_register", core_python_event_register, METH_VARARGS,
      "Register to core object events"},
     {"event_unregister", core_python_event_unregister, METH_VARARGS,

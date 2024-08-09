@@ -29,6 +29,7 @@ class BaseFrontend:
         self._command_completion = {}
         self._run = True
         self._run_sequential = False
+        self._query = None
         if event_register:
             self.event_register = event_register
         else:
@@ -62,6 +63,9 @@ class BaseFrontend:
                     self._obj_name_2_id[klass][obj[0]] = obj[1]
                     self._obj_id_2_name[klass][obj[1]] = obj[0]
 
+    def query_object(self, objects):
+        return self._query(objects)
+
     def get_object_id(self, klass, name):
         return self._obj_name_2_id[klass].get(name, None)
 
@@ -84,6 +88,9 @@ class BaseFrontend:
 
     def set_sequential_mode(self, mode):
         self._run_sequential = mode
+
+    def set_object_query(self, func):
+        self._query = func
 
     def _process_commands(self):
         while self._run:

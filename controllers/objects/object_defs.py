@@ -98,7 +98,9 @@ class Axis(ObjectDef):
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
                     ("length", ctypes.c_float),
-                    ("position", ctypes.c_float)]
+                    ("position", ctypes.c_float),
+                    ("ratio", ctypes.c_float),
+                    ("motors", (ctypes.c_char * 64) * 8)]
     class AxisEventHomed(ctypes.Structure):
         _fields_ = [("axis", ctypes.c_char_p)]
     def __init__(self):
