@@ -30,6 +30,8 @@ class BaseFrontend:
         self._run = True
         self._run_sequential = False
         self._query = None
+        self.reset = None
+        self.is_reset = False
         if event_register:
             self.event_register = event_register
         else:
@@ -91,6 +93,9 @@ class BaseFrontend:
     def set_sequential_mode(self, mode):
         self._run_sequential = mode
 
+    def set_reset(self, func):
+        self.reset = func
+
     def set_object_query(self, func):
         self._query = func
 
@@ -110,6 +115,8 @@ class BaseFrontend:
         return opts_struct
     
     def queue_command(self, klass, object, cmd, opts, timestamp):
+        if self.is_reset:
+            return False
         if isinstance(cmd, str):
             cmd_id = self._cmd_name_2_id[klass].get(cmd, (None,))[0]
             if cmd_id is None:

@@ -47,10 +47,12 @@ typedef struct {
 
 static object_cache_t *heater_event_cache = NULL;
 
-void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestamp);
-int heater_set_temp(core_object_t *object, core_object_command_t *cmd);
-void heater_status(core_object_t *object, void *status);
-void heater_destroy(core_object_t *object);
+static void heater_update(core_object_t *object, uint64_t ticks,
+			  uint64_t timestamp);
+static int heater_set_temp(core_object_t *object, core_object_command_t *cmd);
+static void heater_status(core_object_t *object, void *status);
+static void heater_reset(core_object_t *object);
+static void heater_destroy(core_object_t *object);
 
 heater_t *object_create(const char *name, void *config_ptr) {
     heater_t *heater;
@@ -62,6 +64,7 @@ heater_t *object_create(const char *name, void *config_ptr) {
 
     heater->object.type = OBJECT_TYPE_HEATER;
     heater->object.update = heater_update;
+    heater->object.reset = heater_reset;
     heater->object.destroy = heater_destroy;
     heater->object.exec_command = heater_set_temp;
     heater->object.get_state = heater_status;
@@ -79,7 +82,14 @@ heater_t *object_create(const char *name, void *config_ptr) {
     return heater;
 }
 
-int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
+static void heater_reset(core_object_t *object) {
+    heater_t *heater = (heater_t *)object;
+
+    heater->base_temp = heater->temp;
+    heater->target_temp = AMBIENT_TEMP;
+}
+
+static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     heater_t *heater = (heater_t *)object;
     struct heater_set_temperature_args *args;
 
@@ -103,7 +113,7 @@ int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     return 0;
 }
 
-void heater_status(core_object_t *object, void *status) {
+static void heater_status(core_object_t *object, void *status) {
     heater_status_t *s = (heater_status_t *)status;
     heater_t *heater = (heater_t *)object;
 
@@ -136,7 +146,8 @@ static float interpolate(uint64_t *p_pos, float base, float limit,
     return val;
 }
 
-void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
+static void heater_update(core_object_t *object, uint64_t ticks,
+			  uint64_t timestep) {
     heater_t *heater = (heater_t *)object;
     uint64_t time_delta = timestep - heater->timestep;
     heater_temp_reached_event_data_t *data;
@@ -168,7 +179,7 @@ void heater_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     }
 }
 
-void heater_destroy(core_object_t *object) {
+static void heater_destroy(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
 
     core_object_destroy(object);

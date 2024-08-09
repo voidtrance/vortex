@@ -77,6 +77,13 @@ static const command_func_t command_handlers[] = {
     [AXIS_COMMAND_HOME] = axis_home,
 };
 
+static void axis_reset(core_object_t *object) {
+    axis_t *axis = (axis_t *)object;
+
+    axis->axis_command_id = AXIS_COMMAND_MAX;
+    axis->position = random_float_limit(0, axis->length);
+}
+
 static int axis_init(core_object_t *object) {
     axis_t *axis = (axis_t *)object;
     endstop_status_t status;
@@ -107,8 +114,7 @@ static int axis_init(core_object_t *object) {
     else
 	axis->endstop_is_max = false;
 
-    axis->axis_command_id = AXIS_COMMAND_MAX;
-    axis->position = random_float_limit(0, axis->length);
+    axis_reset(object);
     return 0;
 }
 
@@ -358,6 +364,7 @@ axis_t *object_create(const char *name, void *config_ptr) {
     axis->object.name = strdup(name);
     axis->object.init = axis_init;
     axis->object.update = axis_update;
+    axis->object.reset = axis_reset;
     axis->object.exec_command = axis_exec_command;
     axis->object.get_state = axis_status;
     axis->object.destroy = axis_destroy;

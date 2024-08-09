@@ -53,6 +53,7 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep);
 int stepper_exec(core_object_t *object, core_object_command_t *cmd);
 int stepper_enable(core_object_t *object, void *args);
 int stepper_move(core_object_t *object, void *args);
+void stepper_reset(core_object_t *object);
 void stepper_status(core_object_t *object, void *status);
 void stepper_destroy(core_object_t *object);
 
@@ -75,6 +76,7 @@ stepper_t *object_create(const char *name, void *config_ptr) {
     stepper->object.type = OBJECT_TYPE_STEPPER;
     stepper->object.update = stepper_update;
     stepper->object.get_state = stepper_status;
+    stepper->object.reset = stepper_reset;
     stepper->object.destroy = stepper_destroy;
     stepper->object.exec_command = stepper_exec;
     stepper->object.name = strdup(name);
@@ -97,7 +99,18 @@ stepper_t *object_create(const char *name, void *config_ptr) {
 	return NULL;
     }
 
+    stepper_reset((core_object_t *)stepper);
     return stepper;
+}
+
+void stepper_reset(core_object_t *object) {
+    stepper_t *stepper = (stepper_t *)object;
+
+    stepper->current_step = 0;
+    stepper->current_cmd = 0;
+    stepper->dir = MOVE_DIR_NONE;
+    stepper->steps = 0;
+    stepper->enabled = false;
 }
 
 int stepper_enable(core_object_t *object, void *args) {

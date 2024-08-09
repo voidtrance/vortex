@@ -100,6 +100,7 @@ class Emulator:
         self._frontend = frontend
         self._frontend.set_command_queue(self._command_queue)
         self._frontend.set_controller_data(controller.get_params())
+        self._frontend.set_reset(controller.reset)
         self._frontend.set_object_query(controller.query_objects)
         self._controller = controller
         self._scheduled_queue = ScheduleQueue()

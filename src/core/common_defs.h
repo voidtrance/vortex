@@ -60,6 +60,7 @@ struct core_object {
     LIST_ENTRY(core_object) entry;
 
     int (*init)(core_object_t *object);
+    void (*reset)(core_object_t *object);
     int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
     void (*get_state)(core_object_t *object, void *);
     /*

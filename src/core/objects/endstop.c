@@ -51,6 +51,10 @@ typedef struct {
 static void endstop_update(core_object_t *object, uint64_t ticks,
 			   uint64_t runtime);
 
+static void endstop_reset(core_object_t *object) {
+    endstop_update(object, 0, 0);
+}
+
 static int endstop_init(core_object_t *object) {
     endstop_t *endstop = (endstop_t *)object;
 
@@ -104,6 +108,7 @@ endstop_t *object_create(const char *name, void *config_ptr) {
     endstop->object.name = strdup(name);
     endstop->object.init = endstop_init;
     endstop->object.update = endstop_update;
+    endstop->object.reset = endstop_reset;
     endstop->object.get_state = endstop_status;
     endstop->object.destroy = endstop_destroy;
     endstop->axis_name = strdup(config->axis);

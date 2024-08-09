@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <math.h>
 #include <sys/resource.h>
 #include "utils.h"
@@ -30,6 +31,7 @@
 
 struct core_thread_control {
     int do_run;
+    bool pause;
     pthread_t thread_id;
 };
 
@@ -39,6 +41,7 @@ struct core_thread_args {
     uint64_t frequency;
     int64_t frequency_match;
     int *control;
+    bool *pause;
     int ret;
 };
 
@@ -72,6 +75,12 @@ static void *core_update_thread(void *arg) {
     while (*(volatile int *)args->control == 1) {
 	int64_t delay;
 	uint64_t time;
+
+	if (*(volatile bool *)args->pause) {
+	    sleep_time.tv_nsec = 50000;
+	    nanosleep(&sleep_time, NULL);
+	    continue;
+	}
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
 	callback(ticks, runtime, args->user_data);
@@ -142,7 +151,9 @@ int start_thread(struct core_control_data *thread_data) {
         return ret;
 
     thread_data->control.do_run = 1;
+    thread_data->control.pause = false;
     thread_data->args.control = &thread_data->control.do_run;
+    thread_data->args.pause = &thread_data->control.pause;
     ret = pthread_create(&thread_data->control.thread_id, &attrs,
 			 thread_data->thread_func, &thread_data->args);
     if (ret)
@@ -195,4 +206,14 @@ int64_t controller_timer_stop(void) {
 	pthread_join(core_global_work.control.thread_id, NULL);
 
     return core_global_update.args.frequency_match;
+}
+
+void controller_timer_pause(void) {
+    core_global_update.control.pause = true;
+    core_global_update.control.pause = true;
+}
+
+void controller_timer_resume(void) {
+    core_global_update.control.pause = false;
+    core_global_work.control.pause = false;
 }

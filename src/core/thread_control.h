@@ -28,5 +28,7 @@ int controller_timer_start(update_callback_t update_cb,
 			   work_callback_t work_cb, uint64_t work_frequency,
 			   void *user_data);
 int64_t controller_timer_stop(void);
+void controller_timer_pause(void);
+void controller_timer_resume(void);
 
 #endif

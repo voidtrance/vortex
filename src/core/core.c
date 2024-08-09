@@ -1035,6 +1035,55 @@ static PyObject *core_get_status(PyObject *self, PyObject *args) {
     return NULL;
 }
 
+static PyObject *core_reset(PyObject *self, PyObject *args) {
+    core_t *core = (core_t *)self;
+    PyObject *object_list = NULL;
+
+    if (!PyArg_ParseTuple(args, "|O", &object_list))
+	return NULL;
+
+    if (object_list && !Py_IsNone(object_list) && !PyList_Check(object_list)) {
+	PyErr_Format(VortexCoreError, "Argument must be a list or None");
+	return NULL;
+    }
+
+    controller_timer_pause();
+    if (PyList_Check(object_list)) {
+	Py_ssize_t size = PyList_Size(object_list);
+	Py_ssize_t i;
+
+	for (i = 0; i < size; i++) {
+	    PyObject *item = PyList_GetItem(object_list, i);
+	    core_object_id_t id;
+	    core_object_t *object;
+
+	    if (!PyLong_Check(item)) {
+		PyErr_Format(VortexCoreError, "List items must be object IDs");
+		return NULL;
+	    }
+
+	    id = PyLong_AsUnsignedLong(item);
+	    object = core_id_to_object(id);
+	    if (object->reset)
+		object->reset(object);
+	}
+    } else {
+        core_object_type_t type;
+
+        for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+            core_object_t *object;
+
+	    LIST_FOREACH(object, &core->objects[type], entry) {
+		if (object->reset)
+		    object->reset(object);
+	    }
+        }
+    }
+    controller_timer_resume();
+
+    Py_RETURN_TRUE;
+}
+
 void core_log(core_log_level_t level, core_object_type_t type,
 	      const char *name, const char *fmt, ...) {
     va_list args;
@@ -1084,6 +1133,7 @@ static PyMethodDef VortexCoreMethods[] = {
      "Register to core object events"},
     {"event_unregister", core_python_event_unregister, METH_VARARGS,
      "Unregister from core object events"},
+    {"reset", core_reset, METH_VARARGS, "Reset controller object state"},
     {NULL, NULL, 0, NULL}
 };
 
