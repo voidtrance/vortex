@@ -39,10 +39,10 @@ typedef struct {
     uint16_t steps_per_rotation;
     uint8_t microsteps;
     uint64_t last_timestep;
-    float current_step;
+    double current_step;
     float steps;
-    float rps;
-    float spns;
+    double rps;
+    double spns;
     stepper_move_dir_t dir;
     bool enabled;
 } stepper_t;
@@ -130,7 +130,8 @@ int stepper_set_speed(core_object_t *object, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_set_speed_args *opts = (struct stepper_set_speed_args *)args;
 
-    stepper->spns = SEC_TO_NSEC(opts->steps_per_second);
+    log_debug(stepper, "SPS: %f", opts->steps_per_second);
+    stepper->spns = opts->steps_per_second / SEC_TO_NSEC(1);
     CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
     stepper->current_cmd = NULL;
     return 0;
@@ -147,7 +148,7 @@ int stepper_move(core_object_t *object, void *args) {
 
     stepper->dir = opts->direction;
     stepper->steps = opts->steps;
-    log_debug(stepper, "Stepper %s moving %f steps in %u",
+    log_debug(stepper, "Stepper %s moving %.20f steps in %u",
 	      stepper->object.name, stepper->steps, stepper->dir);
     return 0;
 }
@@ -179,7 +180,7 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     uint64_t delta  = timestep - stepper->last_timestep;
 
     if (stepper->steps > 0.0) {
-	float steps = stepper->spns * delta;
+	double steps = stepper->spns * delta;
 
 	if (steps > stepper->steps)
 	    steps = stepper->steps;
@@ -188,6 +189,8 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 	else
 	    stepper->current_step += steps;
 	stepper->steps -= steps;
+	log_debug(stepper, "Current steps: %.15f, inc: %.15f, remaining: %.15f",
+                  steps, stepper->current_step, stepper->steps);
     } else if (stepper->current_cmd &&
 	       stepper->current_cmd->object_cmd_id == STEPPER_COMMAND_MOVE) {
 	stepper_move_comeplete_event_data_t *data;

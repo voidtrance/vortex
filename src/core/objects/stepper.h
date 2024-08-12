@@ -48,7 +48,7 @@ struct stepper_move_args {
 
 typedef struct {
     bool enabled;
-    uint64_t steps;
+    int64_t steps;
     uint16_t spr;
     uint8_t microsteps;
 } stepper_status_t;

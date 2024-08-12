@@ -570,8 +570,8 @@ static void core_process_work(void *arg) {
 
 	object = core_id_to_object(cmd->target_id);
 	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-		 "issuing command for %lu, id: %lu, cmd: %u",
-		 cmd->target_id, cmd->command.command_id,
+		 "issuing command for %s, id: %lu, cmd: %u",
+		 object->name, cmd->command.command_id,
 		 cmd->command.object_cmd_id);
 	(void)object->exec_command(object, &cmd->command);
 	pthread_mutex_lock(&core->submitted.lock);

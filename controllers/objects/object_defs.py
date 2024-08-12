@@ -40,7 +40,7 @@ class Stepper(ObjectDef):
                     ("steps", ctypes.c_uint32)]
     class StepperStatus(ctypes.Structure):
         _fields_ = [("enabled", ctypes.c_bool),
-                    ("steps", ctypes.c_uint64),
+                    ("steps", ctypes.c_int64),
                     ("spr", ctypes.c_uint16),
                     ("microsteps", ctypes.c_uint8)]
     class StepperMoveCompleteEvent(ctypes.Structure):
