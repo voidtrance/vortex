@@ -27,13 +27,13 @@ enum {
 };
 
 typedef struct {
-    float distance;
+    double distance;
 } axis_move_command_opts_t;
 
 typedef struct {
     bool homed;
     float length;
-    float position;
+    double position;
     float ratio;
     char motors[8][64];
 } axis_status_t;

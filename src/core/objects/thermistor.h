@@ -19,7 +19,7 @@
 #define __THERMISTOR_H__
 
 typedef struct {
-    float resistance;
+    double resistance;
 } thermistor_status_t;
 
 #endif

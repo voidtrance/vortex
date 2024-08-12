@@ -22,11 +22,11 @@
 
 typedef struct {
     bool triggered;
-    float position;
+    double position;
 } probe_status_t;
 
 typedef struct {
-    float position;
+    double position;
 } probe_trigger_event_data_t;
 
 #endif

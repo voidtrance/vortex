@@ -41,7 +41,7 @@ typedef struct {
 
 typedef struct {
     uint16_t length;
-    float mm_per_step;
+    double mm_per_step;
     const char **steppers;
     const char endstop[64];
 } axis_config_params_t;

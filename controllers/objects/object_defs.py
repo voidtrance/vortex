@@ -34,7 +34,7 @@ class Stepper(ObjectDef):
     class StepperEnableCommandOpts(ctypes.Structure):
         _fields_ = [("enable", ctypes.c_bool)]
     class StepperSetSpeedCommandOpts(ctypes.Structure):
-        _fields_ = [("steps_per_second", ctypes.c_float)]
+        _fields_ = [("steps_per_second", ctypes.c_double)]
     class StepperMoveCommandOpts(ctypes.Structure):
         _fields_ = [("direction", ctypes.c_uint8),
                     ("steps", ctypes.c_uint32)]
@@ -58,7 +58,7 @@ class Thermistor(ObjectDef):
                     ("heater", ctypes.c_char * 64),
                     ("beta", ctypes.c_uint32)]
     class ThermistorStatus(ctypes.Structure):
-        _fields_ = [("resistance", ctypes.c_float)]
+        _fields_ = [("resistance", ctypes.c_double)]
     def __init__(self):
         super().__init__(ModuleTypes.THERMISTOR)
 class Heater(ObjectDef):
@@ -93,15 +93,15 @@ class Endstop(ObjectDef):
 class Axis(ObjectDef):
     class AxisConfig(ctypes.Structure):
         _fields_ = [("length", ctypes.c_uint16),
-                    ("mm_per_step", ctypes.c_float),
+                    ("mm_per_step", ctypes.c_double),
                     ("stepper", ctypes.POINTER(ctypes.c_char_p)),
                     ("endstop", ctypes.c_char * 64)]
     class AxisMoveCommandOpts(ctypes.Structure):
-        _fields_ = [("distance", ctypes.c_float)]
+        _fields_ = [("distance", ctypes.c_double)]
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
                     ("length", ctypes.c_float),
-                    ("position", ctypes.c_float),
+                    ("position", ctypes.c_double),
                     ("ratio", ctypes.c_float),
                     ("motors", (ctypes.c_char * 64) * 8)]
     class AxisEventHomed(ctypes.Structure):
@@ -118,9 +118,9 @@ class Probe(ObjectDef):
                     ("range", ctypes.c_float)]
     class ProbeStatus(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool),
-                    ("position", ctypes.c_float)]
+                    ("position", ctypes.c_double)]
     class ProbeEventTriggered(ctypes.Structure):
-        _fields_ = [("position", ctypes.c_float)]
+        _fields_ = [("position", ctypes.c_double)]
     def __init__(self):
         super().__init__(ModuleTypes.PROBE)
         self.events = {ModuleEvents.PROBE_TRIGGERED: self.ProbeEventTriggered}
