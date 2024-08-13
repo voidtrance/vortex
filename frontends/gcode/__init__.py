@@ -20,9 +20,14 @@ import logging
 import vortex.frontends.lib
 import vortex.frontends.gcode.gcmd as gcmd
 import vortex.lib.constants as constants
+import vortex.lib.ext_enum as enum
 from vortex.frontends import BaseFrontend
 from vortex.controllers.types import ModuleTypes, ModuleEvents
 
+@enum.unique
+class CoordinateType(enum.ExtIntEnum):
+    ABSOLUTE = enum.auto()
+    RELATIVE = enum.auto()
 class GCodeFrontend(BaseFrontend):
     FIFO = "/tmp/gcode_frontend_fifo"
     def __init__(self):
@@ -37,6 +42,7 @@ class GCodeFrontend(BaseFrontend):
         self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
         self._command_id_queue = []
         self.current_feed_rate = 0.
+        self.coordinates = CoordinateType.ABSOLUTE
 
     def _process_commands(self, *args):
         while self._run:
@@ -72,12 +78,12 @@ class GCodeFrontend(BaseFrontend):
 
     # GCode command implementation
     def G0(self, cmd):
+        axis_ids = self._obj_name_2_id[ModuleTypes.AXIS].values()
+        axes_status = self.query_object(list(axis_ids))
         klass = ModuleTypes.AXIS
         if cmd.has_param("F"):
             mm_per_min = cmd.get_param("F")
             speed = mm_per_min.value / 60
-            axis_ids = self._obj_name_2_id[ModuleTypes.AXIS].values()
-            axes_status = self.query_object(list(axis_ids))
             for status in axes_status.values():
                 logging.debug(f"axis ration: {status['ratio']}")
                 for motor in [x for x in status['motors'] if x]:
@@ -86,8 +92,13 @@ class GCodeFrontend(BaseFrontend):
                         f"steps_per_second={speed / status['ratio']}",
                                         0)
         for axis in cmd.get_params(["F"]):
+            if self.coordinates == CoordinateType.RELATIVE:
+                axis_id = self._obj_name_2_id[ModuleTypes.AXIS][axis]
+                axis_position = axes_status[axis_id]["position"] + axis.value
+            else:
+                axis_position = axis.value
             self.queue_command(klass, axis.name.lower(), "move",
-                               f"distance={axis.value}", 0)
+                               f"position={axis_position}", 0)
     def G1(self, cmd):
         self.G0(cmd)
     def G4(self, cmd):
@@ -112,6 +123,10 @@ class GCodeFrontend(BaseFrontend):
             for axis in cmd.get_params():
                 if not self.queue_command(klass, axis.name.lower(), "home", None, 0):
                     logging.error(f"Failed to queue command 'home' for {axis}")
+    def G90(self, cmd):
+        self.coordinates = CoordinateType.ABSOLUTE
+    def G91(self, cmd):
+        self.coordinates = CoordinateType.RELATIVE
     def M0(self, cmd):
         self.M400(None)
         wait_time = 0.

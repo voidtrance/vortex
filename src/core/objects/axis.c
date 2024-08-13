@@ -184,6 +184,7 @@ static int axis_move(core_object_t *object, void *args) {
     axis_move_command_opts_t *opts = (axis_move_command_opts_t *)args;
     struct stepper_move_args *stepper_args;
     stepper_status_t motor_status;
+    double distance;
     size_t i;
 
     if (!axis->homed) {
@@ -194,6 +195,9 @@ static int axis_move(core_object_t *object, void *args) {
     if (axis->length != AXIS_NO_LENGTH && (opts->position < 0 ||
 					   opts->position > axis->length))
 	return -EINVAL;
+
+    axis->target_position = opts->position;
+    distance = axis->target_position - axis->position;
 
     if (axis->length == AXIS_NO_LENGTH) {
 	/* Implicitly enable motors for infinite axes */
@@ -227,11 +231,10 @@ static int axis_move(core_object_t *object, void *args) {
         if (!stepper_args)
             return -ENOMEM;
 
-        stepper_args->steps = fabs(opts->distance) / axis->mm_per_step;
-        log_debug(axis, "move: distance: %f, steps: %u", opts->distance,
+        stepper_args->steps = fabs(distance) / axis->mm_per_step;
+        log_debug(axis, "move: distance: %f, steps: %u", distance,
                   stepper_args->steps);
-        stepper_args->direction =
-            opts->distance < 0 ? MOVE_DIR_BACK : MOVE_DIR_FWD;
+        stepper_args->direction = distance < 0 ? MOVE_DIR_BACK : MOVE_DIR_FWD;
 
         axis_motor_move(axis, i, stepper_args);
     }

@@ -27,7 +27,7 @@ enum {
 };
 
 typedef struct {
-    double distance;
+    double position;
 } axis_move_command_opts_t;
 
 typedef struct {

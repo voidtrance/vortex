@@ -97,7 +97,7 @@ class Axis(ObjectDef):
                     ("stepper", ctypes.POINTER(ctypes.c_char_p)),
                     ("endstop", ctypes.c_char * 64)]
     class AxisMoveCommandOpts(ctypes.Structure):
-        _fields_ = [("distance", ctypes.c_double)]
+        _fields_ = [("position", ctypes.c_double)]
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
                     ("length", ctypes.c_float),
