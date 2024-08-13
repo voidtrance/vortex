@@ -129,7 +129,9 @@ class BaseFrontend:
         if self._run_sequential and self._command_completion:
             return False
 
+        logging.debug(f"Submitting command: {obj_id} {cmd_id} {opts} {timestamp}")
         cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
+        logging.debug(f"Command ID:{cmd_id}")
         self._command_completion[cmd_id] = cmd
         return True
 

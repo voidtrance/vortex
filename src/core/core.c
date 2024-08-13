@@ -649,6 +649,9 @@ static void core_process_work(void *arg) {
 	PyObject *args;
 	bool handled = false;
 
+	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+		 "completing cmd %lu", comps->entries[comps->tail].id);
+
 	pthread_mutex_lock(&core->submitted.lock);
 	empty = STAILQ_EMPTY(&core->submitted.list);
 	pthread_mutex_unlock(&core->submitted.lock);
@@ -659,6 +662,8 @@ static void core_process_work(void *arg) {
 	cmd = STAILQ_FIRST(&core->submitted.list);
 	pthread_mutex_unlock(&core->submitted.lock);
 	while (cmd) {
+	    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+		     "submitted command %lu", cmd->command.command_id);
 	    cmd_next = STAILQ_NEXT(cmd, entry);
 	    if (cmd->command.command_id == comps->entries[comps->tail].id) {
 		if (cmd->handler)

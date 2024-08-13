@@ -54,7 +54,7 @@ class DirectFrontend(BaseFrontend):
                 if len(parts) == 5:
                     timestamp = int(parts[4])
             except ValueError as e:
-                print(e)
+                logging.error(f"Unable to parse command: {e}")
                 continue
 
             klass = ModuleTypes[klass]
