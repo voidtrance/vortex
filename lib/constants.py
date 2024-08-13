@@ -13,7 +13,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-SEC2USEC = 1000000
+SEC2MSEC = 1000
+SEC2USEC = SEC2MSEC * 1000
 SEC2NSEC = SEC2USEC * 1000
 KHZ2HZ = 1000
 MHZ2HZ = KHZ2HZ * 1000

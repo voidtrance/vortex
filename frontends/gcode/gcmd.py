@@ -133,6 +133,8 @@ class GCodeCommand:
                 return param
         return None
 
-    def get_params(self):
+    def get_params(self, exclude=None):
         for param in self.__params:
+            if exclude and param.name in exclude:
+                continue
             yield(param)
