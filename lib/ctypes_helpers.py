@@ -34,6 +34,8 @@ def is_simple(ctype):
 def attempt_value_conversion(ctype, value):
     if ctype in (ctypes.c_char, ctypes.c_char_p) or \
         is_simple_char_array(ctype):
+        if value is None:
+            value = ""
         return bytes(value, "ascii")
     if ctype == ctypes.c_bool:
         if value.lower() not in ConfigParser.BOOLEAN_STATES:
@@ -53,10 +55,10 @@ def fill_ctypes_struct(instance, data):
                 #if is_simple_char_array(expected_type):
                 #    setattr(instance, key, bytes(data[key], "ascii"))
                 #else:
-                value = attempt_value_conversion(expected_type, data[key])
+                value = attempt_value_conversion(expected_type, data.get(key, None))
                 setattr(instance, key, value)
             else:
-                fill_ctypes_struct(getattr(instance, key), data[key])
+                fill_ctypes_struct(getattr(instance, key), data.get(key, None))
     elif issubclass(t, ctypes.Array):
         if not isinstance(data, list):
             raise TypeError("'data' should be a list")

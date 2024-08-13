@@ -32,6 +32,8 @@
 #include <cache.h>
 #include <random.h>
 
+#define AXIS_NO_LENGTH (-1.0)
+
 typedef struct {
     const char *name;
     core_object_t *obj;
@@ -41,7 +43,7 @@ typedef struct {
 } axis_motor_t;
 
 typedef struct {
-    uint16_t length;
+    float length;
     double mm_per_step;
     const char **steppers;
     const char endstop[64];
@@ -89,7 +91,14 @@ static void axis_reset(core_object_t *object) {
     axis_t *axis = (axis_t *)object;
 
     axis->axis_command_id = AXIS_COMMAND_MAX;
-    axis->position = random_float_limit(0, axis->length);
+    axis->homed = false;
+
+    if (axis->length == AXIS_NO_LENGTH) {
+      axis->homed = true;
+      axis->position = 0.0;
+    } else {
+      axis->position = random_float_limit(0, axis->length);
+    }
 }
 
 static int axis_init(core_object_t *object) {
@@ -115,13 +124,13 @@ static int axis_init(core_object_t *object) {
 					   axis->endstop_name);
 	if (!axis->endstop)
 	    return -ENODEV;
-    }
 
-    axis->endstop->get_state(axis->endstop, &status);
-    if (!strncmp(status.type, "max", 3))
-	axis->endstop_is_max = true;
-    else
-	axis->endstop_is_max = false;
+	axis->endstop->get_state(axis->endstop, &status);
+	if (!strncmp(status.type, "max", 3))
+	    axis->endstop_is_max = true;
+	else
+	    axis->endstop_is_max = false;
+    }
 
     axis_reset(object);
     return 0;
@@ -182,18 +191,34 @@ static int axis_move(core_object_t *object, void *args) {
 	return -EINVAL;
     }
 
-    if (opts->distance == 0)
-	return 0;
+    if (axis->length != AXIS_NO_LENGTH && (opts->position < 0 ||
+					   opts->position > axis->length))
+	return -EINVAL;
 
-    axis->target_position = axis->position + opts->distance;
+    if (axis->length == AXIS_NO_LENGTH) {
+	/* Implicitly enable motors for infinite axes */
+	for (i = 0; i < axis->n_motors; i++) {
+            struct stepper_enable_args *args = malloc(sizeof(*args));
 
-    /* Check that all motors are enabled. */
-    for (i = 0; i < axis->n_motors; i++) {
-	axis->motors[i].obj->get_state(axis->motors[i].obj, &motor_status);
-	if (!motor_status.enabled) {
-	    log_error(axis, "Axis motor '%s' is not enabled.",
-		      axis->motors[i].name);
-	    return -1;
+            if (!args)
+              return -ENOMEM;
+
+            args->enable = true;
+	    axis->comps[i].cmd_id = STEPPER_COMMAND_ENABLE;
+	    axis->comps[i].id = CORE_CMD_SUBMIT(axis, axis->motors[i].obj,
+						STEPPER_COMMAND_ENABLE,
+						axis_stepper_command_handler,
+						args);
+        }
+    } else {
+	/* Check that all motors are enabled. */
+	for (i = 0; i < axis->n_motors; i++) {
+	    axis->motors[i].obj->get_state(axis->motors[i].obj, &motor_status);
+	    if (!motor_status.enabled) {
+		log_error(axis, "Axis motor '%s' is not enabled.",
+			  axis->motors[i].name);
+		return -1;
+	    }
 	}
     }
 
@@ -238,7 +263,9 @@ static int axis_home(core_object_t *object, void *args) {
 
     log_debug(axis, "homing axis: %u, %u, %f, %f", axis->homed,
 	      axis->waiting_to_move, axis->position, axis->length);
-    axis->target_position = axis->endstop_is_max ? axis->length : 0;
+    if (axis->length != AXIS_NO_LENGTH)
+	axis->target_position = axis->endstop_is_max ? axis->length : 0;
+
     for (i = 0; i < axis->n_motors; i++) {
 	enable_args = malloc(sizeof(*enable_args));
         enable_args->enable = true;
@@ -249,6 +276,7 @@ static int axis_home(core_object_t *object, void *args) {
 					    axis_stepper_command_handler,
 					    enable_args);
     }
+
     return 0;
 }
 
@@ -302,10 +330,12 @@ static void axis_update(core_object_t *object, uint64_t ticks,
     log_debug(axis, "axis %s position: %.20f, homed: %u, command: %u",
 	      axis->object.name, axis->position, axis->homed,
 	      axis->axis_command_id);
-    if (!axis->endstop_is_max && axis->position <= 0)
-        axis->position = 0;
-    else if (axis->endstop_is_max && axis->position >= axis->length)
-	axis->position = axis->length;
+    if (axis->length != AXIS_NO_LENGTH) {
+	if (!axis->endstop_is_max && axis->position <= 0)
+	    axis->position = 0;
+	else if (axis->endstop_is_max && axis->position >= axis->length)
+	    axis->position = axis->length;
+    }
 
     switch (axis->axis_command_id) {
     case AXIS_COMMAND_HOME:
@@ -424,7 +454,8 @@ axis_t *object_create(const char *name, void *config_ptr) {
     axis->object.exec_command = axis_exec_command;
     axis->object.get_state = axis_status;
     axis->object.destroy = axis_destroy;
-    axis->endstop_name = strdup(config->endstop);
+    if (config->endstop[0] != '\0')
+	axis->endstop_name = strdup(config->endstop);
 
     /* First, we have to find out how many motors are
      * defined.

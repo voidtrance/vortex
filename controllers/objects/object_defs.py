@@ -92,7 +92,7 @@ class Endstop(ObjectDef):
 
 class Axis(ObjectDef):
     class AxisConfig(ctypes.Structure):
-        _fields_ = [("length", ctypes.c_uint16),
+        _fields_ = [("length", ctypes.c_float),
                     ("mm_per_step", ctypes.c_double),
                     ("stepper", ctypes.POINTER(ctypes.c_char_p)),
                     ("endstop", ctypes.c_char * 64)]
