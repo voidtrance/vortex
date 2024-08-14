@@ -14,10 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import queue
-from collections import OrderedDict
 import logging
 import ctypes
 import time
+from os import strerror
+from collections import OrderedDict
 from vortex.lib.constants import *
 from vortex.core import VortexCoreError
 from vortex.controllers.types import ModuleTypes, ModuleEvents
@@ -177,7 +178,7 @@ class Emulator:
                                                 0 if command.opts is None else \
                                                     ctypes.addressof(command.opts))
             if ret:
-                logging.error("Failed to execute command")
+                logging.error(f"Failed to execute command: {strerror(abs(ret))}")
             time.sleep(0.001)
             
 
