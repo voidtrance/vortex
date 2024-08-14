@@ -44,7 +44,7 @@ typedef struct {
 
 typedef struct {
     float length;
-    double mm_per_step;
+    double travel_per_step;
     const char **steppers;
     const char endstop[64];
 } axis_config_params_t;
@@ -67,7 +67,7 @@ typedef struct {
     bool waiting_to_move;
     bool endstop_is_max;
     float length;
-    double mm_per_step;
+    double travel_per_step;
     double position;
     double target_position;
 } axis_t;
@@ -231,7 +231,7 @@ static int axis_move(core_object_t *object, void *args) {
         if (!stepper_args)
             return -ENOMEM;
 
-        stepper_args->steps = fabs(distance) / axis->mm_per_step;
+        stepper_args->steps = fabs(distance) / axis->travel_per_step;
         log_debug(axis, "move: distance: %f, steps: %u", distance,
                   stepper_args->steps);
         stepper_args->direction = distance < 0 ? MOVE_DIR_BACK : MOVE_DIR_FWD;
@@ -324,9 +324,9 @@ static void axis_update(core_object_t *object, uint64_t ticks,
      * motor.
      */
     for (i = 0; i < axis->n_motors; i++) {
-	average_position += (stepper_status.steps * axis->mm_per_step) -
+	average_position += (stepper_status.steps * axis->travel_per_step) -
 	    axis->motors[i].position;
-	axis->motors[i].position = stepper_status.steps * axis->mm_per_step;
+	axis->motors[i].position = stepper_status.steps * axis->travel_per_step;
     }
     axis->position += (average_position / axis->n_motors);
 
@@ -381,7 +381,7 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 			  args->direction = MOVE_DIR_BACK;
 		      }
 
-		      args->steps = (uint32_t)(distance / axis->mm_per_step);
+		      args->steps = (uint32_t)(distance / axis->travel_per_step);
 		      if (!args->steps) {
 			  axis->position += axis->endstop_is_max ? distance :
 			      -distance;
@@ -408,7 +408,7 @@ static void axis_status(core_object_t *object, void *status) {
     s->homed = axis->homed;
     s->length = axis->length;
     s->position = axis->position;
-    s->ratio = axis->mm_per_step;
+    s->travel_per_step = axis->travel_per_step;
     memset(s->motors, 0, sizeof(s->motors));
     for (i = 0; i < axis->n_motors; i++) {
         strncpy(s->motors[i], axis->motors[i].name, ARRAY_SIZE(s->motors[i]));
@@ -489,7 +489,7 @@ axis_t *object_create(const char *name, void *config_ptr) {
 	return NULL;
     }
 
-    axis->mm_per_step = config->mm_per_step;
+    axis->travel_per_step = config->travel_per_step;
     axis->length = config->length;
     axis->homed = false;
 

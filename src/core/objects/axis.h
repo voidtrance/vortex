@@ -34,7 +34,7 @@ typedef struct {
     bool homed;
     float length;
     double position;
-    float ratio;
+    float travel_per_step;
     char motors[8][64];
 } axis_status_t;
 

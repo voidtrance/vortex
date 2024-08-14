@@ -93,7 +93,7 @@ class Endstop(ObjectDef):
 class Axis(ObjectDef):
     class AxisConfig(ctypes.Structure):
         _fields_ = [("length", ctypes.c_float),
-                    ("mm_per_step", ctypes.c_double),
+                    ("travel_per_step", ctypes.c_double),
                     ("stepper", ctypes.POINTER(ctypes.c_char_p)),
                     ("endstop", ctypes.c_char * 64)]
     class AxisMoveCommandOpts(ctypes.Structure):
@@ -102,7 +102,7 @@ class Axis(ObjectDef):
         _fields_ = [("homed", ctypes.c_bool),
                     ("length", ctypes.c_float),
                     ("position", ctypes.c_double),
-                    ("ratio", ctypes.c_float),
+                    ("travel_per_step", ctypes.c_float),
                     ("motors", (ctypes.c_char * 64) * 8)]
     class AxisEventHomed(ctypes.Structure):
         _fields_ = [("axis", ctypes.c_char_p)]

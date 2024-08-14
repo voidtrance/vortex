@@ -85,11 +85,11 @@ class GCodeFrontend(BaseFrontend):
             mm_per_min = cmd.get_param("F")
             speed = mm_per_min.value / 60
             for status in axes_status.values():
-                logging.debug(f"axis ration: {status['ratio']}")
+                logging.debug(f"axis ratio: {status['travel_per_step']}")
                 for motor in [x for x in status['motors'] if x]:
                     self.queue_command(
                         ModuleTypes.STEPPER, motor, "set_speed",
-                        f"steps_per_second={speed / status['ratio']}",
+                        f"steps_per_second={speed / status['travel_per_step']}",
                                         0)
         for axis in cmd.get_params(["F"]):
             if self.coordinates == CoordinateType.RELATIVE:
