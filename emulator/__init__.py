@@ -100,7 +100,8 @@ class Emulator:
         self._command_queue = CommandQueue()
         self._frontend = frontend
         self._frontend.set_command_queue(self._command_queue)
-        self._frontend.set_controller_data(controller.get_params())
+        controller_params = controller.get_params()
+        self._frontend.set_controller_data(controller_params)
         self._frontend.set_reset(controller.reset)
         self._frontend.set_object_query(controller.query_objects)
         self._controller = controller
@@ -108,18 +109,7 @@ class Emulator:
         self._run_emulation = True
         self._frequency = 0
         self._event_handlers = {}
-        self._controller_object_data = {k: None for k in ModuleTypes}
-        for t in ModuleTypes:
-            object_def = getattr(odefs, str(t).capitalize(), None)
-            if not object_def:
-                continue
-            self._controller_object_data[t] = object_def()
-        self._controller_event_data = {k: {} for k in ModuleTypes}
-        for t in ModuleTypes:
-            if not self._controller_object_data[t]:
-                continue
-            self._controller_event_data[t].update(
-                {e: s for e, s in self._controller_object_data[t].events.items()})
+        self._controller_event_data = controller_params["events"]
 
     def set_frequency(self, frequency=0):
         if (frequency / MHZ2HZ) > 10:
@@ -174,9 +164,7 @@ class Emulator:
     def _process_schedule(self, timestamp):
         for command in self._scheduled_queue.get_all(timestamp):
             ret = self._controller.exec_command(command.id, command.obj_id,
-                                                command.cmd_id,
-                                                0 if command.opts is None else \
-                                                    ctypes.addressof(command.opts))
+                                                command.cmd_id, command.opts)
             if ret:
                 logging.error(f"Failed to execute command: {strerror(abs(ret))}")
             time.sleep(0.001)

@@ -124,6 +124,3 @@ class Probe(ObjectDef):
     def __init__(self):
         super().__init__(ModuleTypes.PROBE)
         self.events = {ModuleEvents.PROBE_TRIGGERED: self.ProbeEventTriggered}
-
-__objects__ = [Stepper, Thermistor, Heater, Endstop,
-               Axis, Probe]

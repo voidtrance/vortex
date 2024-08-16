@@ -16,8 +16,16 @@
 import vortex.lib.ext_enum
 import vortex.core as cc
 
-ModuleTypes = vortex.lib.ext_enum.ExtIntEnum(
-    "ModuleTypes", {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()})
+__core_objects = {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()}
+__virt_object_list = []
+# Update the list of objects to include the virtual ones
+__core_objects.update({n.upper(): (len(__core_objects) + i, n) \
+                       for i, n in enumerate(__virt_object_list)})
+ModuleTypes = vortex.lib.ext_enum.ExtIntEnum("ModuleTypes", __core_objects)
+# Don't pollute the namespace
+del __core_objects
+del __virt_object_list
 
 ModuleEvents = vortex.lib.ext_enum.ExtIntEnum(
     "ModuleEvents", {n.upper(): (v, n) for v, n in cc.OBJECT_EVENT_NAMES.items()})
+

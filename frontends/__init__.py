@@ -50,8 +50,8 @@ class BaseFrontend:
         if commands:
             for klass in commands:
                 for cmd in commands[klass]:
-                    self._cmd_name_2_id[klass][cmd[1]] = (cmd[0], cmd[2], cmd[3])
-                    self._cmd_id_2_cmd[klass][cmd[0]] = (cmd[1], cmd[2], cmd[3])
+                    self._cmd_name_2_id[klass][cmd[1]] = cmd[0]
+                    self._cmd_id_2_cmd[klass][cmd[0]] = cmd[1]
         objects = data.get("objects", None)
         if objects:
             for klass in objects:
@@ -103,29 +103,17 @@ class BaseFrontend:
         while self._run:
             continue
 
-    def convert_opts(self, klass, cmd_id, opts):
-        if not self._cmd_id_2_cmd[klass][cmd_id][1]:
-            return None
-        opts_struct = self._cmd_id_2_cmd[klass][cmd_id][1]()
-        opts_defaults = self._cmd_id_2_cmd[klass][cmd_id][2]
-        try:
-            ctypes_helpers.fill_ctypes_struct(opts_struct, opts)
-        except TypeError as e:
-            logging.error(f"Failed to convert command options: {str(e)}")
-        return opts_struct
-    
     def queue_command(self, klass, object, cmd, opts, timestamp):
         if self.is_reset:
             return False
         if isinstance(cmd, str):
-            cmd_id = self._cmd_name_2_id[klass].get(cmd, (None,))[0]
+            cmd_id = self._cmd_name_2_id[klass].get(cmd, None)
             if cmd_id is None:
                 return False
         obj_id = self._obj_name_2_id[klass].get(object, None)
         if obj_id is None:
             return False
         opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
-        opts = self.convert_opts(klass, cmd_id, opts)
         if self._run_sequential and self._command_completion:
             return False
 
