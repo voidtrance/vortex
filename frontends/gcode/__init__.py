@@ -185,6 +185,9 @@ class GCodeFrontend(BaseFrontend):
     def M400(self, cmd):
         while self._command_completion:
             time.sleep(0.1)
+    def M999(self, cmd):
+        object = self._obj_name_2_id[ModuleTypes.TOOLHEAD]['tool1']
+        print(self.query_object([object]))
 
 def create():
     return GCodeFrontend()

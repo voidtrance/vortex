@@ -13,5 +13,18 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['object_defs.py', 'vobj_base.py', 'toolhead.py'],
-                   subdir: 'vortex/controllers/objects')
+import vortex.controllers.objects.vobj_base as vobj
+from vortex.controllers.types import ModuleTypes
+
+class Toolhead(vobj.VirtualObjectBase):
+    type = ModuleTypes.TOOLHEAD
+    def get_status(self):
+        axes_ids = []
+        for axis in self.config.axes:
+            klass, name, id = self.lookup.object_by_name(axis, ModuleTypes.AXIS)
+            axes_ids.append(id)
+        status = self.query(axes_ids)
+        toolhead_status = dict.fromkeys(self.config.axes, None)
+        for i, id in enumerate(axes_ids):
+            toolhead_status[self.config.axes[i]] = status[id]["position"]
+        return toolhead_status
