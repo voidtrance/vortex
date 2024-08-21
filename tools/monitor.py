@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+import sys
+import socket
+import pickle
+import gi
+from vortex.controllers.types import ModuleTypes
+gi.require_version("Gtk", "3.0")
+gi.require_version('GLib', '2.0')
+from gi.repository import Gtk
+from gi.repository import GLib
+
+
+socket_path = "/tmp/vortex_monitor"
+
+class MainWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Vortex Monitor")
+        self.connect("destroy", Gtk.main_quit)
+        self.connection = None
+        self.objects = []
+
+        self.entries = {}
+        self.klass_frames = {}
+        self.klass_boxes = {}
+        self.run_update = True
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        monitor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+
+        frame = Gtk.Frame(label="Object Status")
+        self.set_widget_margin(frame, 5)
+        monitor_box.pack_start(frame, True, True, 3)
+
+        object_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.set_widget_margin(object_box, 5)
+        for klass in ModuleTypes:
+            if klass is ModuleTypes.NONE:
+                continue
+            self.klass_frames[klass] = Gtk.Frame(label=str(klass).capitalize())
+            object_box.pack_start(self.klass_frames[klass], True, True, 3)
+        frame.add(object_box)
+
+        control_box = Gtk.ButtonBox(orientation=Gtk.Orientation.VERTICAL)
+        control_box.set_layout(Gtk.ButtonBoxStyle.START)
+        control_box.set_spacing(5)
+        self.set_widget_margin(control_box, 15)
+
+        self.precision_spin = Gtk.SpinButton.new_with_range(-1, 8, 1)
+        self.precision_spin.set_value(8)
+        control_box.pack_start(self.precision_spin, False, True, 3)
+
+        pause_button = Gtk.Button(label="Pause")
+        pause_button.connect("clicked", self.pause_emulation)
+        control_box.pack_start(pause_button, False, True, 3)
+
+        resume_button = Gtk.Button(label="Resume")
+        resume_button.connect("clicked", self.resume_emulation)
+        control_box.pack_start(resume_button, False, True, 3)
+        monitor_box.pack_end(control_box, False, False, 3)
+
+        main_box.pack_start(monitor_box, True, True, 3)
+
+        button_box = Gtk.ButtonBox(orientation=Gtk.Orientation.HORIZONTAL)
+        button_box.set_layout(Gtk.ButtonBoxStyle.END)
+        exit_button = Gtk.Button(label="Exit")
+        exit_button.connect("clicked", self.destroy)
+        button_box.pack_end(exit_button, True, True, 3)
+        
+        main_box.pack_end(button_box, False, True, 3)
+        self.add(main_box)
+        self.show_all()
+        self.timer = GLib.timeout_add(100, self.update)
+
+    def connect_to_server(self):
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            sock.connect(socket_path)
+        except (FileNotFoundError, ConnectionRefusedError):
+            return
+        self.connection = sock
+
+    def send_request(self, request, data={}):
+        request = {"request": request}
+        request.update(data)
+        self.connection.sendall(pickle.dumps(request))
+
+    def get_response(self):
+        data = b""
+        incoming = self.connection.recv(1024)
+        while incoming:
+            data += incoming
+            try:
+                incoming = self.connection.recv(1024, socket.MSG_DONTWAIT)
+            except BlockingIOError:
+                break
+        return pickle.loads(data)
+
+    def get_data_value(self, value):
+        precision = self.precision_spin.get_value_as_int()
+        if isinstance(value, float):
+            if precision != -1:
+                value = round(value, precision)
+        elif isinstance(value, list):
+            value = ", ".join([x for x in value if x])
+        return str(value)
+    
+    def populate_grids(self, data):
+        for klass in self.objects:
+            self.klass_boxes[klass] = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.set_widget_margin(self.klass_boxes[klass], 5)
+            self.klass_frames[klass].add(self.klass_boxes[klass])
+            for i, obj in enumerate(self.objects[klass]):
+                hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+                object_label = Gtk.Label(label='')
+                object_label.set_markup(f'<b>{obj["name"]}</b>')
+                object_label.hexpand = True
+                object_label.hexpand_set = True
+                object_label.set_xalign(0.)
+                hbox.pack_start(object_label, True, True, 3)
+                self.entries[obj["id"]] = {}
+                for j, prop in enumerate(data[obj["id"]]):
+                    label = Gtk.Label(label=prop)
+                    hbox.pack_start(label, False, False, 3)
+                    entry = Gtk.Entry()
+                    entry.editable = False
+                    entry.can_focus = False
+                    value = self.get_data_value(data[obj["id"]][prop])
+                    entry.set_text(value)
+                    hbox.pack_start(entry, False, False, 3)
+                    self.entries[obj["id"]][prop] = entry
+                self.klass_boxes[klass].pack_start(hbox, False, False, 3)
+        self.show_all()
+
+    def set_widget_margin(self, widget, top, bottom=None, left=None, right=None):
+        widget.set_margin_top(top)
+        widget.set_margin_bottom(bottom if bottom is not None else top)
+        widget.set_margin_start(left if left is not None else top)
+        widget.set_margin_end(right if right is not None else top)
+
+    def pause_emulation(self, button):
+        self.send_request("pause", {"action": True})
+        return self.get_response()
+    
+    def resume_emulation(self, button):
+        self.send_request("pause", {"action": False})
+        return self.get_response()
+    
+    def get_status(self, klass=None):
+        obj_ids = []
+        klass_set = [klass] if klass is not None else [x for x in ModuleTypes]
+        for klass in klass_set:
+            if klass not in self.objects:
+                continue                
+            for obj in self.objects[klass]:
+                obj_ids.append(obj["id"])
+        try:
+            self.send_request("query", {"objects": obj_ids})
+            return self.get_response()
+        except (BrokenPipeError, EOFError):
+            self.connection = None
+            for klass in ModuleTypes:
+                if klass in self.klass_frames and klass in self.klass_boxes:
+                    self.klass_frames[klass].remove(self.klass_boxes[klass])
+            self.klass_boxes.clear()
+            self.objects.clear()
+            return None
+
+    def update(self):
+        need_populate = False
+        if self.connection is None:
+            self.connect_to_server()
+            if self.connection is None:
+                return self.run_update
+        if not self.objects:
+            self.send_request("object_list")
+            data = self.get_response()
+            self.objects = data["objects"]
+            need_populate = True
+        try:
+            status = self.get_status()
+        except:
+            status = None
+        if status is None:
+            return self.run_update
+        if need_populate:
+            self.populate_grids(status)
+        for obj_id in status:
+            for prop in status[obj_id]:
+                value = self.get_data_value(status[obj_id][prop])
+                self.entries[obj_id][prop].set_text(value)
+        return self.run_update
+    
+    def destroy(self, button):
+        self.run_update = False
+        super().destroy()
+
+def main():
+    app = MainWindow()
+    Gtk.main()
+    return 0
+
+sys.exit(main())

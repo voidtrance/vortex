@@ -180,7 +180,7 @@ class Controller(core.VortexCore):
         virtual_objects = []
         for id in objects:
             klass, name = self.objects.object_by_id(id)
-            if self.object_defs[klass][0]:
+            if klass and self.object_defs[klass][0]:
                 virtual_objects.append(id)
         objects = [x for x in objects if x not in virtual_objects]
         _status = self.get_status(objects)

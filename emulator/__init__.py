@@ -22,7 +22,7 @@ from collections import OrderedDict
 from vortex.lib.constants import *
 from vortex.core import VortexCoreError
 from vortex.controllers.types import ModuleTypes, ModuleEvents
-import vortex.controllers.objects.object_defs as odefs
+import vortex.emulator.monitor as monitor
 
 __all__ = ["Emulator"]
 
@@ -108,6 +108,7 @@ class Emulator:
         self._scheduled_queue = ScheduleQueue()
         self._run_emulation = True
         self._frequency = 0
+        self._monitor = None
         self._event_handlers = {}
         self._controller_event_data = controller_params["events"]
 
@@ -115,6 +116,11 @@ class Emulator:
         if (frequency / MHZ2HZ) > 10:
             logging.warning("Frequency greater than 10MHz may result in inaccurate timing")
         self._frequency = frequency or self._controller.FREQUENCY
+
+    def start_monitor(self, start=False):
+        if start:
+            self._monitor = monitor.MonitorServer(self._controller, self._command_queue)
+            self._monitor.start()
 
     def register_event(self, object_type, event_type, object_name, handler):
         if not self._controller.event_register(object_type, event_type,
@@ -149,6 +155,8 @@ class Emulator:
             self._process_schedule(timestep)
     
     def stop(self):
+        if self._monitor is not None:
+            self._monitor.stop()
         self._frontend.stop()
         self._controller.stop()
 

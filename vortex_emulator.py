@@ -44,6 +44,8 @@ def create_arg_parser():
                         provide more information but will also affect
                         conroller timing more.""")
     debug.add_argument("-l", "--logfile", type=str, default=None)
+    debug.add_argument("-M", "--monitor", action="store_true",
+                       help="""Start monitoring server thread.""")
 
     parser.add_argument("-C", "--config", required=True)
     return parser
@@ -82,6 +84,7 @@ def main():
     
     emulation = vortex.emulator.Emulator(controller, frontend)
     emulation.set_frequency(opts.frequency)
+    emulation.start_monitor(opts.monitor)
 
     try:
         emulation.run()

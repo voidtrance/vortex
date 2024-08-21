@@ -1040,6 +1040,21 @@ static PyObject *core_get_status(PyObject *self, PyObject *args) {
     return NULL;
 }
 
+static PyObject *core_pause(PyObject *self, PyObject *args) {
+    bool pause;
+
+    if (!PyArg_ParseTuple(args, "p", &pause))
+        return NULL;
+
+    if (pause)
+        controller_timer_pause();
+    else
+        controller_timer_resume();
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 static PyObject *core_reset(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     PyObject *object_list = NULL;
@@ -1138,6 +1153,7 @@ static PyMethodDef VortexCoreMethods[] = {
      "Register to core object events"},
     {"event_unregister", core_python_event_unregister, METH_VARARGS,
      "Unregister from core object events"},
+    {"pause", core_pause, METH_VARARGS, "Pause emulation"},
     {"reset", core_reset, METH_VARARGS, "Reset controller object state"},
     {NULL, NULL, 0, NULL}
 };
