@@ -17,7 +17,7 @@ import vortex.lib.ext_enum
 import vortex.core as cc
 
 __core_objects = {n.upper(): (v, n) for v, n in cc.OBJECT_TYPE_NAMES.items()}
-__virt_object_list = ["toolhead"]
+__virt_object_list = ["toolhead", "fan", "digital_pin"]
 # Update the list of objects to include the virtual ones
 __core_objects.update({n.upper(): (len(__core_objects) + i, n) \
                        for i, n in enumerate(__virt_object_list)})

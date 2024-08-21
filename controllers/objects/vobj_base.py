@@ -13,6 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import errno
 from vortex.controllers.types import ModuleTypes
 
 class Sentinal(dict):
@@ -32,3 +33,16 @@ class VirtualObjectBase:
         if name == "events":
             raise TypeError("Virtual object don't support events")
         super().__setattr__(name, value)
+    def exec_command(self, cmd_id, cmd, opts):
+        if not self.commands:
+            return -errno.EINVAL
+        command = None
+        for _cmd in self.commands:
+            if _cmd[0] == cmd:
+                command = _cmd
+                break
+        if not command:
+            return -errno.EINVAL
+        for arg in command[2]:
+            if not opts.get(arg, None):
+                return -errno.EINVAL

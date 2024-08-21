@@ -13,6 +13,19 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['object_defs.py', 'vobj_base.py', 'toolhead.py',
-                    'fan.py', 'dpin.py'],
-                   subdir: 'vortex/controllers/objects')
+import vortex.controllers.objects.vobj_base as vobj
+from vortex.controllers.types import ModuleTypes
+
+class DigitalPin(vobj.VirtualObjectBase):
+    type = ModuleTypes.DIGITAL_PIN
+    commands = [(0, "set", ["state"], None)]
+    def __init__(self, config, lookup_obj, query_obj):
+        super().__init__(config, lookup_obj, query_obj)
+        self._state = False
+    def exec_command(self, cmd_id, cmd, opts):
+        ret = super().exec_command(cmd_id, cmd, opts)
+        if ret:
+            return ret
+        self._state = bool(opts.get("state"))
+    def get_status(self):
+        return {"state" : self._state}

@@ -166,6 +166,16 @@ class GCodeFrontend(BaseFrontend):
                                       "set_temperature",
                                       f"temperature={temp.value}", 0):
                 logging.error("Failed to queue command")
+    def M106(self, cmd):
+        object = self.find_object(ModuleTypes.FAN, "fan1", "fan", "extruder", "hostend")
+        if object:
+            speed = cmd.get_param("S")
+            if not self.queue_command(ModuleTypes.FAN, object,
+                                      "set_speed", f"speed={speed.value}", 0):
+                logging.error("Failed to queue command")
+    def M107(self, cmd):
+        cmd = gcmd.GCodeCommand("M106 S0")
+        self.M106(cmd)
     def M109(self, cmd):
         self.M104(cmd)
     def M112(self, cmd):

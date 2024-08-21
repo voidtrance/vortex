@@ -27,10 +27,7 @@
 typedef enum {
     OBJECT_TYPE_NONE,
     OBJECT_TYPE_STEPPER,
-    OBJECT_TYPE_DIGITAL_PIN,
-    OBJECT_TYPE_PWM_PIN,
     OBJECT_TYPE_ENDSTOP,
-    OBJECT_TYPE_FAN,
     OBJECT_TYPE_HEATER,
     OBJECT_TYPE_THERMISTOR,
     OBJECT_TYPE_PROBE,
@@ -41,10 +38,7 @@ typedef enum {
 static const char *const ObjectTypeExportNames[] = {
     [OBJECT_TYPE_NONE] = stringify(OBJECT_TYPE_NONE),
     [OBJECT_TYPE_STEPPER] = stringify(OBJECT_TYPE_STEPPER),
-    [OBJECT_TYPE_DIGITAL_PIN] = stringify(OBJECT_TYPE_DIGITAL_PIN),
-    [OBJECT_TYPE_PWM_PIN] = stringify(OBJECT_TYPE_PWM_PIN),
     [OBJECT_TYPE_ENDSTOP] = stringify(OBJECT_TYPE_ENDSTOP),
-    [OBJECT_TYPE_FAN] = stringify(OBJECT_TYPE_FAN),
     [OBJECT_TYPE_HEATER] = stringify(OBJECT_TYPE_HEATER),
     [OBJECT_TYPE_THERMISTOR] = stringify(OBJECT_TYPE_THERMISTOR),
     [OBJECT_TYPE_PROBE] = stringify(OBJECT_TYPE_PROBE),
@@ -54,10 +48,7 @@ static const char *const ObjectTypeExportNames[] = {
 static const char *const ObjectTypeNames[] = {
     [OBJECT_TYPE_NONE] = "none",
     [OBJECT_TYPE_STEPPER] = "stepper",
-    [OBJECT_TYPE_DIGITAL_PIN] = "digital_pin",
-    [OBJECT_TYPE_PWM_PIN] = "pwm_pin",
     [OBJECT_TYPE_ENDSTOP] = "endstop",
-    [OBJECT_TYPE_FAN] = "fan",
     [OBJECT_TYPE_HEATER] = "heater",
     [OBJECT_TYPE_THERMISTOR] = "thermistor",
     [OBJECT_TYPE_PROBE] = "probe",
