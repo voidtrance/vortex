@@ -121,8 +121,6 @@ int stepper_enable(core_object_t *object, void *args) {
 
     stepper->enabled = !!opts->enable;
     log_debug(stepper, "Enabling %s %u", stepper->object.name, stepper->enabled);
-    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
-    stepper->current_cmd = NULL;
     return 0;
 }
 
@@ -132,8 +130,6 @@ int stepper_set_speed(core_object_t *object, void *args) {
 
     log_debug(stepper, "SPS: %f", opts->steps_per_second);
     stepper->spns = opts->steps_per_second / SEC_TO_NSEC(1);
-    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
-    stepper->current_cmd = NULL;
     return 0;
 }
 
@@ -141,10 +137,8 @@ int stepper_move(core_object_t *object, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_move_args *opts = (struct stepper_move_args *)args;
 
-    if (!stepper->enabled) {
-	stepper->current_cmd = NULL;
+    if (!stepper->enabled)
 	return -1;
-    }
 
     stepper->dir = opts->direction;
     stepper->steps = opts->steps;
@@ -160,9 +154,12 @@ int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
     if (stepper->current_cmd)
 	return -1;
 
-    stepper->current_cmd = cmd;
     ret = command_handlers[cmd->object_cmd_id](object, cmd->args);
-    return ret;
+    if (ret)
+	return ret;
+
+    stepper->current_cmd = cmd;
+    return 0;
 }
 
 void stepper_status(core_object_t *object, void *status) {
@@ -179,6 +176,15 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     stepper_t *stepper = (stepper_t *)object;
     uint64_t delta  = timestep - stepper->last_timestep;
 
+    if (!stepper->current_cmd)
+	return;
+
+    if (stepper->current_cmd->object_cmd_id != STEPPER_COMMAND_MOVE) {
+        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
+	stepper->current_cmd = NULL;
+	return;
+    }
+
     if (stepper->steps > 0.0) {
 	double steps = stepper->spns * delta;
 
@@ -191,8 +197,7 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 	stepper->steps -= steps;
 	log_debug(stepper, "Current steps: %.15f, inc: %.15f, remaining: %.15f",
                   steps, stepper->current_step, stepper->steps);
-    } else if (stepper->current_cmd &&
-	       stepper->current_cmd->object_cmd_id == STEPPER_COMMAND_MOVE) {
+    } else if (stepper->current_cmd->object_cmd_id == STEPPER_COMMAND_MOVE) {
 	stepper_move_comeplete_event_data_t *data;
 
 	CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
