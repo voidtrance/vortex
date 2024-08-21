@@ -73,7 +73,6 @@ static void probe_update(core_object_t *object, uint64_t ticks,
     float fuzz = random_float_limit(0, probe->range);
     bool state = probe->triggered;
 
-    probe->triggered = false;
     probe->z_axis->get_state(probe->z_axis, &status);
     log_debug(probe, "z axis position: %f", status.position);
     if (status.position <= probe->z_offset + fuzz) {
@@ -92,6 +91,8 @@ static void probe_update(core_object_t *object, uint64_t ticks,
 				  data);
 	    }
 	}
+    } else {
+        probe->triggered = false;
     }
 }
 
