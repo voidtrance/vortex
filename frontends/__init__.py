@@ -62,6 +62,8 @@ class BaseFrontend:
     def find_object(self, klass, *seq):
         '''Find object ID for object of type klass.
         The object name can be any of the values in seq.'''
+        if len(seq) == 0:
+            return self._obj_name_2_id[klass]
         for s in seq:
             if s in self._obj_name_2_id[klass]:
                 return s
@@ -80,6 +82,9 @@ class BaseFrontend:
         cmd = self._cmd_name_2_id[klass].get(name, None)
         if cmd is None:
             return self._cmd_id_2_cmd[klass].get(name, None)
+
+    def get_object_set(self, klass):
+        return list(self._obj_id_2_name[klass].values())
 
     def run(self):
         self._thread = threading.Thread(None, self._process_commands, "frontend")

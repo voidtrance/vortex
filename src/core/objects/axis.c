@@ -176,7 +176,8 @@ static int axis_motor_move(axis_t *axis, size_t motor_idx, double distance) {
     }
 
     log_debug(axis, "move: distance: %f, steps: %u", distance,
-	      stepper_args->steps);
+              stepper_args->steps);
+
     stepper_args->direction = distance < 0 ? MOVE_DIR_BACK : MOVE_DIR_FWD;
     motor->move_complete = false;
     axis->comps[motor_idx].cmd_id = STEPPER_COMMAND_MOVE;
@@ -191,7 +192,6 @@ static int axis_move(core_object_t *object, void *args) {
     axis_t *axis = (axis_t *)object;
     axis_move_command_opts_t *opts = (axis_move_command_opts_t *)args;
     stepper_status_t motor_status;
-    double distance;
     size_t i;
 
     if (!axis->homed) {
@@ -204,7 +204,6 @@ static int axis_move(core_object_t *object, void *args) {
 	return -EINVAL;
 
     axis->target_position = opts->position;
-    distance = axis->target_position - axis->position;
 
     if (axis->length == AXIS_NO_LENGTH) {
 	/* Implicitly enable motors for infinite axes */
@@ -310,14 +309,15 @@ static void axis_update(core_object_t *object, uint64_t ticks,
      * motor.
      */
     for (i = 0; i < axis->n_motors; i++) {
-	average_position += (stepper_status.steps * axis->travel_per_step) -
-	    axis->motors[i].position;
-	axis->motors[i].position = stepper_status.steps * axis->travel_per_step;
+        average_position += (stepper_status.steps * axis->travel_per_step) -
+                            axis->motors[i].position;
+        axis->motors[i].position = stepper_status.steps * axis->travel_per_step;
     }
+
     axis->position += (average_position / axis->n_motors);
 
-    log_debug(axis, "axis %s position: %.20f, homed: %u, command: %u",
-	      axis->object.name, axis->position, axis->homed,
+    log_debug(axis, "position: %.15f, target: %.15f, homed: %u, command: %u",
+	      axis->position, axis->target_position, axis->homed,
 	      axis->axis_command_id);
 
     if (axis->length != AXIS_NO_LENGTH) {
@@ -328,66 +328,41 @@ static void axis_update(core_object_t *object, uint64_t ticks,
     }
 
     switch (axis->axis_command_id) {
-    case AXIS_COMMAND_HOME:
-	if (!axis->homed) {
-            if (axis->position == axis->target_position ||
-		axis->length == AXIS_NO_LENGTH) {
-		axis_homed_event_data_t *data;
-
-		axis->homed = true;
-                axis->axis_command_id = AXIS_COMMAND_MAX;
-                CORE_CMD_COMPLETE(axis, axis->command_id, 0);
-                axis->command_id = 0;
-
-                data = object_cache_alloc(axis_event_cache);
-		if (data) {
-		    data->axis = axis->object.name;
-		    CORE_EVENT_SUBMIT(axis, OBJECT_EVENT_AXIS_HOMED,
-				      core_object_to_id((core_object_t *)axis),
-				      data);
-		}
-            } else {
-		for (i = 0; i < axis->n_motors; i++) {
-		    if (!axis->motors[i].enabled ||
-			!axis->motors[i].move_complete)
-			continue;
-
-		    if (axis->endstop_is_max)
-			distance = axis->length - axis->position;
-		    else
-			distance = -axis->position;
-
-		    if (distance / axis->travel_per_step < 1.0) {
-			axis->position += distance;
-			break;
-		    }
-
-		    axis_motor_move(axis, i, distance);
-		}
-	    }
-	}
-	break;
     case AXIS_COMMAND_MOVE:
 	if (!axis->homed)
 	    break;
+    case AXIS_COMMAND_HOME:
+	if (axis->position == axis->target_position ||
+	    axis->length == AXIS_NO_LENGTH) {
 
-	if (axis->position == axis->target_position) {
-	    axis->axis_command_id = AXIS_COMMAND_MAX;
+	    if (axis->axis_command_id == AXIS_COMMAND_HOME) {
+                axis_homed_event_data_t *data;
+
+                axis->homed = true;
+                data = object_cache_alloc(axis_event_cache);
+                if (data) {
+                  data->axis = axis->object.name;
+                  CORE_EVENT_SUBMIT(axis, OBJECT_EVENT_AXIS_HOMED,
+                                    core_object_to_id((core_object_t *)axis),
+                                    data);
+                }
+            }
+
+            axis->axis_command_id = AXIS_COMMAND_MAX;
 	    CORE_CMD_COMPLETE(axis, axis->command_id, 0);
 	    axis->command_id = 0;
-	} else {
-	    for (i = 0; i < axis->n_motors; i++) {
-		if (!axis->motors[i].move_complete)
-		    continue;
+	    break;
+	}
 
-		distance = axis->target_position - axis->position;
-		if (distance / axis->travel_per_step < 1.0) {
-		    axis->position += distance;
-		    break;
-		}
+	for (i = 0; i < axis->n_motors; i++) {
+            if (!axis->motors[i].enabled || !axis->motors[i].move_complete)
+                continue;
 
-		axis_motor_move(axis, i, distance);
-	    }
+	    distance = axis->target_position - axis->position;
+	    if (fabs(distance) / axis->travel_per_step < 1.0)
+		distance = (distance < 0 ? -1 : 1) / axis->travel_per_step;
+
+	    axis_motor_move(axis, i, distance);
 	}
     default:
         break;

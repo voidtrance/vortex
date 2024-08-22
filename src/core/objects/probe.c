@@ -41,6 +41,7 @@ typedef struct {
     float z_offset;
     float position;
     float range;
+    float fuzz;
     bool triggered;
 } probe_t;
 
@@ -70,16 +71,16 @@ static void probe_update(core_object_t *object, uint64_t ticks,
 			 uint64_t runtime) {
     probe_t *probe = (probe_t *)object;
     axis_status_t status;
-    float fuzz = random_float_limit(0, probe->range);
-    bool state = probe->triggered;
 
     probe->z_axis->get_state(probe->z_axis, &status);
     log_debug(probe, "z axis position: %f", status.position);
-    if (status.position <= probe->z_offset + fuzz) {
-	probe_trigger_event_data_t *data;
+    probe->position = status.position + probe->z_offset;
 
-	probe->triggered = true;
-	probe->position = status.position;
+    if (status.position <= probe->fuzz) {
+        probe_trigger_event_data_t *data;
+        bool state = probe->triggered;
+
+        probe->triggered = true;
 
 	// Send event only when probe is triggered.
 	if (!state) {
@@ -92,6 +93,9 @@ static void probe_update(core_object_t *object, uint64_t ticks,
 	    }
 	}
     } else {
+	if (probe->triggered)
+	    probe->fuzz = random_float_limit(0, probe->range);
+
         probe->triggered = false;
     }
 }

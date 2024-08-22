@@ -29,6 +29,7 @@ typedef enum {
 enum {
     STEPPER_COMMAND_ENABLE,
     STEPPER_COMMAND_SET_SPEED,
+    STEPPER_COMMAND_SET_ACCEL,
     STEPPER_COMMAND_MOVE,
     STEPPER_COMMAND_MAX,
 };
@@ -41,6 +42,11 @@ struct stepper_set_speed_args {
     double steps_per_second;
 };
 
+struct stepper_set_accel_args {
+    uint32_t accel; // steps per second^2
+    uint32_t decel; // steps per second^2
+};
+
 struct stepper_move_args {
     stepper_move_dir_t direction;
     uint32_t steps;
@@ -51,6 +57,9 @@ typedef struct {
     int64_t steps;
     uint16_t spr;
     uint8_t microsteps;
+    double speed;
+    double accel;
+    double decel;
 } stepper_status_t;
 
 #endif

@@ -192,6 +192,21 @@ class GCodeFrontend(BaseFrontend):
                 logging.error("Failed to queue command")
     def M190(self, cmd):
         self.G140(cmd)
+    def M204(self, cmd):
+        accel = cmd.get_param("S")
+        axes = self.get_object_set(ModuleTypes.AXIS)
+        if "e" in axes:
+            axes.remove("e")
+        axes_ids = [self.get_object_id(ModuleTypes.AXIS, x) for x in axes]
+        status = self.query_object(axes_ids)
+        for axis in status:
+            for motor in status[axis]["motors"]:
+                if not motor:
+                    continue
+                if not self.queue_command(ModuleTypes.STEPPER, motor,
+                                          "set_accel",
+                                          f"accel={accel.value},decel=0", 0):
+                    logging.error("Failed to queue command")
     def M400(self, cmd):
         while self._command_completion:
             time.sleep(0.1)

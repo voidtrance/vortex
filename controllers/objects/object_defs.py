@@ -29,12 +29,15 @@ class Stepper(ObjectDef):
     class StepperConfig(ctypes.Structure):
         _fields_ = [("steps_per_rotation", ctypes.c_uint32),
                     ("microsteps", ctypes.c_uint32),
-                    ("clock_speed", ctypes.c_char * 64),
+                    ("start_speed", ctypes.c_uint32),
                     ("driver", ctypes.c_char * 16)]
     class StepperEnableCommandOpts(ctypes.Structure):
         _fields_ = [("enable", ctypes.c_bool)]
     class StepperSetSpeedCommandOpts(ctypes.Structure):
         _fields_ = [("steps_per_second", ctypes.c_double)]
+    class StepperSetAccelCommandOpts(ctypes.Structure):
+        _fields_ = [("accel", ctypes.c_uint32),
+                    ("decel", ctypes.c_uint32)]
     class StepperMoveCommandOpts(ctypes.Structure):
         _fields_ = [("direction", ctypes.c_uint8),
                     ("steps", ctypes.c_uint32)]
@@ -42,14 +45,18 @@ class Stepper(ObjectDef):
         _fields_ = [("enabled", ctypes.c_bool),
                     ("steps", ctypes.c_int64),
                     ("spr", ctypes.c_uint16),
-                    ("microsteps", ctypes.c_uint8)]
+                    ("microsteps", ctypes.c_uint8),
+                    ("speed", ctypes.c_double),
+                    ("accel", ctypes.c_double),
+                    ("decel", ctypes.c_double)]
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
         super().__init__(ModuleTypes.STEPPER)
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
-                         (1, "set_speed", self.StepperSetSpeedCommandOpts, (0., )),
-                         (2, "move", self.StepperMoveCommandOpts, (0, 0))]
+                         (1, "set_speed", self.StepperSetSpeedCommandOpts, (0.,)),
+                         (2, "set_accel", self.StepperSetAccelCommandOpts, (0.,)),
+                         (3, "move", self.StepperMoveCommandOpts, (0, 0))]
         self.events = {ModuleEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
         
 class Thermistor(ObjectDef):
