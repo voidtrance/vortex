@@ -86,7 +86,7 @@ class GCodeCommand:
         if not parsed:
             parsed = self.macro_r.match(command)
             if not parsed:
-                raise GCodeCommandParseError
+                raise GCodeCommandParseError(f"Failed to parse line '{command}'")
             self.__is_macro = True
         self.__cmd = parsed.group("cmd")
         self.__raw_params = parsed.group("data")
@@ -100,6 +100,9 @@ class GCodeCommand:
         if self.__raw_params:
             for param in self.__raw_params.split():
                 self.__params.append(GCodeParam(param))
+
+    def __str__(self):
+        return f"{self.__cmd} {self.__raw_params}"
 
     @property
     def command(self):
