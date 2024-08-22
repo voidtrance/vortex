@@ -43,6 +43,7 @@ class GCodeFrontend(BaseFrontend):
         self._command_id_queue = []
         self.current_feed_rate = 0.
         self.coordinates = CoordinateType.ABSOLUTE
+        self.extruder_coordinates = CoordinateType.ABSOLUTE
 
     def _process_commands(self, *args):
         while self._run:
@@ -91,8 +92,12 @@ class GCodeFrontend(BaseFrontend):
                         ModuleTypes.STEPPER, motor, "set_speed",
                         f"steps_per_second={speed / status['travel_per_step']}",
                                         0)
-        for axis in cmd.get_params(["F"]):
-            if self.coordinates == CoordinateType.RELATIVE:
+        for axis in cmd.get_params(exclude=["F"]):
+            if axis.name.lower() == "e":
+                coordinates = self.extruder_coordinates
+            else:
+                coordinates = self.coordinates
+            if coordinates == CoordinateType.RELATIVE:
                 axis_id = self._obj_name_2_id[ModuleTypes.AXIS][axis]
                 axis_position = axes_status[axis_id]["position"] + axis.value
             else:
@@ -152,6 +157,10 @@ class GCodeFrontend(BaseFrontend):
         if wait_time:
             time.sleep(wait_time)
         self.reset(reset_objects)
+    def M82(self, cmd):
+        self.extruder_coordinates = CoordinateType.ABSOLUTE
+    def M83(self, cmd):
+        self.extruder_coordinates = CoordinateType.RELATIVE
     def M104(self, cmd):
         object = self.find_object(ModuleTypes.HEATER, "extruder", "hotend")
         if object:
