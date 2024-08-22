@@ -36,7 +36,9 @@ class MainWindow(Gtk.Window):
         for klass in ModuleTypes:
             if klass is ModuleTypes.NONE:
                 continue
-            self.klass_frames[klass] = Gtk.Frame(label=str(klass).capitalize())
+            label = str(klass).replace('_', " ")
+            self.klass_frames[klass] = Gtk.Frame(label=label.title())
+            self.klass_frames[klass].set_label_align(0.01, 0.6)
             object_box.pack_start(self.klass_frames[klass], True, True, 3)
         frame.add(object_box)
 
@@ -45,7 +47,7 @@ class MainWindow(Gtk.Window):
         control_box.set_spacing(5)
         self.set_widget_margin(control_box, 15)
 
-        self.precision_spin = Gtk.SpinButton.new_with_range(-1, 8, 1)
+        self.precision_spin = Gtk.SpinButton.new_with_range(-1, 15, 1)
         self.precision_spin.set_value(8)
         control_box.pack_start(self.precision_spin, False, True, 3)
 
@@ -69,7 +71,7 @@ class MainWindow(Gtk.Window):
         main_box.pack_end(button_box, False, True, 3)
         self.add(main_box)
         self.show_all()
-        self.timer = GLib.timeout_add(100, self.update)
+        self.timer = GLib.timeout_add(500, self.update)
 
     def connect_to_server(self):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -99,7 +101,8 @@ class MainWindow(Gtk.Window):
         precision = self.precision_spin.get_value_as_int()
         if isinstance(value, float):
             if precision != -1:
-                value = round(value, precision)
+                if value and round(value, precision):
+                    value = round(value, precision)
         elif isinstance(value, list):
             value = ", ".join([x for x in value if x])
         return str(value)
