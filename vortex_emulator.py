@@ -26,7 +26,8 @@ def create_arg_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     frontend = parser.add_argument_group("Frontend Options")
     frontend.add_argument("-f", "--frontend", default="direct",
-                        help="""Select frontend.""")
+                        help="""The frontend that will be started for
+                        the emulation.""")
     frontend.add_argument("-s", action="store_true", dest="sequential",
                           help="""Enable sequential mode. In this
                           mode, the frontent will execute one command
@@ -34,8 +35,14 @@ def create_arg_parser():
                           command queue as they are received.""")
 
     controller = parser.add_argument_group("Controller Options")
-    controller.add_argument("-c", "--controller", required=True)
-    controller.add_argument("-F", "--frequency", default=0)
+    controller.add_argument("-c", "--controller", required=True,
+                            help="""The HW controller to be used for the
+                            emulation. This argument is required.""")
+    controller.add_argument("-F", "--frequency", default=0,
+                            help="""Custom frequency that the HW controller
+                            should use. By default, each HW controller
+                            sets their own frequency. This option can be
+                            used to override that value.""")
 
     debug = parser.add_argument_group("Debug Options")
     debug.add_argument("-d", "--debug", choices=logging._nameToLevel.keys(),
@@ -43,11 +50,16 @@ def create_arg_parser():
                         help="""Set logging level. Higher logging levels will
                         provide more information but will also affect
                         conroller timing more.""")
-    debug.add_argument("-l", "--logfile", type=str, default=None)
+    debug.add_argument("-l", "--logfile", type=str, default=None,
+                       help="""Log messages are sent to the file specified
+                       by this option.""")
     debug.add_argument("-M", "--monitor", action="store_true",
-                       help="""Start monitoring server thread.""")
+                       help="""Start monitoring server thread. This thread
+                       processes requests from the monitoring application.""")
 
-    parser.add_argument("-C", "--config", required=True)
+    parser.add_argument("-C", "--config", required=True,
+                        help="""HW object configuration file. This argument
+                        is required.""")
     return parser
 
 def load_mcu(name, config):
