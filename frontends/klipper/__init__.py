@@ -30,7 +30,7 @@ def create_message(size):
     return MessageBlock
 
 class KlipperFrontend(BaseFrontend):
-    DEV = "/tmp/klipper_uds"
+    PIPE_FILE = "/tmp/klipper_uds"
     BLOCK_SYNC = 0x7e
     MIN_MSG_LEN = 5
     MAX_MSG_LEN = 64
@@ -39,15 +39,9 @@ class KlipperFrontend(BaseFrontend):
 
     def __init__(self):
         super().__init__()
-        mfd, sfd = vortex.frontends.lib.create_pty(self.DEV)
-        self.serial = os.fdopen(mfd, "wb+", buffering=0)
         self.next_sequence = self.SEQ_DEST
-        self._poll = select.poll()
-        self._poll.register(self.serial, select.POLLIN|select.POLLHUP)
-
-    def __del__(self):
-        self.serial.close()
-        os.unlink(self.DEV)
+        self.serial_data = bytes()
+        self.mp = msgproto.MessageParser()
 
     def _calc_crc(self, data):
         crc = ctypes.c_uint16(0xffff)
@@ -116,28 +110,18 @@ class KlipperFrontend(BaseFrontend):
         msg[4] = self.BLOCK_SYNC
         device.write(msg)
 
-    def _process_commands(self):
-        serial_data = bytes()
-        mp = msgproto.MessageParser()
-        while self._run:
-            events = self._poll.poll(0.1)
-            if not events or self.serial.fileno() not in [e[0] for e in events]:
+    def _process_command(self, data):
+        self.serial_data += data
+        while 1:
+            i = self.mp.check_packet(self.serial_data)
+            if i == 0:
+                break
+            elif i < 0:
+                self.serial_data = self.serial_data[-i:]
                 continue
-            event = [e for e in events if e[0] == self.serial.fileno()]
-            if not (event[0][1] & select.POLLIN):
-                continue
-
-            serial_data += self.serial.read(4096)
-            while 1:
-                i = mp.check_packet(serial_data)
-                if i == 0:
-                    break
-                if i < 0:
-                    serial_data = serial_data[-i:]
-                    continue
-                msg_params = mp.parse(serial_data[:i])
-                print(msg_params)
-                data = serial_data[:i]
+            msg_params = self.mp.parse(self.serial_data[:i])
+            print(msg_params)
+            self.serial_data = self.serial_data[i:]
 
 def create():
     return KlipperFrontend()

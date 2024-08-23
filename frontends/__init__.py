@@ -16,10 +16,13 @@
 import threading
 import importlib
 import logging
-from vortex.lib import ctypes_helpers
+import select
+import os
 from vortex.controllers.types import ModuleTypes
+from vortex.frontends.lib import create_pty
 
 class BaseFrontend:
+    PIPE_PATH = "/tmp/vortex"
     def __init__(self, event_register=None, event_unregister=None):
         self._raw_controller_params = {}
         self._cmd_id_2_cmd = {x: {} for x in ModuleTypes}
@@ -40,6 +43,16 @@ class BaseFrontend:
             self.event_unregister = event_unregister
         else:
             self.event_unregister = lambda a, b, c, d: False
+        try:
+            os.mkfifo(self.PIPE_PATH)
+        except FileExistsError:
+            pass
+        mfd, sfd = create_pty(self.PIPE_PATH)
+        self._fd = os.fdopen(mfd, 'wb+', buffering=0)
+        self._poll = select.poll()
+        self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
+        self._command_id_queue = []
+
 
     def set_command_queue(self, queue):
         self._queue = queue
@@ -87,7 +100,8 @@ class BaseFrontend:
         return list(self._obj_id_2_name[klass].values())
 
     def run(self):
-        self._thread = threading.Thread(None, self._process_commands, "frontend")
+        self._thread = threading.Thread(None, self._run_command_loop,
+                                         "frontend")
         self._run = True
         self._thread.start()
     
@@ -104,9 +118,20 @@ class BaseFrontend:
     def set_object_query(self, func):
         self._query = func
 
-    def _process_commands(self):
+    def _process_command(self, cmd):
+        return
+
+    def _run_command_loop(self):
+        data = bytes()
         while self._run:
-            continue
+            events = self._poll.poll(0.1)
+            if not events or self._fd.fileno() not in [e[0] for e in events]:
+                continue
+            event = [e for e in events if e[0] == self._fd.fileno()]
+            if not (event[0][1] & select.POLLIN):
+                continue
+            data = self._fd.read()
+            self._process_command(data)
 
     def queue_command(self, klass, object, cmd, opts, timestamp):
         if self.is_reset:
@@ -133,6 +158,10 @@ class BaseFrontend:
 
     def event_handler(self, event, owner, timestamp, *args):
         pass
+
+    def __del__(self):
+        self._fd.close()
+        os.unlink(self.PIPE_PATH)
     
 def create_frontend(name):
     try:

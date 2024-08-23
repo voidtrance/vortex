@@ -29,43 +29,22 @@ class CoordinateType(enum.ExtIntEnum):
     ABSOLUTE = enum.auto()
     RELATIVE = enum.auto()
 class GCodeFrontend(BaseFrontend):
-    FIFO = "/tmp/gcode_frontend_fifo"
     def __init__(self):
         super().__init__()
-        try:
-            os.mkfifo(self.FIFO)
-        except FileExistsError:
-            pass
-        mfd, sfd = vortex.frontends.lib.create_pty(self.FIFO)
-        self._fd = os.fdopen(mfd, 'r')
-        self._poll = select.poll()
-        self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
         self._command_id_queue = []
         self.current_feed_rate = 0.
         self.coordinates = CoordinateType.ABSOLUTE
         self.extruder_coordinates = CoordinateType.ABSOLUTE
 
-    def _process_commands(self, *args):
-        while self._run:
-            events = self._poll.poll(0.1)
-            if not events or self._fd.fileno() not in [e[0] for e in events]:
-                continue
-            event = [e for e in events if e[0] == self._fd.fileno()]
-            if not (event[0][1] & select.POLLIN):
-                continue
-            cmd = self._fd.readline()
-            logging.debug(f"Received command: {cmd.strip()}")
-            cmd = gcmd.GCodeCommand(cmd)
-            handler = getattr(self, cmd.command, None)
-            logging.debug(f"Command {cmd} handler {handler}")
-            if not handler:
-                logging.error(f"No handler for command {cmd.command}")
-                continue
-            handler(cmd)
-
-    def __del__(self):
-        self._fd.close()
-        os.unlink(self.FIFO)
+    def _process_command(self, data):
+        cmd = data.decode()
+        cmd = gcmd.GCodeCommand(cmd)
+        handler = getattr(self, cmd.command, None)
+        logging.debug(f"Command {cmd} handler {handler}")
+        if not handler:
+            logging.error(f"No handler for command {cmd.command}")
+            return
+        handler(cmd)
 
     def complete_command(self, id, result):
         logging.debug(f"Command {id} complete: {result}")
