@@ -50,11 +50,11 @@ class GCodeFrontend(BaseFrontend):
         logging.debug(f"Command {id} complete: {result}")
         super().complete_command(id, result)
 
-    def event_handler(self, event, owner, timestamp, *args):
-        super().event_handler(event, owner, timestamp, *args)
-        print(event, owner, timestamp, args)
-        if event == "move_complete":
-            print(owner.get_status())
+    def event_handler(self, klass, event, owner, data):
+        print("gcode handler:", klass, event, owner, data)
+        if event == ModuleEvents.HEATER_TEMP_REACHED:
+            print("gcode handler: ", data["temp"])
+            self._run_sequential = self._default_sequential
 
     # GCode command implementation
     def G0(self, cmd):

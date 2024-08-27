@@ -21,6 +21,7 @@ import vortex.core as core
 import inspect
 from collections import namedtuple
 from vortex.controllers.types import ModuleTypes
+import vortex.core
 import vortex.lib.ctypes_helpers
 
 class Counter:
@@ -108,6 +109,7 @@ class Controller(core.VortexCore):
         self.object_defs = {x: None for x in ModuleTypes}
         self._virtual_objects = {}
         self._completion_callback = None
+        self._event_handlers = {}
         self._load_objects(config)
         if not self.init_objects():
             raise core.VortexCoreError("Failed to initialize objects.")
@@ -230,3 +232,31 @@ class Controller(core.VortexCore):
         else:
             return self._virtual_objects[object_id].exec_command(command_id,
                                                                  subcommand_id, opts)
+    def event_register(self, object_type, event_type, object_name, handler):
+        if not super().event_register(object_type, event_type, object_name,
+                                      self._event_handler):
+            return False
+        self._event_handlers[(object_type, event_type, object_name)] = handler
+        return True
+    def event_unregister(self, object_type, event_type, object_name):
+        self._event_handlers.pop((object_type, event_type, object_name))
+        return super().event_unregister(object_type, event_type, object_name)
+    def _find_event_data(self, klass, event):
+        for e, s in self.object_defs[klass][1].events.items():
+            if e == event:
+                return s
+        return None
+    def _event_handler(self, object_type, object_name, event_type, data):
+        handler = self._event_handlers.get((object_type, event_type, object_name),
+                                            None)
+        if handler is None:
+            return
+        event_data_def = self._find_event_data(object_type, event_type)
+        if event_data_def is None:
+            raise vortex.core.VortexCoreError(f"Unknown event type {event_type}")
+        if self.object_defs[object_type][0] is False:
+            pointer = ctypes.cast(data, ctypes.POINTER(event_data_def))
+            content = vortex.lib.ctypes_helpers.parse_ctypes_struct(pointer.contents)
+        else:
+            content = data
+        handler(object_type, event_type, object_name, content)

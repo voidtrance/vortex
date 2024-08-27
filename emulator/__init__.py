@@ -102,15 +102,16 @@ class Emulator:
         self._frontend.set_command_queue(self._command_queue)
         controller_params = controller.get_params()
         self._frontend.set_controller_data(controller_params)
-        self._frontend.set_reset(controller.reset)
-        self._frontend.set_object_query(controller.query_objects)
+        self._frontend.set_controller_functions(
+            {"reset": controller.reset,
+             "query": controller.query_objects,
+             "event_register": controller.event_register,
+             "event_unregister": controller.event_unregister})
         self._controller = controller
         self._scheduled_queue = ScheduleQueue()
         self._run_emulation = True
         self._frequency = 0
         self._monitor = None
-        self._event_handlers = {}
-        self._controller_event_data = controller_params["events"]
 
     def set_frequency(self, frequency=0):
         if (frequency / MHZ2HZ) > 10:
@@ -123,24 +124,12 @@ class Emulator:
             self._monitor.start()
 
     def register_event(self, object_type, event_type, object_name, handler):
-        if not self._controller.event_register(object_type, event_type,
-                                               object_name,
-                                               self._event_handler):
-            return False
-        self._event_handlers[(object_type, event_type, object_name)] = handler
-        return True
+        return self._controller.event_register(object_type, event_type,
+                                               object_name, handler)
     
     def unregister_event(self, object_type, event_type, object_name):
-        self._event_handlers.pop((object_type, event_type, object_name))
         return self._controller.event_unregister(object_type, event_type, object_name)
     
-    def _event_handler(self, object_type, event_type, object_name, data):
-        event_data_def = self._controller_event_data[object_type][event_type]
-        pointer = ctypes.cast(data, ctypes.POINTER(event_data_def))
-        data = pointer.contents
-        handler = self._event_handlers[(object_type, event_type, object_name)]
-        handler(object_type, event_type, object_name, data)
-
     def run(self):
         try:
            self._controller.start(self._frequency, self._command_complete)

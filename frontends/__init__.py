@@ -23,7 +23,7 @@ from vortex.frontends.lib import create_pty
 
 class BaseFrontend:
     PIPE_PATH = "/tmp/vortex"
-    def __init__(self, event_register=None, event_unregister=None):
+    def __init__(self):
         self._raw_controller_params = {}
         self._cmd_id_2_cmd = {x: {} for x in ModuleTypes}
         self._cmd_name_2_id = {x: {} for x in ModuleTypes}
@@ -35,14 +35,8 @@ class BaseFrontend:
         self._query = None
         self.reset = None
         self.is_reset = False
-        if event_register:
-            self.event_register = event_register
-        else:
-            self.event_register = lambda a, b, c, d: False
-        if event_unregister:
-            self.event_unregister = event_unregister
-        else:
-            self.event_unregister = lambda a, b, c, d: False
+        self.event_register = lambda a, b, c, d: False
+        self.event_unregister = lambda a, b, c, d: False
         try:
             os.mkfifo(self.PIPE_PATH)
         except FileExistsError:
@@ -56,6 +50,16 @@ class BaseFrontend:
 
     def set_command_queue(self, queue):
         self._queue = queue
+
+    def set_controller_functions(self, func_set):
+        if not isinstance(func_set, dict):
+            return
+        self._query = func_set.get("query", None)
+        self.reset = func_set.get("reset", None)
+        if "event_register" in func_set:
+            self.event_register = func_set["event_register"]
+        if "event_unregister" in func_set:
+            self.event_unregister = func_set["event_unregister"]
 
     def set_controller_data(self, data):
         self._raw_controller_params = data
@@ -112,12 +116,6 @@ class BaseFrontend:
     def set_sequential_mode(self, mode):
         self._run_sequential = mode
 
-    def set_reset(self, func):
-        self.reset = func
-
-    def set_object_query(self, func):
-        self._query = func
-
     def _process_command(self, cmd):
         return
 
@@ -155,9 +153,6 @@ class BaseFrontend:
 
     def complete_command(self, id, result):
         self._command_completion.pop(id)
-
-    def event_handler(self, event, owner, timestamp, *args):
-        pass
 
     def __del__(self):
         self._fd.close()
