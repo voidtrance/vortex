@@ -31,6 +31,7 @@
 
 typedef struct {
     uint16_t power;
+    uint32_t max_temp;
 } heater_config_params_t;
 
 typedef struct {
@@ -41,7 +42,8 @@ typedef struct {
     float target_temp;
     float base_temp;
     float temp;
-    uint64_t ramp_duration;
+    uint32_t max_temp;
+    uint64_t max_ramp_duration;
     uint64_t pos;
 } heater_t;
 
@@ -70,7 +72,8 @@ heater_t *object_create(const char *name, void *config_ptr) {
     heater->object.get_state = heater_status;
     heater->object.name = strdup(name);
     heater->pos = 0;
-    heater->ramp_duration = SEC_TO_NSEC(120.0 * 100 / config->power);
+    heater->max_ramp_duration = SEC_TO_NSEC(120.0 * 100 / config->power);
+    heater->max_temp = config->max_temp;
 
     if (object_cache_create(&heater_event_cache,
 			    sizeof(heater_temp_reached_event_data_t))) {
@@ -98,7 +101,8 @@ static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
 
     heater->command = *cmd;
     args = (struct heater_set_temperature_args *)cmd->args;
-    if (args->temperature < AMBIENT_TEMP)
+    if (args->temperature < AMBIENT_TEMP ||
+	args->temperature > heater->max_temp)
 	return -1;
 
     heater->set_temp = args->temperature;
@@ -118,6 +122,7 @@ static void heater_status(core_object_t *object, void *status) {
     heater_t *heater = (heater_t *)object;
 
     s->temperature = heater->temp;
+    s->max_temp = heater->max_temp;
 }
 
 static float powout(float value, uint8_t p) {
@@ -151,6 +156,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     heater_t *heater = (heater_t *)object;
     uint64_t time_delta = timestep - heater->timestep;
     heater_temp_reached_event_data_t *data;
+    uint64_t duration;
 
     heater->timestep = timestep;
     if (heater->set_temp == 0.0 || heater->temp == heater->set_temp)
@@ -160,9 +166,11 @@ static void heater_update(core_object_t *object, uint64_t ticks,
      * Use interpolation function to approximate temperature
      * ramp.
      */
+    duration = heater->max_ramp_duration *
+	(heater->target_temp / heater->max_temp);
     heater->temp = interpolate(&heater->pos, heater->base_temp,
 			       heater->target_temp, time_delta,
-			       heater->ramp_duration);
+			       duration);
     heater->temp = roundl(heater->temp * 100) / 100;
     log_debug(heater, "heater %s temp: %f", heater->object.name, heater->temp);
 
