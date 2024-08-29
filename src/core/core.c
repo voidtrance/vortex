@@ -378,23 +378,20 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
 				    const char *name, void *config) {
     core_object_t *obj;
     char object_path[PATH_MAX];
-    char *libname[] = {
-	[OBJECT_TYPE_NONE] = NULL,
-	[OBJECT_TYPE_STEPPER] = "stepper.so",
-	[OBJECT_TYPE_ENDSTOP] = "endstop.so",
-	[OBJECT_TYPE_HEATER] = "heater.so",
-	[OBJECT_TYPE_THERMISTOR] = "thermistor.so",
-	[OBJECT_TYPE_PROBE] = "probe.so",
-	[OBJECT_TYPE_AXIS] = "axis.so",
-    };
+
+    if (klass == OBJECT_TYPE_NONE || klass >= OBJECT_TYPE_MAX) {
+	core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+		 "Invalid object klass %u", klass);
+	return CORE_OBJECT_ID_INVALID;
+    }
 
     if (!core->object_libs[klass]) {
 	char *path, *dir;
 
 	path = strdup(module_path);
 	dir = dirname(path);
-	snprintf(object_path, sizeof(object_path), "%s/objects/%s", dir,
-		 libname[klass]);
+	snprintf(object_path, sizeof(object_path), "%s/objects/%s.so", dir,
+		 ObjectTypeNames[klass]);
 	free(path);
         core->object_libs[klass] = dlopen(object_path, RTLD_LAZY);
         if (!core->object_libs[klass]) {
