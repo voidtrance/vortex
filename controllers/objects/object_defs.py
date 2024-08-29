@@ -18,6 +18,7 @@ from ..types import ModuleTypes, ModuleEvents
 import ctypes
 
 class ObjectDef(Namespace):
+    virtual = False
     def __init__(self, type=ModuleTypes.NONE):
         self.type = type
         self.config = getattr(self, str(type).capitalize() + "Config", None)

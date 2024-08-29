@@ -20,40 +20,7 @@
 #include <stdint.h>
 #include <sys/queue.h>
 #include <stdlib.h>
-
-#define _stringify(x) #x
-#define stringify(x) _stringify(x)
-
-typedef enum {
-    OBJECT_TYPE_NONE,
-    OBJECT_TYPE_STEPPER,
-    OBJECT_TYPE_ENDSTOP,
-    OBJECT_TYPE_HEATER,
-    OBJECT_TYPE_THERMISTOR,
-    OBJECT_TYPE_PROBE,
-    OBJECT_TYPE_AXIS,
-    OBJECT_TYPE_MAX
-} core_object_type_t;
-
-static const char *const ObjectTypeExportNames[] = {
-    [OBJECT_TYPE_NONE] = stringify(OBJECT_TYPE_NONE),
-    [OBJECT_TYPE_STEPPER] = stringify(OBJECT_TYPE_STEPPER),
-    [OBJECT_TYPE_ENDSTOP] = stringify(OBJECT_TYPE_ENDSTOP),
-    [OBJECT_TYPE_HEATER] = stringify(OBJECT_TYPE_HEATER),
-    [OBJECT_TYPE_THERMISTOR] = stringify(OBJECT_TYPE_THERMISTOR),
-    [OBJECT_TYPE_PROBE] = stringify(OBJECT_TYPE_PROBE),
-    [OBJECT_TYPE_AXIS] = stringify(OBJECT_TYPE_AXIS),
-};
-
-static const char *const ObjectTypeNames[] = {
-    [OBJECT_TYPE_NONE] = "none",
-    [OBJECT_TYPE_STEPPER] = "stepper",
-    [OBJECT_TYPE_ENDSTOP] = "endstop",
-    [OBJECT_TYPE_HEATER] = "heater",
-    [OBJECT_TYPE_THERMISTOR] = "thermistor",
-    [OBJECT_TYPE_PROBE] = "probe",
-    [OBJECT_TYPE_AXIS] = "axis",
-};
+#include "auto-types.h"
 
 typedef unsigned long core_object_id_t;
 #define CORE_OBJECT_ID_INVALID (-1UL)

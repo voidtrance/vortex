@@ -19,8 +19,8 @@ from vortex.controllers.types import ModuleTypes
 class DigitalPin(vobj.VirtualObjectBase):
     type = ModuleTypes.DIGITAL_PIN
     commands = [(0, "set", ["state"], None)]
-    def __init__(self, config, lookup_obj, query_obj):
-        super().__init__(config, lookup_obj, query_obj)
+    def __init__(self, *args):
+        super().__init__(*args)
         self._state = False
     def exec_command(self, cmd_id, cmd, opts):
         ret = super().exec_command(cmd_id, cmd, opts)

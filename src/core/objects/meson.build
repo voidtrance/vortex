@@ -16,11 +16,15 @@
 r = run_command(py, root / 'tools/find_modules.py', root, check: true)
 objects = r.stdout().strip()
 
+auto_gen_types = custom_target('auto-types.h', output: 'auto-types.h',
+                         input : root / 'tools/auto_gen_types.py',
+                         command : [py, '@INPUT@', '-t', root, '@OUTPUT@'])
+
 cc = meson.get_compiler('c')
 math = cc.find_library('m')
 
 foreach object : objects.split()
-    lib = library(object, object + '.c',
+    lib = library(object, [object + '.c', auto_gen_types, auto_gen_events],
                          include_directories: [core_utils_include, core_include],
                          dependencies: [core_utils_dep, math],
                          name_prefix: '',

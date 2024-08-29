@@ -14,10 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.controllers.types import ModuleTypes
+from vortex.controllers.types import ModuleTypes, ModuleEvents
 
 class Toolhead(vobj.VirtualObjectBase):
     type = ModuleTypes.TOOLHEAD
+    events = [ModuleEvents.TOOLHEAD_ORIGIN]
     def get_status(self):
         axes_ids = []
         for axis in self.config.axes:
@@ -27,4 +28,12 @@ class Toolhead(vobj.VirtualObjectBase):
         toolhead_status = dict.fromkeys(self.config.axes, None)
         for i, id in enumerate(axes_ids):
             toolhead_status[self.config.axes[i]] = status[id]["position"]
+        event_sent = getattr(self, "event_sent", False)
+        if list(toolhead_status.values()) == [0.0] * len(toolhead_status.keys()):
+            if not event_sent:
+                self.event_submit(ModuleEvents.TOOLHEAD_ORIGIN,
+                                  list(toolhead_status.values()))
+                self.event_sent = True
+        else:
+            self.event_sent = False
         return toolhead_status

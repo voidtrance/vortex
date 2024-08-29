@@ -16,23 +16,18 @@
 import errno
 from vortex.controllers.types import ModuleTypes
 
-class Sentinal(dict):
-    def __setattr__(self, name, value):
-        raise TypeError(f"{self:r} is a frozen class")
-
 class VirtualObjectBase:
     type = ModuleTypes.NONE
     commands = []
     # Virtual objects don't have events
-    events = Sentinal()
-    def __init__(self, config, obj_lookup, obj_query):
+    events = []
+    virtual = True
+    def __init__(self, config, obj_lookup, obj_query, event_submit):
         self.config = config
         self.lookup = obj_lookup
         self.query = obj_query
-    def __setattr__(self, name, value):
-        if name == "events":
-            raise TypeError("Virtual object don't support events")
-        super().__setattr__(name, value)
+        self._event_submit = event_submit
+        self._id = -1
     def exec_command(self, cmd_id, cmd, opts):
         if not self.commands:
             return -errno.EINVAL
@@ -46,3 +41,5 @@ class VirtualObjectBase:
         for arg in command[2]:
             if not opts.get(arg, None):
                 return -errno.EINVAL
+    def event_submit(self, event, data):
+        self._event_submit(event, self._id, data)

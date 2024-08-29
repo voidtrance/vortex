@@ -23,7 +23,6 @@ subdir('src/lib')
 
 # Build core module and objects
 subdir('src/core')
-subdir('src/core/objects')
 
 # Install Python source
 subdir('emulator')

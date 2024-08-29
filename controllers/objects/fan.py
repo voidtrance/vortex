@@ -19,8 +19,8 @@ from vortex.controllers.types import ModuleTypes
 class Fan(vobj.VirtualObjectBase):
     type = ModuleTypes.FAN
     commands = [(0, "set_speed", ["speed"], None)]
-    def __init__(self, config, lookup_obj, query_obj):
-        super().__init__(config, lookup_obj, query_obj)
+    def __init__(self, *args):
+        super().__init__(*args)
         self._speed = 0.0
     def exec_command(self, cmd_id, cmd, opts):
         ret = super().exec_command(cmd_id, cmd, opts)

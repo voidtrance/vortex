@@ -19,28 +19,8 @@
 #define __EVENTS_H__
 #include <stdint.h>
 #include <stdbool.h>
+#include "auto-events.h"
 #include "objects/object_defs.h"
-
-/*
- * Each object that provides any events has to create
- * an entry in this enum with the event type.
- */
-typedef enum {
-    OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
-    OBJECT_EVENT_HEATER_TEMP_REACHED,
-    OBJECT_EVENT_ENDSTOP_TRIGGER,
-    OBJECT_EVENT_AXIS_HOMED,
-    OBJECT_EVENT_PROBE_TRIGGERED,
-    OBJECT_EVENT_MAX,
-} core_object_event_type_t;
-
-const char *OBJECT_EVENT_NAMES[] = {
-    [OBJECT_EVENT_STEPPER_MOVE_COMPLETE] = "STEPPER_MOVE_COMPLETE",
-    [OBJECT_EVENT_HEATER_TEMP_REACHED] = "HEATER_TEMP_REACHED",
-    [OBJECT_EVENT_ENDSTOP_TRIGGER] = "ENDSTOP_TRIGGER",
-    [OBJECT_EVENT_AXIS_HOMED] = "AXIS_HOMED",
-    [OBJECT_EVENT_PROBE_TRIGGERED] = "PROBE_TRIGGERED",
-};
 
 /*******
  * Event data structure definitions.

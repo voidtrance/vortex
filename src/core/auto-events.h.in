@@ -1,0 +1,43 @@
+/*
+ * vortex - GCode machine emulator
+ * Copyright (C) 2024  Mitko Haralanov
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ #ifndef __AUTO_EVENTS_H__
+ #define __AUTO_EVENTS_H__
+
+/*
+ * Each object that provides any events has to create
+ * an entry in this enum with the event type.
+ */
+typedef enum {
+    OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
+    OBJECT_EVENT_HEATER_TEMP_REACHED,
+    OBJECT_EVENT_ENDSTOP_TRIGGER,
+    OBJECT_EVENT_AXIS_HOMED,
+    OBJECT_EVENT_PROBE_TRIGGERED,
+    @EXTRA_EVENTS@,
+    OBJECT_EVENT_MAX,
+} core_object_event_type_t;
+
+const char *OBJECT_EVENT_NAMES[] = {
+    [OBJECT_EVENT_STEPPER_MOVE_COMPLETE] = "STEPPER_MOVE_COMPLETE",
+    [OBJECT_EVENT_HEATER_TEMP_REACHED] = "HEATER_TEMP_REACHED",
+    [OBJECT_EVENT_ENDSTOP_TRIGGER] = "ENDSTOP_TRIGGER",
+    [OBJECT_EVENT_AXIS_HOMED] = "AXIS_HOMED",
+    [OBJECT_EVENT_PROBE_TRIGGERED] = "PROBE_TRIGGERED",
+    @EXTRA_EVENT_NAMES@,
+};
+#endif

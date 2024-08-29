@@ -18,9 +18,8 @@ import re
 import sys
 import os
 
-def find_all_objects():
-    object_re = r'^class (?P<klass>[^\(]+)\(ObjectDef\):$'
-    object_reg = re.compile(object_re, re.MULTILINE)
+def find_hw_objects():
+    object_reg = re.compile(r'^class (?P<klass>[^\(]+)\(ObjectDef\):$', re.MULTILINE)
     objects = []
     with open(os.path.join(sys.argv[1], "controllers/objects/object_defs.py")) as fd:
         for line in fd:
@@ -30,5 +29,5 @@ def find_all_objects():
             objects.append(match.group("klass").strip().lower())
     return objects
 
-for object in find_all_objects():
+for object in find_hw_objects():
     print(object)
