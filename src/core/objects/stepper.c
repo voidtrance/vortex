@@ -264,7 +264,6 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
 	if (data) {
 	    data->steps = stepper->current_step;
 	    CORE_EVENT_SUBMIT(stepper, OBJECT_EVENT_STEPPER_MOVE_COMPLETE,
-			      core_object_to_id((core_object_t *)stepper),
 			      data);
 	}
     }

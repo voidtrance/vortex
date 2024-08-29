@@ -803,7 +803,7 @@ static int core_object_event_unregister(const core_object_type_t object_type,
     return -1;
 }
 
-static int core_object_event_submit(const core_object_event_type_t type,
+static int core_object_event_submit(const core_object_event_type_t event_type,
 				    const core_object_id_t id,
 				    void *event_data, void *user_data) {
     core_t *core = (core_t *)user_data;
@@ -815,8 +815,8 @@ static int core_object_event_submit(const core_object_event_type_t type,
 	return -1;
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-	     "submitting event = %u, %u, %lu", type, object->type, id);
-    event->type = type;
+	     "submitting event = %u, %u, %lu", event_type, object->type, id);
+    event->type = event_type;
     event->object_type = object->type;
     event->object_id = id;
     event->data = event_data;

@@ -87,9 +87,7 @@ static void probe_update(core_object_t *object, uint64_t ticks,
 	    data = object_cache_alloc(probe_event_cache);
 	    if (data) {
 		data->position = probe->position;
-		CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED,
-				  core_object_to_id((core_object_t *)probe),
-				  data);
+		CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED, data);
 	    }
 	}
     } else {

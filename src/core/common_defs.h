@@ -103,9 +103,9 @@ static inline core_object_t *core_id_to_object(core_object_id_t id) {
     (((core_object_t *)(obj))->call_data.event_unregister(		\
 	(type), (event), (name), ((core_object_t *)(obj)), (handler),	\
 	((core_object_t *)(obj))->call_data.cb_data))
-#define CORE_EVENT_SUBMIT(obj, type, id, data)				\
+#define CORE_EVENT_SUBMIT(obj, event, data)				\
     (((core_object_t *)(obj))->call_data.event_submit(			\
-	(type), (id), (data),						\
+	(event), core_object_to_id((core_object_t *)obj), (data),	\
 	((core_object_t *)(obj))->call_data.cb_data))
 #define CORE_CMD_SUBMIT(obj, target, cmd_id, handler, args)		\
     (((core_object_t *)(obj))->call_data.cmd_submit(			\

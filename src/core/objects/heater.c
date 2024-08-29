@@ -182,8 +182,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     data = object_cache_alloc(heater_event_cache);
     if (data) {
         data->temp = heater->temp;
-        CORE_EVENT_SUBMIT(heater, OBJECT_EVENT_HEATER_TEMP_REACHED,
-                          core_object_to_id((core_object_t *)heater), data);
+        CORE_EVENT_SUBMIT(heater, OBJECT_EVENT_HEATER_TEMP_REACHED, data);
     }
 }
 
