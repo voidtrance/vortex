@@ -138,7 +138,6 @@ static void axis_stepper_command_handler(uint64_t cmd_id, int result,
     log_debug(axis, "Command %lu complete: %d", cmd_id, result);
     for (i = 0; i < axis->n_motors; i++) {
 	info = &axis->comps[i];
-	log_debug(axis, "cmd: %lu", info->id);
 	if (info->id == cmd_id)
 	    break;
     }
@@ -357,10 +356,10 @@ static void axis_update(core_object_t *object, uint64_t ticks,
                 continue;
 
 	    distance = axis->target_position - axis->position;
-	    if (fabs(distance) / axis->travel_per_step < 1.0)
-		distance = (distance < 0 ? -1 : 1) / axis->travel_per_step;
-
-	    axis_motor_move(axis, i, distance);
+	    if (fabs(distance) / axis->travel_per_step > 1.0)
+		axis_motor_move(axis, i, distance);
+	    else
+		axis->position += distance;
 	}
     default:
         break;
