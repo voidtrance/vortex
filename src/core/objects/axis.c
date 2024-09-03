@@ -290,9 +290,6 @@ static void axis_update(core_object_t *object, uint64_t ticks,
     double distance;
     size_t i;
 
-    if (!axis->homed && axis->axis_command_id != AXIS_COMMAND_HOME)
-	return;
-
     /* TODO: need to figure out how to limit the stepper
      * from going past the axis length. Some possibilities:
      *    - have the stepper query the endstop trigger status.
@@ -325,6 +322,9 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 	else if (axis->endstop_is_max && axis->position >= axis->length)
 	    axis->position = axis->length;
     }
+
+    if (!axis->homed && axis->axis_command_id != AXIS_COMMAND_HOME)
+      return;
 
     switch (axis->axis_command_id) {
     case AXIS_COMMAND_MOVE:
