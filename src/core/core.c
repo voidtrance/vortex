@@ -136,8 +136,6 @@ typedef struct {
 
 static core_object_t *core_object_find(const core_object_type_t type,
 				       const char *name, void *data);
-static void core_object_update(uint64_t ticks, uint64_t runtime,
-			       void *user_data);
 static void core_process_work(void *user_data);
 
 /* Object callbacks */
@@ -186,6 +184,13 @@ static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
 
     if (object_cache_create(&core->event_cache, sizeof(core_event_t))) {
 	free(core->completions->entries);
+	free(core->completions);
+	type->tp_free((PyObject *)core);
+	return NULL;
+    }
+
+    if (controller_work_thread_create(core_process_work, core, 0)) {
+	object_cache_destroy(core->event_cache);
 	free(core->completions);
 	type->tp_free((PyObject *)core);
 	return NULL;
@@ -272,6 +277,7 @@ static void vortex_core_dealloc(core_t *self) {
 
 static PyObject *core_start(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
+    core_object_type_t type;
     uint64_t frequency;
     int ret;
 
@@ -286,8 +292,29 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
 
     Py_INCREF(core->python_complete_cb);
 
-    ret = controller_timer_start(core_object_update, frequency,
-				 core_process_work, 0, self);
+    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+	core_object_t *object;
+
+	if (LIST_EMPTY(&core->objects[type]))
+	    continue;
+
+	LIST_FOREACH(object, &core->objects[type], entry) {
+	    char name[256];
+
+	    if (!object->update)
+		continue;
+
+	    snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
+		     object->name);
+	    if (controller_thread_create(object, name, frequency)) {
+		controller_thread_destroy();
+		return NULL;
+	    }
+
+	}
+    }
+
+    ret = controller_thread_start();
     if (ret) {
 	PyErr_Format(VortexCoreError, "Failed to start core threads: %s",
 		     strerror(ret));
@@ -301,12 +328,11 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
 
 static PyObject *core_stop(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
-    int64_t thread_match;
     core_object_event_type_t type;
 
     /* Allow external threads to avoid deadlocks. */
     Py_BEGIN_ALLOW_THREADS;
-    thread_match = controller_timer_stop();
+    controller_thread_stop();
     Py_END_ALLOW_THREADS;
 
     pthread_mutex_lock(&core->cmds.lock);
@@ -371,8 +397,6 @@ static PyObject *core_stop(PyObject *self, PyObject *args) {
 	pthread_mutex_unlock(&core->event_handlers[type].lock);
     }
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-	     "update thread frequency match: %ld", thread_match);
     Py_DECREF(core->python_complete_cb);
     Py_DECREF(self);
     Py_XINCREF(Py_None);
@@ -556,25 +580,6 @@ static PyObject *core_exec_command(PyObject *self, PyObject *args,
     return rc;
 }
 
-static void core_object_update(uint64_t ticks, uint64_t runtime,
-			       void *user_data) {
-    core_t *self = (core_t *)user_data;
-    core_object_type_t type;
-
-    self->ticks = ticks;
-    self->runtime = runtime;
-    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-        core_object_t *object;
-
-        if (LIST_EMPTY(&self->objects[type]))
-            continue;
-
-        LIST_FOREACH(object, &self->objects[type], entry) {
-	    if (object->update)
-		object->update(object, ticks, runtime);
-	}
-    }
-}
 
 static void core_process_work(void *arg) {
     core_t *core = (core_t *)arg;
@@ -1113,9 +1118,9 @@ static PyObject *core_pause(PyObject *self, PyObject *args) {
         return NULL;
 
     if (pause)
-        controller_timer_pause();
+        controller_thread_pause();
     else
-        controller_timer_resume();
+        controller_thread_resume();
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -1133,7 +1138,7 @@ static PyObject *core_reset(PyObject *self, PyObject *args) {
 	return NULL;
     }
 
-    controller_timer_pause();
+    controller_thread_pause();
     if (PyList_Check(object_list)) {
 	Py_ssize_t size = PyList_Size(object_list);
 	Py_ssize_t i;
@@ -1165,7 +1170,7 @@ static PyObject *core_reset(PyObject *self, PyObject *args) {
 	    }
         }
     }
-    controller_timer_resume();
+    controller_thread_resume();
 
     Py_RETURN_TRUE;
 }

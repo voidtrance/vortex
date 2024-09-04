@@ -15,20 +15,22 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __TIMING_H__
-#define __TIMING_H__
+#ifndef __THREAD_CONTROL_H__
+#define __THREAD_CONTROL_H__
 #include <stdint.h>
+#include "common_defs.h"
 
-typedef void (*update_callback_t)(uint64_t ticks, uint64_t runtime,
-				  void *user_data);
+
 typedef void (*work_callback_t)(void *user_data);
 
-int controller_timer_start(update_callback_t update_cb,
-			   uint64_t update_frequency,
-			   work_callback_t work_cb, uint64_t work_frequency,
-			   void *user_data);
-int64_t controller_timer_stop(void);
-void controller_timer_pause(void);
-void controller_timer_resume(void);
+int controller_thread_create(core_object_t *object, const char *name,
+			     uint64_t frequency);
+int controller_work_thread_create(work_callback_t callback, void *user_data,
+				  uint64_t frequency);
+int controller_thread_start(void);
+void controller_thread_stop(void);
+void controller_thread_pause(void);
+void controller_thread_resume(void);
+void controller_thread_destroy(void);
 
 #endif
