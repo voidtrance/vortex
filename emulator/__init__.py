@@ -23,6 +23,7 @@ from vortex.lib.constants import *
 from vortex.core import VortexCoreError
 from vortex.controllers.types import ModuleTypes, ModuleEvents
 import vortex.emulator.monitor as monitor
+import vortex.core.kinematics._vortex_kinematics as kinematics
 
 __all__ = ["Emulator"]
 
@@ -96,7 +97,7 @@ class ScheduleQueue:
         return None
 
 class Emulator:
-    def __init__(self, controller, frontend):
+    def __init__(self, controller, frontend, machine_config):
         self._command_queue = CommandQueue()
         self._frontend = frontend
         self._frontend.set_command_queue(self._command_queue)
@@ -112,6 +113,11 @@ class Emulator:
         self._run_emulation = True
         self._frequency = 0
         self._monitor = None
+        kinematics_type = getattr(kinematics.lib, f"KINEMATICS_{machine_config.kinematics.upper()}",
+                                  kinematics.lib.KINEMATICS_NONE)
+        if kinematics_type == kinematics.lib.KINEMATICS_NONE:
+            raise AttributeError("Invalid machine kinematics type")
+        kinematics.lib.kinematics_type_set(kinematics_type)
 
     def set_frequency(self, frequency=0):
         if (frequency / MHZ2HZ) > 10:

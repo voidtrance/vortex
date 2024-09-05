@@ -94,7 +94,7 @@ def main():
         logging.error(f"Did not find controller '{opts.controller}'")
         return 1
     
-    emulation = vortex.emulator.Emulator(controller, frontend)
+    emulation = vortex.emulator.Emulator(controller, frontend, config.get_machine_config())
     emulation.set_frequency(opts.frequency)
     emulation.start_monitor(opts.monitor)
 

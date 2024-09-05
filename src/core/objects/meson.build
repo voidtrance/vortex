@@ -25,10 +25,9 @@ math = cc.find_library('m')
 
 foreach object : objects.split()
     lib = library(object, [object + '.c', auto_gen_types, auto_gen_events],
-                         include_directories: [core_utils_include, core_include],
-                         dependencies: [core_utils_dep, math],
+                         include_directories: [core_include],
+                         dependencies: [core_utils_dep, core_kinematics_dep, math],
                          name_prefix: '',
-                         link_with: core_utils,
                          install: true,
                          install_dir: py.get_install_dir(pure: false) / 'vortex/core/objects',
                          install_rpath: '$ORIGIN/../lib')

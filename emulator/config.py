@@ -42,8 +42,28 @@ class Configuration:
             logging.debug("CONFIG: " + line)
         self._parser.read_string("\n".join(config_content))
 
+    def get(self, type, name, option):
+        if not isinstance(type, ModuleTypes):
+            raise TypeError("'type' must be a ModuleTypes enumeration value")
+        section = f"{str(type)} {name}"
+        if self._parser.has_section(section):
+            return self._get(self._parser.get(section, option))
+        return None
+
+    def get_machine_config(self):
+        return self.__parse_section("machine")
+    
+    def get_section(self, type, name):
+        if not isinstance(type, ModuleTypes):
+            raise TypeError("'type' must be a ModuleTypes enumeration value")
+        section = f"{str(type)} {name}"
+        if self._parser.has_section(section):
+            return self.__parse_section(section)
+
     def __iter__(self):
         for section in self._parser.sections():
+            if section == "machine":
+                continue
             klass, name = section.split(maxsplit=1)
             yield ModuleTypes[klass], name, self.__parse_section(section)
 

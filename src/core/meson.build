@@ -20,14 +20,12 @@ auto_gen_events = custom_target('auto-events.h', output: 'auto-events.h',
                          input : root / 'tools/auto_gen_types.py',
                          command : [py, '@INPUT@', '-e', root, '@OUTPUT@'])
 
+subdir('kinematics')
 subdir('objects')
 
 py.extension_module('_vortex_core',
-                    ['core.c', 'thread_control.c', auto_gen_events,
-                     auto_gen_types],
-                    include_directories: core_utils_include,
-                    dependencies: [core_utils_dep, pthreads],
-                    link_with: core_utils,
+                    ['core.c', 'thread_control.c', auto_gen_events,  auto_gen_types],
+                    dependencies: [core_utils_dep, core_kinematics_dep, pthreads],
                     install: true,
                     install_dir: py.get_install_dir(pure: false) / 'vortex/core',
                     install_rpath: '$ORIGIN/lib')
