@@ -40,6 +40,10 @@ typedef struct {
     bool triggered;
 } endstop_trigger_event_data_t;
 
+typedef struct {
+  const char *axis;
+} axis_homed_event_data_t;
+
 /*
  * Object event handler type.
  * Object event handlers are called to handle events from

@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <cache.h>
 #include "../common_defs.h"
 #include "object_defs.h"
 #include "../events.h"
@@ -48,6 +49,8 @@ typedef struct {
     bool triggered;
 } endstop_t;
 
+static object_cache_t *endstop_event_cache;
+
 static void endstop_update(core_object_t *object, uint64_t ticks,
 			   uint64_t runtime);
 
@@ -70,7 +73,9 @@ static int endstop_init(core_object_t *object) {
 static void endstop_update(core_object_t *object, uint64_t ticks,
 			   uint64_t runtime) {
     endstop_t *endstop = (endstop_t *)object;
+    endstop_trigger_event_data_t *event;
     axis_status_t status;
+    bool state = endstop->triggered;
 
     endstop->axis->get_state(endstop->axis, &status);
     if ((endstop->type == ENDSTOP_TYPE_MIN && status.position == 0) ||
@@ -78,6 +83,15 @@ static void endstop_update(core_object_t *object, uint64_t ticks,
 	endstop->triggered = true;
     else
         endstop->triggered = false;
+
+    if (state != endstop->triggered) {
+	event = object_cache_alloc(endstop_event_cache);
+	if (!event)
+	    return;
+
+	event->triggered = endstop->triggered;
+	CORE_EVENT_SUBMIT(endstop, OBJECT_EVENT_ENDSTOP_TRIGGER, event);
+    }
 }
 
 static void endstop_status(core_object_t *object, void *status) {
@@ -91,6 +105,7 @@ static void endstop_status(core_object_t *object, void *status) {
 static void endstop_destroy(core_object_t *object) {
     endstop_t *endstop = (endstop_t *)object;
 
+    object_cache_destroy(endstop_event_cache);
     core_object_destroy(object);
     free((char *)endstop->axis_name);
     free(endstop);
@@ -104,6 +119,12 @@ endstop_t *object_create(const char *name, void *config_ptr) {
     endstop = calloc(1, sizeof(*endstop));
     if (!endstop)
 	return NULL;
+
+    if (object_cache_create(&endstop_event_cache,
+			     sizeof(endstop_trigger_event_data_t))) {
+	free(endstop);
+	return NULL;
+    }
 
     endstop->object.type = OBJECT_TYPE_ENDSTOP;
     endstop->object.name = strdup(name);

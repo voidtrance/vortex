@@ -20,16 +20,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-enum {
-    AXIS_COMMAND_MOVE,
-    AXIS_COMMAND_HOME,
-    AXIS_COMMAND_MAX,
-};
-
-typedef struct {
-    double position;
-} axis_move_command_opts_t;
-
 typedef struct {
     bool homed;
     float length;
@@ -37,9 +27,5 @@ typedef struct {
     float travel_per_step;
     char motors[8][64];
 } axis_status_t;
-
-typedef struct {
-    const char *axis;
-} axis_homed_event_data_t;
 
 #endif
