@@ -29,7 +29,8 @@ def make_builder(header_path, link_path):
     ffibuilder.set_source("_vortex_kinematics", '#include <kinematics.h>',
                           libraries=["kinematics"],
                           include_dirs=[header_path],
-                          library_dirs=[link_path])
+                          library_dirs=[link_path],
+                          extra_link_args=['-Wl,-rpath=$ORIGIN'])
     return ffibuilder
 
 if __name__ == "__main__":

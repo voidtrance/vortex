@@ -28,6 +28,7 @@ py.extension_module('_vortex_core',
                     dependencies: [core_utils_dep, core_kinematics_dep, pthreads],
                     install: true,
                     install_dir: py.get_install_dir(pure: false) / 'vortex/core',
-                    install_rpath: '$ORIGIN/lib')
+                    link_args: ['-Wl,-rpath=$ORIGIN/lib'])
+                    #install_rpath: '$ORIGIN/lib')
 py.install_sources(['__init__.py'], subdir: 'vortex/core')
 

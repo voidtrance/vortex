@@ -18,8 +18,10 @@
 # However, to simplify development, this Makefile is here for
 # convinience and to record the require build commands.
 PYTHON ?= $(shell which python3)
-
+VENV ?=
+VENV_PYTHON := $(VENV)/bin/python3
 DEBUG_OPTS :=
+
 ifeq ($(DEBUG),1)
 	DEBUG_OPTS=--config-settings=setup-args=-Dbuildtype=debug
 endif
@@ -28,9 +30,21 @@ all:
 	$(PYTHON) -m pip install --no-build-isolation \
 		--editable . $(DEBUG_OPTS)
 
-wheel:
-	$(PYTHON) -m build -w .
-	$(PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
+venv:
+	@if [ -z "$(VENV)" ]; then \
+		echo "ERROR: Virtual environment path not set"; \
+		exit 1; \
+	fi
+	@echo "Creating virtual environment in $(VENV)..."
+	@if [ ! -d $(VENV) ]; then \
+		virtualenv $(VENV); \
+	fi
+	@echo "Installing dependencies..."
+	$(VENV)/bin/pip install -r ./virtualenv.txt
+
+wheel: venv
+	$(VENV_PYTHON) -m build -w .
+	$(VENV_PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
 
 clean:
 	rm -rf build dist

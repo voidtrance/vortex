@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 [build-system]
 build-backend = 'mesonpy'
-requires = ['meson-python', 'regex']
+requires = ['meson-python', 'regex', 'cffi', 'setuptools']
 
 [project]
 name = 'vortex'
