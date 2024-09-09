@@ -64,15 +64,18 @@ class _Objects:
     def __iter__(self):
         for klass, objects in self.__objects.items():
             for name, id in objects:
-                yield klass, name, id
+                yield Object(klass, name, id)
     def iter_klass(self, klass):
         for name, id in self.__objects[klass]:
-            yield klass, name, id
+            yield Object(klass, name, id)
     def add_object(self, klass, name, id):
         if id in self.__objects[klass]:
             raise ValueError("Object ID already present")
         self.__objects[klass].append((name, id))
 
+Object = namedtuple("Object", ["klass", "name", "id"])
+class ObjectKlassInvalid(Exception): pass
+class ObjectNotFound(Exception): pass
 class ObjectLookUp:
     def __init__(self, object_list):
         self.__dict__.update({"__objects": object_list})
@@ -80,18 +83,25 @@ class ObjectLookUp:
         raise TypeError(f"{self:r} is a frozen class")
     def __iter__(self):
         for klass, name, id in getattr(self, "__objects"):
-            yield klass, name, id
+            yield Object(klass, name, id)
+    def object_by_klass(self, klass):
+        return list(getattr(self, "__object").iter_klass(klass))
     def object_by_id(self, obj_id):
         for klass, name, id in getattr(self, "__objects"):
             if id == obj_id:
-                return klass, name
-        return None, None
+                return Object(klass, name, id)
+        return Object(None, None, None)
     def object_by_name(self, name, klass=None):
-        generator = getattr(self, "__objects").iter_klass(klass) \
-            if klass is not None else getattr(self, "__objects")
+        if klass and klass in ModuleTypes:
+            generator = getattr(self, "__objects").iter_klass(klass)
+        elif klass is not None:
+            generator = getattr(self, "__objects")
+        else:
+            raise ObjectKlassInvalid(f"Klass '{klass}' is invalid")
         for k, n, i in generator:
             if name == n:
-                return k, n, i
+                return Object(k, n, i)
+        raise ObjectNotFound(f"Object '{name}' of klass '{klass}' not found")
 
 class Controller(core.VortexCore):
     PINS = []
@@ -189,19 +199,19 @@ class Controller(core.VortexCore):
     def query_objects(self, objects):
         virtual_objects = []
         for id in objects:
-            klass, name = self.objects.object_by_id(id)
-            if klass and self.object_defs[klass].virtual:
+            object = self.objects.object_by_id(id)
+            if object.klass and self.object_defs[object.klass].virtual:
                 virtual_objects.append(id)
         objects = [x for x in objects if x not in virtual_objects]
         _status = self.get_status(objects)
         object_status = dict.fromkeys(objects, None)
         for i, id  in enumerate(objects):
-            klass, name = self.objects.object_by_id(id)
-            if not klass:
+            object = self.objects.object_by_id(id)
+            if not object.klass:
                 logging.error(f"Could not find klass for object id {id}")
                 continue
             if _status[i]:
-                status_struct = self.object_defs[klass].state
+                status_struct = self.object_defs[object.klass].state
                 status = ctypes.cast(_status[i], ctypes.POINTER(status_struct)).contents
                 object_status[id] = vortex.lib.ctypes_helpers.parse_ctypes_struct(status)
                 self._libc.free(ctypes.c_void_p(_status[i]))
@@ -229,11 +239,11 @@ class Controller(core.VortexCore):
             return opts_struct
         return opts
     def exec_command(self, command_id, object_id, subcommand_id, opts=None):
-        klass, name = self.objects.object_by_id(object_id)
+        object = self.objects.object_by_id(object_id)
         args = 0
-        if not self.object_defs[klass].virtual:
+        if not self.object_defs[object.klass].virtual:
             if opts is not None:
-                opts = self._convert_opts(klass, subcommand_id, opts)
+                opts = self._convert_opts(object.klass, subcommand_id, opts)
                 if opts is not None:
                     args = ctypes.addressof(opts)
                 return super().exec_command(command_id, object_id, subcommand_id, args)

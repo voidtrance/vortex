@@ -22,8 +22,8 @@ class Toolhead(vobj.VirtualObjectBase):
     def get_status(self):
         axes_ids = []
         for axis in self.config.axes:
-            klass, name, id = self.lookup.object_by_name(axis, ModuleTypes.AXIS)
-            axes_ids.append(id)
+            object = self.lookup.object_by_name(axis, ModuleTypes.AXIS)
+            axes_ids.append(object.id)
         status = self.query(axes_ids)
         toolhead_status = dict.fromkeys(self.config.axes, None)
         for i, id in enumerate(axes_ids):
