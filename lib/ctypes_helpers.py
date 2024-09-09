@@ -85,7 +85,10 @@ def parse_ctypes_struct(instance):
     if issubclass(t, ctypes.Structure):
         for key, expected_type in t._fields_:
             if is_simple(expected_type):
-                data[key] = getattr(instance, key)
+                if is_simple_char_array(expected_type):
+                    data[key] = getattr(instance, key).decode('ascii')
+                else:
+                    data[key] = getattr(instance, key)
             else:
                 data[key] = parse_ctypes_struct(getattr(instance, key))
     elif issubclass(t, ctypes.Array):
