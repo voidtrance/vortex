@@ -16,8 +16,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import sys
 import argparse
-import importlib
 import logging
+import errno
 import vortex.emulator
 import vortex.emulator.config
 import vortex.frontends
@@ -62,18 +62,6 @@ def create_arg_parser():
                         is required.""")
     return parser
 
-def load_mcu(name, config):
-    try:
-        module = importlib.import_module(f"vortex.controllers.{name}")
-    except ImportError as e:
-        logging.error(f"Failed to create {name} controller: {str(e)}")
-        logging.error(sys.path)
-        return None
-    module_object = getattr(module, "__controller__", None)
-    if module_object:
-        return module_object(config)
-    return None
-
 def main():
     parser = create_arg_parser()
     opts = parser.parse_args()
@@ -85,18 +73,21 @@ def main():
 
     frontend = vortex.frontends.create_frontend(opts.frontend)
     if frontend is None:
-        return 1
+        logging.error(f"Did not find fronted '{opts.frontend}'")
+        return errno.ENOENT
 
     frontend.set_sequential_mode(opts.sequential)
 
-    controller = load_mcu(opts.controller, config)
+    controller = vortex.emulator.load_mcu(opts.controller, config)
     if controller is None:
         logging.error(f"Did not find controller '{opts.controller}'")
-        return 1
+        return errno.ENOENT
     
-    emulation = vortex.emulator.Emulator(controller, frontend, config.get_machine_config())
+    emulation = vortex.emulator.Emulator(controller,  frontend,
+                                         config.get_machine_config())
     emulation.set_frequency(opts.frequency)
-    emulation.start_monitor(opts.monitor)
+    if opts.monitor:
+        emulation.start_monitor()
 
     try:
         emulation.run()

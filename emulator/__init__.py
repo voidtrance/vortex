@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import queue
 import logging
-import ctypes
+import importlib
 import time
 from os import strerror
 from collections import OrderedDict
@@ -96,6 +96,17 @@ class ScheduleQueue:
             command = self.get(timestamp)
         return None
 
+def load_mcu(name, config):
+    try:
+        module = importlib.import_module(f"vortex.controllers.{name}")
+    except ImportError as e:
+        logging.error(f"Failed to create {name} controller: {str(e)}")
+        return None
+    module_object = getattr(module, "__controller__", None)
+    if module_object:
+        return module_object(config)
+    return None
+
 class Emulator:
     def __init__(self, controller, frontend, machine_config):
         self._command_queue = CommandQueue()
@@ -124,10 +135,9 @@ class Emulator:
             logging.warning("Frequency greater than 10MHz may result in inaccurate timing")
         self._frequency = frequency or self._controller.FREQUENCY
 
-    def start_monitor(self, start=False):
-        if start:
-            self._monitor = monitor.MonitorServer(self._controller, self._command_queue)
-            self._monitor.start()
+    def start_monitor(self):
+        self._monitor = monitor.MonitorServer(self._controller, self._command_queue)
+        self._monitor.start()
 
     def register_event(self, object_type, event_type, object_name, handler):
         return self._controller.event_register(object_type, event_type,
