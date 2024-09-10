@@ -101,8 +101,11 @@ class BaseFrontend:
         if cmd is None:
             return self._cmd_id_2_cmd[klass].get(name, None)
 
-    def get_object_set(self, klass):
+    def get_object_name_set(self, klass):
         return list(self._obj_id_2_name[klass].values())
+
+    def get_object_id_set(self, klass):
+        return list(self._obj_name_2_id[klass].values())
 
     def run(self):
         self._thread = threading.Thread(None, self._run_command_loop,

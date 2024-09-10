@@ -196,6 +196,10 @@ class Controller(core.VortexCore):
                         {e: None for e in self.object_defs[klass].events}
         params["events"] = events
         return params
+    def lookup_object(self, klass, name):
+        return self.objects.object_by_name(name, klass)
+    def lookup_objects(self, klass):
+        return self.objects.object_by_klass(klass)
     def query_objects(self, objects):
         virtual_objects = []
         for id in objects:
