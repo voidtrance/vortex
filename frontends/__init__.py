@@ -18,6 +18,7 @@ import importlib
 import logging
 import select
 import os
+import time
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends.lib import create_pty
 
@@ -131,6 +132,17 @@ class BaseFrontend:
             data = self._fd.read()
             self._process_command(data)
 
+    def wait_for_command(self, cmd_set):
+        if isinstance(cmd_set, int):
+            cmd_set = [cmd_set]
+        if not isinstance(cmd_set, (list, tuple, set)):
+            cmd_set = list(cmd_set)
+        cmd_set = set(cmd_set)
+        pending = set(self._command_completion.keys())
+        while cmd_set & pending:
+            time.sleep(0.5)
+            pending = set(self._command_completion.keys())
+
     def queue_command(self, klass, object, cmd, opts, timestamp):
         if self.is_reset:
             return False
@@ -142,14 +154,14 @@ class BaseFrontend:
         if obj_id is None:
             return False
         opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
-        if self._run_sequential and self._command_completion:
-            return False
 
         logging.debug(f"Submitting command: {obj_id} {cmd_id} {opts} {timestamp}")
         cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
         logging.debug(f"Command ID:{cmd_id}")
         self._command_completion[cmd_id] = cmd
-        return True
+        if self._run_sequential:
+            self.wait_for_command(cmd_id)
+        return cmd_id
 
     def complete_command(self, id, result):
         self._command_completion.pop(id)

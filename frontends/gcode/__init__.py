@@ -13,8 +13,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import select
-import os
 import time
 import logging
 import vortex.frontends.lib
@@ -143,23 +141,20 @@ class GCodeFrontend(BaseFrontend):
     def M104(self, cmd):
         object = self.find_object(ModuleTypes.HEATER, "extruder", "hotend")
         if object:
-            if cmd.command_code == 109:
-                self.event_register(ModuleTypes.HEATER,
-                                    ModuleEvents.HEATER_TEMP_REACHED,
-                                    object, self.event_handler)
-                self._default_sequential = self._run_sequential
-                self._run_sequential = True
             temp = cmd.get_param("S")
-            if not self.queue_command(ModuleTypes.HEATER, object,
-                                      "set_temperature",
-                                      f"temperature={temp.value}", 0):
+            cmd_id = self.queue_command(ModuleTypes.HEATER, object,
+                                        "set_temperature",
+                                        f"temperature={temp.value}", 0)
+            if cmd_id is False:
                 logging.error("Failed to queue command")
+            if cmd.command_code == 109:
+                self.wait_for_command(cmd_id)
     def M106(self, cmd):
         object = self.find_object(ModuleTypes.FAN, "fan1", "fan", "extruder", "hostend")
         if object:
             speed = cmd.get_param("S")
-            if not self.queue_command(ModuleTypes.FAN, object,
-                                      "set_speed", f"speed={speed.value}", 0):
+            if self.queue_command(ModuleTypes.FAN, object,
+                                  "set_speed", f"speed={speed.value}", 0) is False:
                 logging.error("Failed to queue command")
     def M107(self, cmd):
         cmd = gcmd.GCodeCommand("M106 S0")
@@ -174,12 +169,15 @@ class GCodeFrontend(BaseFrontend):
         if object:
             #index = cmd.get_param("I")
             temp = cmd.get_param("S")
-            if not self.queue_command(ModuleTypes.HEATER, object,
-                                      "set_temperature",
-                                      f"temperature={temp.value}", 0):
+            cmd_id = self.queue_command(ModuleTypes.HEATER, object,
+                                        "set_temperature",
+                                        f"temperature={temp.value}", 0)
+            if cmd_id is False:
                 logging.error("Failed to queue command")
+            if cmd.command_code == 190:
+                self.wait_for_command(cmd_id)
     def M190(self, cmd):
-        self.G140(cmd)
+        self.M140(cmd)
     def M204(self, cmd):
         accel = cmd.get_param("S")
         axes = self.get_object_set(ModuleTypes.AXIS)
@@ -191,9 +189,9 @@ class GCodeFrontend(BaseFrontend):
             for motor in status[axis]["motors"]:
                 if not motor:
                     continue
-                if not self.queue_command(ModuleTypes.STEPPER, motor,
-                                          "set_accel",
-                                          f"accel={accel.value},decel=0", 0):
+                if self.queue_command(ModuleTypes.STEPPER, motor,
+                                      "set_accel",
+                                      f"accel={accel.value},decel=0", 0) is False:
                     logging.error("Failed to queue command")
     def M400(self, cmd):
         while self._command_completion:

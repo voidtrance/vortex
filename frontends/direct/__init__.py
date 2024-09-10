@@ -38,7 +38,9 @@ class DirectFrontend(BaseFrontend):
             return
 
         klass = ModuleTypes[klass]
-        self.queue_command(klass, object, cmd, opts, timestamp)
+        if self.queue_command(klass, object, cmd,
+                              opts, timestamp) is False:
+            logging.error("Failed to queue command")
 
     def complete_command(self, id, result):
         logging.debug(f"Command {id} complete: {result}")
