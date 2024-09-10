@@ -15,6 +15,7 @@ socket_path = "/tmp/vortex_monitor"
 class MainWindow(Gtk.Window):
     def __init__(self):
         super().__init__(title="Vortex Monitor")
+        self.set_default_size(1024, -1)
         self.connect("destroy", Gtk.main_quit)
         self.connection = None
         self.objects = []
@@ -119,18 +120,30 @@ class MainWindow(Gtk.Window):
                 object_label.hexpand = True
                 object_label.hexpand_set = True
                 object_label.set_xalign(0.)
-                hbox.pack_start(object_label, True, True, 3)
+                hbox.pack_start(object_label, False, False, 3)
                 self.entries[obj["id"]] = {}
-                for j, prop in enumerate(data[obj["id"]]):
-                    label = Gtk.Label(label=prop)
-                    hbox.pack_start(label, False, False, 3)
+                scroll = Gtk.ScrolledWindow()
+                hbox.pack_end(scroll, True, True, 3)
+                prop_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+                scroll.add(prop_hbox)
+                # We want the widgets in the scrolled window to be
+                # right aligned. So, they have to be added to the end
+                # of the horizontal box. However, to get the right
+                # layout, the property names have to be reversed and
+                # then the entries added before the corresponding
+                # label.
+                props = list(data[obj["id"]].keys())
+                props.reverse()
+                for j, prop in enumerate(props):
                     entry = Gtk.Entry()
                     entry.editable = False
                     entry.can_focus = False
                     value = self.get_data_value(data[obj["id"]][prop])
                     entry.set_text(value)
-                    hbox.pack_start(entry, False, False, 3)
+                    prop_hbox.pack_end(entry, False, False, 3)
                     self.entries[obj["id"]][prop] = entry
+                    label = Gtk.Label(label=prop)
+                    prop_hbox.pack_end(label, False, False, 3)
                 self.klass_boxes[klass].pack_start(hbox, False, False, 3)
         self.show_all()
 
