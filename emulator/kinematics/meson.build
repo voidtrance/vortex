@@ -13,6 +13,5 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-python_sources = ['__init__.py', 'config.py', 'monitor.py']
-py.install_sources(python_sources, subdir: 'vortex/emulator')
-subdir('kinematics')
+python_sources = ['__init__.py']
+py.install_sources(python_sources, subdir: 'vortex/emulator/kinematics')

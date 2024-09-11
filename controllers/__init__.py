@@ -85,7 +85,7 @@ class ObjectLookUp:
         for klass, name, id in getattr(self, "__objects"):
             yield Object(klass, name, id)
     def object_by_klass(self, klass):
-        return list(getattr(self, "__object").iter_klass(klass))
+        return list(getattr(self, "__objects").iter_klass(klass))
     def object_by_id(self, obj_id):
         for klass, name, id in getattr(self, "__objects"):
             if id == obj_id:

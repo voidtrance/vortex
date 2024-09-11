@@ -19,6 +19,8 @@
 #include <stdbool.h>
 #include <string.h>
 #include <cache.h>
+#include <errno.h>
+#include <kinematics.h>
 #include "../common_defs.h"
 #include "object_defs.h"
 #include "../events.h"
@@ -38,13 +40,13 @@ const char *endstop_type_names[] = {
 
 typedef struct {
     const char type[4];
-    const char axis[64];
+    const char axis;
 } endstop_config_params_t;
 
 typedef struct {
     core_object_t object;
     core_object_t *axis;
-    const char *axis_name;
+    axis_type_t axis_type;
     endstop_type_t type;
     bool triggered;
 } endstop_t;
@@ -60,11 +62,34 @@ static void endstop_reset(core_object_t *object) {
 
 static int endstop_init(core_object_t *object) {
     endstop_t *endstop = (endstop_t *)object;
+    axis_status_t status;
+    core_object_t **axes;
+    core_object_t **axis_ptr;
 
-    endstop->axis = CORE_LOOKUP_OBJECT(endstop, OBJECT_TYPE_AXIS,
-				       endstop->axis_name);
-    if (!endstop->axis)
-	return -1;
+    axes = CORE_LIST_OBJECTS(endstop, OBJECT_TYPE_AXIS);
+    if (!axes) {
+      log_error(endstop, "No axis list");
+      return -ENOENT;
+    }
+
+    axis_ptr = axes;
+    do {
+      core_object_t *axis = *axis_ptr;
+
+      axis->get_state(axis, &status);
+      if (status.type == endstop->axis_type) {
+        endstop->axis = axis;
+        break;
+      }
+      axis_ptr++;
+    } while (axis_ptr);
+
+    free(axes);
+
+    if (!endstop->axis) {
+      log_error(endstop, "Could not find axis");
+      return -1;
+    }
 
     endstop_update(object, 0, 0);
     return 0;
@@ -84,7 +109,12 @@ static void endstop_update(core_object_t *object, uint64_t ticks,
     else
         endstop->triggered = false;
 
-    if (state != endstop->triggered) {
+    /*
+    * Only submit trigger events when the emulation is running.
+    * Otherwise, the event could be erroneously submitted when
+    * the object is initialized.
+    */
+    if (state != endstop->triggered && runtime) {
 	event = object_cache_alloc(endstop_event_cache);
 	if (!event)
 	    return;
@@ -107,7 +137,6 @@ static void endstop_destroy(core_object_t *object) {
 
     object_cache_destroy(endstop_event_cache);
     core_object_destroy(object);
-    free((char *)endstop->axis_name);
     free(endstop);
 }
 
@@ -133,7 +162,7 @@ endstop_t *object_create(const char *name, void *config_ptr) {
     endstop->object.reset = endstop_reset;
     endstop->object.get_state = endstop_status;
     endstop->object.destroy = endstop_destroy;
-    endstop->axis_name = strdup(config->axis);
+    endstop->axis_type = kinematics_axis_type_from_char(config->axis);
 
     for (type = 0; type < ENDSTOP_TYPE_END; type++) {
 	if (!strncmp(config->type, endstop_type_names[type],

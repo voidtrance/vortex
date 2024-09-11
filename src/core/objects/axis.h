@@ -19,13 +19,15 @@
 #define __AXIS_H__
 #include <stdint.h>
 #include <stdbool.h>
+#include <kinematics.h>
 
 typedef struct {
     bool homed;
     float length;
+    axis_type_t type;
     double position;
-    float travel_per_step;
     char motors[8][64];
+    char endstop[64];
 } axis_status_t;
 
 #endif

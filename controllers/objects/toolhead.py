@@ -15,15 +15,19 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
 from vortex.controllers.types import ModuleTypes, ModuleEvents
+from vortex.emulator.kinematics import AxisType
 
 class Toolhead(vobj.VirtualObjectBase):
     type = ModuleTypes.TOOLHEAD
     events = [ModuleEvents.TOOLHEAD_ORIGIN]
     def get_status(self):
         axes_ids = []
-        for axis in self.config.axes:
-            object = self.lookup.object_by_name(axis, ModuleTypes.AXIS)
-            axes_ids.append(object.id)
+        axis_types = [AxisType[x.upper()] for x in self.config.axes]
+        axes = self.lookup.object_by_klass(ModuleTypes.AXIS)
+        status = self.query([x.id for x in axes])
+        for axis in axes:
+            if status[axis.id]["axis"] in axis_types:
+                axes_ids.append(axis.id)
         status = self.query(axes_ids)
         toolhead_status = dict.fromkeys(self.config.axes, None)
         for i, id in enumerate(axes_ids):

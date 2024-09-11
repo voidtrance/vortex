@@ -21,6 +21,7 @@ import vortex.lib.constants as constants
 import vortex.lib.ext_enum as enum
 from vortex.frontends import BaseFrontend
 from vortex.controllers.types import ModuleTypes, ModuleEvents
+from vortex.emulator.kinematics import Coordinate, AxisType
 
 @enum.unique
 class CoordinateType(enum.ExtIntEnum):
@@ -52,35 +53,70 @@ class GCodeFrontend(BaseFrontend):
         print("gcode handler:", klass, event, owner, data)
         if event == ModuleEvents.HEATER_TEMP_REACHED:
             print("gcode handler: ", data["temp"])
-            self._run_sequential = self._default_sequential
 
+    def move_to_position(self, axis_id, position):
+        status = self.query_object([axis_id])
+        axis_distance = position - status[axis_id]["position"]
+        motor_ids = [self.get_object_id(ModuleTypes.STEPPER, x) \
+                      for x in status[axis_id]["motors"] if x]
+        print(motor_ids)
+        motor_status = self.query_object(motor_ids)
+        current_positions = [motor_status[x]["steps"] for x in motor_ids]
+        new_position = [axis_distance * motor_status[x]["steps_per_mm"] \
+                        for x in motor_ids]
+        movement = self.kinematics.get_move(current_positions, new_position)
+        move_cmds = []
+        for idx in range(len(movement)):
+            distance = int(movement[idx])
+            direction = 1 + int(distance < 0.)
+            cmd_id = self.queue_command(ModuleTypes.STEPPER,
+                                        status[axis_id]["motors"][idx],
+                                        "move",
+                                        f"steps={abs(distance)},direction={direction}",
+                                        0)
+            if cmd_id is False:
+                logging.error("Failed to submit move command")
+                continue
+            move_cmds.append(cmd_id)
+        return move_cmds
     # GCode command implementation
     def G0(self, cmd):
-        axis_ids = self._obj_name_2_id[ModuleTypes.AXIS].values()
-        axes_status = self.query_object(list(axis_ids))
-        klass = ModuleTypes.AXIS
+        axes_names = self.get_object_name_set(ModuleTypes.AXIS)
+        axes = {x: self.get_object_id(ModuleTypes.AXIS, x) for x in axes_names}
+        axes_status = self.query_object(axes.values())
+        motor_set = []
+        for axis in axes.values():
+            motor_set += [self.get_object_id(ModuleTypes.STEPPER, x) \
+                          for x in axes_status[axis]["motors"] if x]
+        motor_status = self.query_object(motor_set)
         if cmd.has_param("F"):
             mm_per_min = cmd.get_param("F")
             speed = mm_per_min.value / 60
-            for status in axes_status.values():
-                logging.debug(f"axis ratio: {status['travel_per_step']}")
-                for motor in [x for x in status['motors'] if x]:
-                    self.queue_command(
-                        ModuleTypes.STEPPER, motor, "set_speed",
-                        f"steps_per_second={speed / status['travel_per_step']}",
-                                        0)
+            for axis in axes.values():
+                for motor in axes_status[axis]["motors"]:
+                    if not motor:
+                        continue
+                    motor_id = self.get_object_id(ModuleTypes.STEPPER, motor)
+                    steps_per_mm = motor_status[motor_id]["stepr_per_mm"]
+                    self.queue_command(ModuleTypes.STEPPER, motor, "set_speed",
+                                       f"steps_per_second={speed * steps_per_mm}")
         for axis in cmd.get_params(exclude=["F"]):
             if axis.name.lower() == "e":
                 coordinates = self.extruder_coordinates
             else:
                 coordinates = self.coordinates
+            axis_type = AxisType(axes_status[axes[axis.name.lower()]]["type"].upper())
+            axis_id = [x for x in axes_status if axes_status[x]["type"] == axis_type]
+            if len(axis_id) == 0:
+                logging.error(f"Did not find axis of type '{axis.name.upper()}")
+                return
+            axis_id = axis_id[0]
             if coordinates == CoordinateType.RELATIVE:
-                axis_id = self._obj_name_2_id[ModuleTypes.AXIS][axis]
                 axis_position = axes_status[axis_id]["position"] + axis.value
             else:
                 axis_position = axis.value
-            self.queue_command(klass, axis.name.lower(), "move",
-                               f"position={axis_position}", 0)
+            cmds = self.move_to_position(axis_id, axis_position)
+        self.wait_for_command(cmds)
     def G1(self, cmd):
         self.G0(cmd)
     def G4(self, cmd):
@@ -93,18 +129,35 @@ class GCodeFrontend(BaseFrontend):
     def G28(self, cmd):
         klass = ModuleTypes.AXIS
         if not cmd.has_params():
-            for axis in self._obj_name_2_id[klass]:
-                # Do axis homing one-by-one.
-                while self._command_completion:
-                    print(self._command_completion)
-                    time.sleep(0.2)
-                logging.debug(f"Sending command 'home' to {axis}")
-                if not self.queue_command(klass, axis, "home", None, 0):
-                    logging.error(f"Failed to queue command 'home' for axis {axis}")
+            axes_types = [AxisType.X, AxisType.Y, AxisType.Z,
+                          AxisType.A, AxisType.B, AxisType.C]
         else:
-            for axis in cmd.get_params():
-                if not self.queue_command(klass, axis.name.lower(), "home", None, 0):
-                    logging.error(f"Failed to queue command 'home' for {axis}")
+            axes_types = [AxisType[x.name.upper()] for x in cmd.iter_params()]
+        axes_ids = self.get_object_id_set(ModuleTypes.AXIS)
+        status = self.query_object(axes_ids)
+        axes_ids = [x for x in axes_ids if status[x]["type"] in axes_types]
+        axis_endstop_ids = {x: self.get_object_id(ModuleTypes.ENDSTOP,
+                                               status[x]["endstop"]) \
+                                                for x in axes_ids}
+        endstop_status = self.query_object(axis_endstop_ids.values())
+        for axis in axes_ids:
+            logging.debug(f"Homing axis {AxisType(status[axis]["type"])}")
+            motor_ids = {}
+            for motor in [x for x in status[axis]["motors"] if x]:
+                motor_ids[motor] = self.get_object_id(ModuleTypes.STEPPER, motor)
+            motor_status = self.query_object(motor_ids.values())
+            for motor in motor_ids:
+                if not motor_status[motor_ids[motor]]["enabled"]:
+                    cmd_id = self.queue_command(ModuleTypes.STEPPER, motor, "enable",
+                                              "enable=1", 0)
+                    if cmd_id is False:
+                        logging.error("Failed to enable motor")
+                    self.wait_for_command(cmd_id)
+            if endstop_status[axis_endstop_ids[axis]]["type"] == "max":
+                cmds = self.move_to_position(axis, status[axis]["length"])
+            else:
+                cmds = self.move_to_position(axis, 0)
+            self.wait_for_command(cmds)
     def G90(self, cmd):
         self.coordinates = CoordinateType.ABSOLUTE
     def G91(self, cmd):

@@ -27,6 +27,7 @@
 
 typedef core_object_t *(*object_lookup_cb_t)(const core_object_type_t,
                                              const char *, void *);
+typedef core_object_t **(*object_list_cb_t)(const core_object_type_t, void *);
 typedef void (*complete_cb_t)(uint64_t, int, void *);
 typedef uint64_t (*cmd_submit_cb_t)(core_object_t *, core_object_id_t, uint16_t,
 				    void *, complete_cb_t, void *);
@@ -37,6 +38,7 @@ typedef void (*log_cb_t)(core_log_level_t, core_object_type_t, const char *,
  */
 typedef struct {
     object_lookup_cb_t object_lookup;
+    object_list_cb_t object_list;
     complete_cb_t completion_callback;
     event_register_t event_register;
     event_register_t event_unregister;
@@ -90,8 +92,10 @@ static inline core_object_t *core_id_to_object(core_object_id_t id) {
 
 #define CORE_LOOKUP_OBJECT(obj, type, name)				\
     (((core_object_t *)(obj))->call_data.object_lookup(			\
-	(type), (name),							\
-	((core_object_t *)(obj))->call_data.cb_data))
+	(type), (name), ((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_LIST_OBJECTS(obj, type)					\
+    (((core_object_t *)(obj))->call_data.object_list(	                \
+	(type), ((core_object_t *)(obj))->call_data.cb_data))
 #define CORE_CMD_COMPLETE(obj, id, status)				\
     (((core_object_t *)(obj))->call_data.completion_callback(		\
 	(id), (status),	((core_object_t *)(obj))->call_data.cb_data))

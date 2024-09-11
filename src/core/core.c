@@ -136,7 +136,9 @@ typedef struct {
 } core_t;
 
 static core_object_t *core_object_find(const core_object_type_t type,
-				       const char *name, void *data);
+                                       const char *name, void *data);
+static core_object_t **core_object_list(const core_object_type_t type,
+					void *data);
 static void core_process_work(void *user_data);
 
 /* Object callbacks */
@@ -198,6 +200,7 @@ static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
     }
 
     core_call_data.object_lookup = core_object_find;
+    core_call_data.object_list = core_object_list;
     core_call_data.completion_callback = core_object_command_complete;
     core_call_data.event_register = core_object_event_register;
     core_call_data.event_unregister = core_object_event_unregister;
@@ -789,6 +792,27 @@ static core_object_t *core_object_find(const core_object_type_t type,
     return NULL;
 }
 
+static core_object_t **core_object_list(const core_object_type_t type,
+					void *data)
+{
+    core_t *core = (core_t *)data;
+    core_object_t *object;
+    core_object_t **list;
+    size_t n_objects = 0;
+
+    LIST_FOREACH(object, &core->objects[type], entry)
+	n_objects++;
+
+    list = calloc(n_objects + 1, sizeof(*list));
+    if (!list)
+	return NULL;
+
+    n_objects = 0;
+    LIST_FOREACH(object, &core->objects[type], entry)
+	list[n_objects++] = object;
+
+    return list;
+}
 
 static int core_object_event_register(const core_object_type_t object_type,
 				      const core_object_event_type_t event,
@@ -869,8 +893,8 @@ static int __core_object_event_submit(const core_object_event_type_t event_type,
 	return -1;
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-	     "submitting event = %s, %s, %lu", OBJECT_EVENT_NAMES[event_type],
-	     ObjectTypeNames[object->type], id);
+	     "submitting event = %s %s, %s, %lu", ObjectTypeNames[object->type],
+	     object->name, OBJECT_EVENT_NAMES[event_type], id);
     event->type = event_type;
     event->object_type = object->type;
     event->object_id = id;

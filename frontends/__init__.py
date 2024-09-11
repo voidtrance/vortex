@@ -48,7 +48,6 @@ class BaseFrontend:
         self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
         self._command_id_queue = []
 
-
     def set_command_queue(self, queue):
         self._queue = queue
 
@@ -76,6 +75,9 @@ class BaseFrontend:
                 for obj in objects[klass]:
                     self._obj_name_2_id[klass][obj[0]] = obj[1]
                     self._obj_id_2_name[klass][obj[1]] = obj[0]
+
+    def set_kinematics_model(self, model):
+        self.kinematics = model
 
     def find_object(self, klass, *seq):
         '''Find object ID for object of type klass.

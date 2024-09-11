@@ -18,10 +18,25 @@
 #ifndef __KINEMATICS_H__
 #define __KINEMATICS_H__
 
+typedef enum {
+    AXIS_TYPE_X,
+    AXIS_TYPE_Y,
+    AXIS_TYPE_Z,
+    AXIS_TYPE_A,
+    AXIS_TYPE_B,
+    AXIS_TYPE_C,
+    AXIS_TYPE_E,
+    AXIS_TYPE_MAX,
+} axis_type_t;
+
 typedef struct coordinates {
-  double x;
-  double y;
-  double z;
+    double x;
+    double y;
+    double z;
+    double a;
+    double b;
+    double c;
+    double e;
 } coordinates_t;
 
 typedef enum {
@@ -35,6 +50,7 @@ typedef enum {
 
 int kinematics_type_set(kinematics_type_t type);
 kinematics_type_t kinematics_type_get(void);
+axis_type_t kinematics_axis_type_from_char(char type_char);
 int compute_motor_movement(coordinates_t *delta, coordinates_t *movement);
 int compute_axis_movement(coordinates_t *delta, coordinates_t *movement);
 

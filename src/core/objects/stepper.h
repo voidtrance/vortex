@@ -60,6 +60,7 @@ typedef struct {
     double speed;
     double accel;
     double decel;
+    uint32_t steps_per_mm;
 } stepper_status_t;
 
 #endif

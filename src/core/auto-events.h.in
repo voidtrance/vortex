@@ -32,7 +32,7 @@ typedef enum {
     OBJECT_EVENT_MAX,
 } core_object_event_type_t;
 
-static const char *OBJECT_EVENT_NAMES[] = {
+static const char *OBJECT_EVENT_NAMES[] __attribute__((unused)) = {
     [OBJECT_EVENT_STEPPER_MOVE_COMPLETE] = "STEPPER_MOVE_COMPLETE",
     [OBJECT_EVENT_HEATER_TEMP_REACHED] = "HEATER_TEMP_REACHED",
     [OBJECT_EVENT_ENDSTOP_TRIGGER] = "ENDSTOP_TRIGGER",

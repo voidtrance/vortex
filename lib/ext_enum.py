@@ -35,7 +35,7 @@ def getitem_wrap(orig):
                     member = members[0]
         else:
             member = orig(cls, key)
-        if not member:
+        if member is None:
             raise KeyError(f"Enum '{cls.__name__}' does not contain '{key}'")
         return member
     return wrapped

@@ -31,6 +31,7 @@ class Stepper(ObjectDef):
         _fields_ = [("steps_per_rotation", ctypes.c_uint32),
                     ("microsteps", ctypes.c_uint32),
                     ("start_speed", ctypes.c_uint32),
+                    ("steps_per_mm", ctypes.c_uint32),
                     ("driver", ctypes.c_char * 16)]
     class StepperEnableCommandOpts(ctypes.Structure):
         _fields_ = [("enable", ctypes.c_bool)]
@@ -49,7 +50,8 @@ class Stepper(ObjectDef):
                     ("microsteps", ctypes.c_uint8),
                     ("speed", ctypes.c_double),
                     ("accel", ctypes.c_double),
-                    ("decel", ctypes.c_double)]
+                    ("decel", ctypes.c_double),
+                    ("steps_per_mm", ctypes.c_uint)]
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
@@ -88,9 +90,10 @@ class Heater(ObjectDef):
 class Endstop(ObjectDef):
     class EndstopConfig(ctypes.Structure):
         _fields_ = [("type", ctypes.c_char * 4),
-                    ("axis", ctypes.c_char * 64)]
+                    ("axis", ctypes.c_char)]
     class EndstopStatus(ctypes.Structure):
-        _fields_ = [("triggered", ctypes.c_bool)]
+        _fields_ = [("triggered", ctypes.c_bool),
+                    ("type", ctypes.c_char * 4)]
     class EndstopTriggerEvent(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool)]
     def __init__(self):
@@ -103,7 +106,7 @@ class Endstop(ObjectDef):
 class Axis(ObjectDef):
     class AxisConfig(ctypes.Structure):
         _fields_ = [("length", ctypes.c_float),
-                    ("travel_per_step", ctypes.c_double),
+                    ("type", ctypes.c_char),
                     ("stepper", ctypes.POINTER(ctypes.c_char_p)),
                     ("endstop", ctypes.c_char * 64)]
     class AxisMoveCommandOpts(ctypes.Structure):
@@ -111,9 +114,10 @@ class Axis(ObjectDef):
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
                     ("length", ctypes.c_float),
+                    ("axis", ctypes.c_int),
                     ("position", ctypes.c_double),
-                    ("travel_per_step", ctypes.c_float),
-                    ("motors", (ctypes.c_char * 64) * 8)]
+                    ("motors", (ctypes.c_char * 64) * 8),
+                    ("endstop", ctypes.c_char * 64)]
     class AxisEventHomed(ctypes.Structure):
         _fields_ = [("axis", ctypes.c_char_p)]
     def __init__(self):

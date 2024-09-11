@@ -55,7 +55,10 @@ def fill_ctypes_struct(instance, data):
                 #if is_simple_char_array(expected_type):
                 #    setattr(instance, key, bytes(data[key], "ascii"))
                 #else:
-                value = attempt_value_conversion(expected_type, data.get(key, None))
+                try:
+                    value = attempt_value_conversion(expected_type, data.get(key, None))
+                except TypeError as e:
+                    raise TypeError(f"{key}: {str(e)}")
                 setattr(instance, key, value)
             else:
                 fill_ctypes_struct(getattr(instance, key), data.get(key, None))
@@ -67,7 +70,10 @@ def fill_ctypes_struct(instance, data):
                 #if is_simple_char_array(t):
                 #    instance[i] = bytes(data[i], "ascii")
                 #else:
-                instance[i] = attempt_value_conversion(t, val)
+                try:
+                    instance[i] = attempt_value_conversion(t, val)
+                except:
+                    raise TypeError(f"{str(instance)}: {str(e)}")
             else:
                 fill_ctypes_struct(instance[i], val)
     elif is_simple_pointer(instance):

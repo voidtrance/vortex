@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <time.h>
+#include <kinematics.h>
 #include "../debug.h"
 #include "../common_defs.h"
 #include "../events.h"
@@ -49,8 +50,28 @@ static object_cache_t *probe_event_cache = NULL;
 
 static int probe_init(core_object_t *object) {
     probe_t *probe = (probe_t *)object;
+    axis_status_t status;
+    core_object_t **axes;
+    core_object_t **axis_ptr;
 
-    probe->z_axis = CORE_LOOKUP_OBJECT(probe, OBJECT_TYPE_AXIS, "z");
+    axes = CORE_LIST_OBJECTS(probe, OBJECT_TYPE_AXIS);
+    if (!axes)
+      return -ENOENT;
+
+    axis_ptr = axes;
+    do {
+      core_object_t *axis = *axis_ptr;
+
+      axis->get_state(axis, &status);
+      if (status.type == AXIS_TYPE_Z) {
+        probe->z_axis = axis;
+        break;
+      }
+      axis_ptr++;
+    } while (axis_ptr);
+
+    free(axes);
+
     if (!probe->z_axis) {
 	log_error(probe, "Did not find a Z axis");
 	return -ENOENT;

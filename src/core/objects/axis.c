@@ -37,20 +37,23 @@
 typedef struct {
     const char *name;
     core_object_t *obj;
-    double position;
+    uint32_t steps_per_mm;
+    int64_t initial_step;
+    int64_t steps;
     bool move_complete;
     bool enabled;
 } axis_motor_t;
 
 typedef struct {
     float length;
-    double travel_per_step;
+    const char type;
     const char **steppers;
     const char endstop[64];
 } axis_config_params_t;
 
 typedef struct {
     core_object_t object;
+    axis_type_t type;
     axis_motor_t *motors;
     size_t n_motors;
     const char *endstop_name;
@@ -58,13 +61,14 @@ typedef struct {
     bool homed;
     bool endstop_is_max;
     float length;
-    double travel_per_step;
+    double start_position;
     double position;
 } axis_t;
 
 typedef int (*command_func_t)(core_object_t *object, void *args);
 
 static object_cache_t *axis_event_cache = NULL;
+static stepper_status_t stepper_status;
 
 static void axis_event_handler(core_object_t *object, const char *name,
 			       const core_object_event_type_t event,
@@ -77,15 +81,15 @@ static void axis_reset(core_object_t *object) {
 
     if (axis->length == AXIS_NO_LENGTH) {
       axis->homed = true;
-      axis->position = 0.0;
+      axis->start_position = 0.0;
     } else {
-      axis->position = random_float_limit(0, axis->length);
+      axis->start_position = random_float_limit(0, axis->length);
     }
+    axis->position = axis->start_position;
 }
 
 static int axis_init(core_object_t *object) {
     axis_t *axis = (axis_t *)object;
-    endstop_status_t status;
     size_t i;
 
     for (i = 0; i < axis->n_motors; i++) {
@@ -94,20 +98,24 @@ static int axis_init(core_object_t *object) {
 	if (!axis->motors[i].obj)
 	    return -ENODEV;
 
+	axis->motors[i].obj->get_state(axis->motors[i].obj, &stepper_status);
 	axis->motors[i].move_complete = true;
+	axis->motors[i].steps_per_mm = stepper_status.steps_per_mm;
+	axis->motors[i].initial_step = stepper_status.steps;
     }
 
     if (axis->endstop_name) {
-	axis->endstop = CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_ENDSTOP,
-					   axis->endstop_name);
-	if (!axis->endstop)
-	    return -ENODEV;
+      endstop_status_t status;
+      axis->endstop =
+          CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_ENDSTOP, axis->endstop_name);
+      if (!axis->endstop)
+        return -ENODEV;
 
-	axis->endstop->get_state(axis->endstop, &status);
-	if (!strncmp(status.type, "max", 3))
-	    axis->endstop_is_max = true;
-	else
-	    axis->endstop_is_max = false;
+      axis->endstop->get_state(axis->endstop, &status);
+      if (!strncmp(status.type, "max", 3))
+        axis->endstop_is_max = true;
+      else
+        axis->endstop_is_max = false;
     }
 
     CORE_EVENT_REGISTER(axis, OBJECT_TYPE_ENDSTOP, OBJECT_EVENT_ENDSTOP_TRIGGER,
@@ -128,11 +136,16 @@ static void axis_event_handler(core_object_t *object, const char *name,
 	axis->homed = true;
 }
 
+#define step_distance(motor)                                                   \
+    ((double)(motor.steps - motor.initial_step) / motor.steps_per_mm)
+
 static void axis_update(core_object_t *object, uint64_t ticks,
 			uint64_t runtime) {
     axis_t *axis = (axis_t *)object;
-    stepper_status_t stepper_status;
-    double average_position = 0;
+    coordinates_t coords = { 0 };
+    coordinates_t distance = { 0 };
+    kinematics_type_t kinematics = kinematics_type_get();
+    double average_distance = 0.0;
     size_t i;
 
     /* TODO: need to figure out how to limit the stepper
@@ -141,21 +154,49 @@ static void axis_update(core_object_t *object, uint64_t ticks,
      *    - have the axis somehow set limits on the number of
      *      steps the stepper can perform.
      */
-
-    for (i = 0; i < axis->n_motors; i++)
-        axis->motors[i].obj->get_state(axis->motors[i].obj, &stepper_status);
-
-    /*
-     * Average out the axis position based on the position of
-     * motor.
-     */
     for (i = 0; i < axis->n_motors; i++) {
-        average_position += (stepper_status.steps * axis->travel_per_step) -
-                            axis->motors[i].position;
-        axis->motors[i].position = stepper_status.steps * axis->travel_per_step;
+        axis->motors[i].obj->get_state(axis->motors[i].obj, &stepper_status);
+	axis->motors[i].steps = stepper_status.steps;
     }
 
-    axis->position += (average_position / axis->n_motors);
+    if (kinematics == KINEMATICS_COREXY &&
+	(axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Y)) {
+	coords.x = step_distance(axis->motors[0]);
+	coords.y = step_distance(axis->motors[1]);
+    } else if (kinematics == KINEMATICS_COREXZ &&
+	(axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Z)) {
+	coords.x = step_distance(axis->motors[0]);
+	coords.z = step_distance(axis->motors[1]);
+    } else {
+	/*
+	 * Average out the axis position based on the position of
+	 * motor.
+	 */
+	for (i = 0; i < axis->n_motors; i++)
+	    average_distance += step_distance(axis->motors[i]);
+
+	coords.x = average_distance / axis->n_motors;
+    }
+
+    compute_axis_movement(&coords, &distance);
+
+    switch (kinematics) {
+    case KINEMATICS_COREXY:
+	if (axis->type != AXIS_TYPE_Y)
+	    axis->position = axis->start_position + distance.x;
+	else
+	    axis->position = axis->start_position + distance.y;
+	break;
+    case KINEMATICS_COREXZ:
+	if (axis->type != AXIS_TYPE_Z)
+	    axis->position = axis->start_position + distance.x;
+	else
+	    axis->position = axis->start_position + distance.y;
+	break;
+    default:
+	axis->position = axis->start_position + distance.x;
+	break;
+    }
 
     log_debug(axis, "position: %.15f, homed: %u, command: %u",
 	      axis->position, axis->homed);
@@ -175,8 +216,10 @@ static void axis_status(core_object_t *object, void *status) {
 
     s->homed = axis->homed;
     s->length = axis->length;
+    s->type = axis->type;
     s->position = axis->position;
-    s->travel_per_step = axis->travel_per_step;
+    if (axis->endstop_name)
+	strncpy(s->endstop, axis->endstop_name, sizeof(s->endstop));
     memset(s->motors, 0, sizeof(s->motors));
     for (i = 0; i < axis->n_motors; i++) {
         strncpy(s->motors[i], axis->motors[i].name, ARRAY_SIZE(s->motors[i]));
@@ -200,6 +243,7 @@ axis_t *object_create(const char *name, void *config_ptr) {
     axis_t *axis;
     axis_config_params_t *config = (axis_config_params_t *)config_ptr;
     const char *stepper;
+    kinematics_type_t kinematics = kinematics_type_get();
     size_t i = 0;
 
     if (object_cache_create(&axis_event_cache,
@@ -222,6 +266,8 @@ axis_t *object_create(const char *name, void *config_ptr) {
     if (config->endstop[0] != '\0')
 	axis->endstop_name = strdup(config->endstop);
 
+    axis->type = kinematics_axis_type_from_char(config->type);
+
     /* First, we have to find out how many motors are
      * defined.
      */
@@ -239,12 +285,23 @@ axis_t *object_create(const char *name, void *config_ptr) {
     }
 
     axis->n_motors = i;
+    if (((kinematics == KINEMATICS_COREXY &&
+	 (axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Y))
+	|| (kinematics == KINEMATICS_COREXZ &&
+	    (axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Z))) &&
+	axis->n_motors != 2) {
+	log_error(axis, "Kinematics model requires 2 motors for axis");
+	free(axis->motors);
+	object_cache_destroy(axis_event_cache);
+	free((char *)axis->endstop_name);
+	free(axis);
+	return NULL;
+    }
+
     for (i = 0; i < axis->n_motors; i++)
 	axis->motors[i].name = strdup(config->steppers[i]);
 
-    axis->travel_per_step = config->travel_per_step;
     axis->length = config->length;
-    axis->homed = false;
 
     return axis;
 }

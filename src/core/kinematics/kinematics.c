@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <errno.h>
+#include <ctype.h>
 #include "kinematics.h"
 #include "cartesian.h"
 #include "corexy.h"
@@ -42,6 +43,37 @@ int kinematics_type_set(kinematics_type_t type) {
 
 kinematics_type_t kinematics_type_get(void) {
     return core_kinematics_type;
+}
+
+axis_type_t kinematics_axis_type_from_char(char type_char) {
+    axis_type_t type;
+
+    type_char = tolower(type_char);
+    switch (type_char) {
+    case 'x':
+	type = AXIS_TYPE_X;
+	break;
+    case 'y':
+	type = AXIS_TYPE_Y;
+	break;
+    case 'z':
+	type = AXIS_TYPE_Z;
+	break;
+    case 'a':
+	type = AXIS_TYPE_A;
+	break;
+    case 'b':
+	type = AXIS_TYPE_B;
+	break;
+    case 'c':
+	type = AXIS_TYPE_C;
+	break;
+    case 'e':
+	type = AXIS_TYPE_E;
+	break;
+    }
+
+    return type;
 }
 
 int compute_motor_movement(coordinates_t *delta, coordinates_t *movement) {

@@ -31,6 +31,7 @@ typedef struct {
     uint32_t steps_per_rotation;
     uint32_t microsteps;
     uint32_t start_speed;
+    uint32_t steps_per_mm;
     const char driver[16];
 } stepper_config_params_t;
 
@@ -46,10 +47,11 @@ typedef struct {
     core_object_command_t *current_cmd;
     uint16_t steps_per_rotation;
     uint8_t microsteps;
+    uint32_t steps_per_mm;
     uint64_t last_timestep;
+    uint64_t move_steps;
     double current_step;
-    float steps;
-    float move_steps;
+    double steps;
     double rps;
     double spns;
     accel_data_t accel;
@@ -96,6 +98,7 @@ stepper_t *object_create(const char *name, void *config_ptr) {
     stepper->object.name = strdup(name);
     stepper->steps_per_rotation = config->steps_per_rotation;
     stepper->microsteps = config->microsteps;
+    stepper->steps_per_mm = config->steps_per_mm;
     stepper->spns = (double)config->start_speed / SEC_TO_NSEC(1);
 
     if (object_cache_create(&stepper_event_cache,
@@ -199,12 +202,13 @@ void stepper_status(core_object_t *object, void *status) {
     stepper_t *stepper = (stepper_t *)object;
 
     s->enabled = stepper->enabled;
-    s->steps = stepper->current_step;
+    s->steps = (int64_t)stepper->current_step;
     s->spr = stepper->steps_per_rotation;
     s->microsteps = stepper->microsteps;
     s->speed = stepper->spns;
     s->accel = stepper->accel.rate;
     s->decel = stepper->accel.rate;
+    s->steps_per_mm = stepper->steps_per_mm;
 }
 
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
