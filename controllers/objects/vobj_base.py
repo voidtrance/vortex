@@ -22,11 +22,12 @@ class VirtualObjectBase:
     # Virtual objects don't have events
     events = []
     virtual = True
-    def __init__(self, config, obj_lookup, obj_query, event_submit):
+    def __init__(self, config, obj_lookup, obj_query, cmd_complete, event_submit):
         self.config = config
         self.lookup = obj_lookup
         self.query = obj_query
         self._event_submit = event_submit
+        self._cmd_complete = cmd_complete
         self._id = -1
     def exec_command(self, cmd_id, cmd, opts):
         if not self.commands:
@@ -39,7 +40,10 @@ class VirtualObjectBase:
         if not command:
             return -errno.EINVAL
         for arg in command[2]:
-            if not opts.get(arg, None):
+            if opts.get(arg, None) is None:
                 return -errno.EINVAL
+        return 0
     def event_submit(self, event, data):
         self._event_submit(event, self._id, data)
+    def complete_command(self, cmd_id, status):
+        self._cmd_complete(cmd_id, status)

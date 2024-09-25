@@ -178,6 +178,7 @@ class Emulator:
                                                 command.cmd_id, command.opts)
             if ret:
                 logging.error(f"Failed to execute command: {strerror(abs(ret))}")
+                self._frontend.complete_command(command.id, ret)
             time.sleep(0.001)
             
 

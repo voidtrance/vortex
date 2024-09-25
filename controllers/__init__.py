@@ -156,6 +156,7 @@ class Controller(core.VortexCore):
             if self.object_defs[klass].virtual:
                 obj = self.object_defs[klass](options, self.objects,
                                               self.query_objects,
+                                              self.virtual_command_complete,
                                               self.event_submit)
                 object_id = self.register_virtual_object(klass, name)
                 obj._id = object_id
@@ -170,6 +171,11 @@ class Controller(core.VortexCore):
                     continue
                 object_id = self.create_object(klass, name, ctypes.addressof(obj_conf))
             self._objects.add_object(klass, name, object_id)
+    def start(self, frequency, completion_cb):
+        self._completion_callback = completion_cb
+        super().start(frequency, self._completion_callback)
+    def virtual_command_complete(self, cmd_id, status):
+        self._completion_callback(cmd_id, status)
     def get_params(self):
         params = {'commands': [], 'pins': [], "objects": [], "events": {}}
         cmds = {x: [] for x in ModuleTypes}
@@ -241,16 +247,28 @@ class Controller(core.VortexCore):
             except TypeError as e:
                 logging.error(f"Failed to convert command options: {str(e)}")
             return opts_struct
+        for opt, value in opts.items():
+            if value.lower() in ("true", "false"):
+                value = True if value.lower() == "true" else False
+            else:
+                try:
+                    value = float(value)
+                except ValueError:
+                    try:
+                        value = int(value)
+                    except ValueError:
+                        pass
+            opts[opt] = value
         return opts
     def exec_command(self, command_id, object_id, subcommand_id, opts=None):
         object = self.objects.object_by_id(object_id)
-        args = 0
+        if opts is not None:
+            opts = self._convert_opts(object.klass, subcommand_id, opts)
         if not self.object_defs[object.klass].virtual:
+            args = 0
             if opts is not None:
-                opts = self._convert_opts(object.klass, subcommand_id, opts)
-                if opts is not None:
-                    args = ctypes.addressof(opts)
-                return super().exec_command(command_id, object_id, subcommand_id, args)
+                args = ctypes.addressof(opts)
+            return super().exec_command(command_id, object_id, subcommand_id, args)
         else:
             return self._virtual_objects[object_id].exec_command(command_id,
                                                                  subcommand_id, opts)

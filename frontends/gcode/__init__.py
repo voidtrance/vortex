@@ -21,12 +21,14 @@ import vortex.lib.constants as constants
 import vortex.lib.ext_enum as enum
 from vortex.frontends import BaseFrontend
 from vortex.controllers.types import ModuleTypes, ModuleEvents
-from vortex.emulator.kinematics import Coordinate, AxisType
+from vortex.emulator.kinematics import AxisType
+from vortex.frontends.proto import CommandStatus, Completion
 
 @enum.unique
 class CoordinateType(enum.ExtIntEnum):
     ABSOLUTE = enum.auto()
     RELATIVE = enum.auto()
+
 class GCodeFrontend(BaseFrontend):
     def __init__(self):
         super().__init__()
@@ -43,11 +45,17 @@ class GCodeFrontend(BaseFrontend):
         if not handler:
             logging.error(f"No handler for command {cmd.command}")
             return
-        handler(cmd)
+        status = handler(cmd)
+        if not isinstance(status, CommandStatus):
+            super().respond(CommandStatus.QUEUED, status)
+        else:
+            data = True if status == CommandStatus.SUCCESS else False
+            super().respond(status, data)
 
     def complete_command(self, id, result):
         logging.debug(f"Command {id} complete: {result}")
         super().complete_command(id, result)
+        super().respond(CommandStatus.COMPLETE, Completion(id, result))
 
     def event_handler(self, klass, event, owner, data):
         print("gcode handler:", klass, event, owner, data)
@@ -59,7 +67,6 @@ class GCodeFrontend(BaseFrontend):
         axis_distance = position - status[axis_id]["position"]
         motor_ids = [self.get_object_id(ModuleTypes.STEPPER, x) \
                       for x in status[axis_id]["motors"] if x]
-        print(motor_ids)
         motor_status = self.query_object(motor_ids)
         current_positions = [motor_status[x]["steps"] for x in motor_ids]
         new_position = [axis_distance * motor_status[x]["steps_per_mm"] \
@@ -109,7 +116,7 @@ class GCodeFrontend(BaseFrontend):
             axis_id = [x for x in axes_status if axes_status[x]["type"] == axis_type]
             if len(axis_id) == 0:
                 logging.error(f"Did not find axis of type '{axis.name.upper()}")
-                return
+                return CommandStatus.FAIL
             axis_id = axis_id[0]
             if coordinates == CoordinateType.RELATIVE:
                 axis_position = axes_status[axis_id]["position"] + axis.value
@@ -117,8 +124,9 @@ class GCodeFrontend(BaseFrontend):
                 axis_position = axis.value
             cmds = self.move_to_position(axis_id, axis_position)
         self.wait_for_command(cmds)
+        return CommandStatus.SUCCESS
     def G1(self, cmd):
-        self.G0(cmd)
+        return self.G0(cmd)
     def G4(self, cmd):
         if not cmd.has_params():
             while self._command_completion:
@@ -126,6 +134,7 @@ class GCodeFrontend(BaseFrontend):
         else:
             dwell = cmd.get_param("S") or cmd.get_param("P")
             time.sleep(dwell / constants.SEC2MSEC)
+        return CommandStatus.SUCCESS
     def G28(self, cmd):
         klass = ModuleTypes.AXIS
         if not cmd.has_params():
@@ -158,10 +167,13 @@ class GCodeFrontend(BaseFrontend):
             else:
                 cmds = self.move_to_position(axis, 0)
             self.wait_for_command(cmds)
+        return CommandStatus.SUCCESS
     def G90(self, cmd):
         self.coordinates = CoordinateType.ABSOLUTE
+        return CommandStatus.SUCCESS
     def G91(self, cmd):
         self.coordinates = CoordinateType.RELATIVE
+        return CommandStatus.SUCCESS
     def M0(self, cmd):
         self.M400(None)
         wait_time = 0.
@@ -173,6 +185,7 @@ class GCodeFrontend(BaseFrontend):
             time.sleep(wait_time)
         self.reset()
         self.is_reset = True
+        return CommandStatus.SUCCESS
     def M1(self, cmd):
         self.M400(None)
         reset_objects = []
@@ -187,10 +200,13 @@ class GCodeFrontend(BaseFrontend):
         if wait_time:
             time.sleep(wait_time)
         self.reset(reset_objects)
+        return CommandStatus.SUCCESS
     def M82(self, cmd):
         self.extruder_coordinates = CoordinateType.ABSOLUTE
+        return CommandStatus.SUCCESS
     def M83(self, cmd):
         self.extruder_coordinates = CoordinateType.RELATIVE
+        return CommandStatus.SUCCESS
     def M104(self, cmd):
         object = self.find_object(ModuleTypes.HEATER, "extruder", "hotend")
         if object:
@@ -200,8 +216,12 @@ class GCodeFrontend(BaseFrontend):
                                         f"temperature={temp.value}", 0)
             if cmd_id is False:
                 logging.error("Failed to queue command")
+                return CommandStatus.FAIL
             if cmd.command_code == 109:
                 self.wait_for_command(cmd_id)
+                return CommandStatus.SUCCESS
+            return cmd_id
+        return CommandStatus.FAIL
     def M106(self, cmd):
         object = self.find_object(ModuleTypes.FAN, "fan1", "fan", "extruder", "hostend")
         if object:
@@ -209,14 +229,18 @@ class GCodeFrontend(BaseFrontend):
             if self.queue_command(ModuleTypes.FAN, object,
                                   "set_speed", f"speed={speed.value}", 0) is False:
                 logging.error("Failed to queue command")
+                return CommandStatus.FAIL
+            return CommandStatus.SUCCESS
+        return CommandStatus.FAIL
     def M107(self, cmd):
         cmd = gcmd.GCodeCommand("M106 S0")
-        self.M106(cmd)
+        return self.M106(cmd)
     def M109(self, cmd):
-        self.M104(cmd)
+        return self.M104(cmd)
     def M112(self, cmd):
         self.reset()
         self.is_reset = True
+        return CommandStatus.SUCCESS
     def M140(self, cmd):
         object = self.find_object(ModuleTypes.HEATER, "bed", "surface")
         if object:
@@ -227,10 +251,14 @@ class GCodeFrontend(BaseFrontend):
                                         f"temperature={temp.value}", 0)
             if cmd_id is False:
                 logging.error("Failed to queue command")
+                return CommandStatus.FAIL
             if cmd.command_code == 190:
                 self.wait_for_command(cmd_id)
+                return CommandStatus.SUCCESS
+            return cmd_id
+        return CommandStatus.FAIL
     def M190(self, cmd):
-        self.M140(cmd)
+        return self.M140(cmd)
     def M204(self, cmd):
         accel = cmd.get_param("S")
         axes = self.get_object_set(ModuleTypes.AXIS)
@@ -238,20 +266,28 @@ class GCodeFrontend(BaseFrontend):
             axes.remove("e")
         axes_ids = [self.get_object_id(ModuleTypes.AXIS, x) for x in axes]
         status = self.query_object(axes_ids)
+        cmds = []
         for axis in status:
             for motor in status[axis]["motors"]:
                 if not motor:
                     continue
-                if self.queue_command(ModuleTypes.STEPPER, motor,
+                cmd_id = self.queue_command(ModuleTypes.STEPPER, motor,
                                       "set_accel",
-                                      f"accel={accel.value},decel=0", 0) is False:
+                                      f"accel={accel.value},decel=0", 0)
+                if cmd_id is False:
                     logging.error("Failed to queue command")
+                    return CommandStatus.FAIL
+                cmds.append(cmd_id)
+        self.wait_for_commands(cmds)
+        return CommandStatus.SUCCESS
     def M400(self, cmd):
         while self._command_completion:
             time.sleep(0.1)
+        return CommandStatus.SUCCESS
     def M999(self, cmd):
         object = self._obj_name_2_id[ModuleTypes.TOOLHEAD]['tool1']
         print(self.query_object([object]))
+        return CommandStatus.SUCCESS
 
 def create():
     return GCodeFrontend()

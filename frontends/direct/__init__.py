@@ -16,6 +16,7 @@
 import logging
 from vortex.frontends import BaseFrontend
 from vortex.controllers.types import ModuleTypes
+from vortex.frontends.proto import CommandStatus, Completion
 
 class DirectFrontend(BaseFrontend):
     def __init__(self):
@@ -38,13 +39,18 @@ class DirectFrontend(BaseFrontend):
             return
 
         klass = ModuleTypes[klass]
-        if self.queue_command(klass, object, cmd,
-                              opts, timestamp) is False:
+        cmd_id = self.queue_command(klass, object, cmd,
+                              opts, timestamp)
+        if cmd_id is False:
             logging.error("Failed to queue command")
+            super().respond(CommandStatus.FAIL, False)
+        else:
+            super().respond(CommandStatus.QUEUED, cmd_id)
 
     def complete_command(self, id, result):
         logging.debug(f"Command {id} complete: {result}")
         super().complete_command(id, result)
+        super().respond(CommandStatus.COMPLETE, Completion(id, result))
 
     def event_handler(self, event, owner, timestamp, *args):
         super().event_handler(event, owner, timestamp, *args)

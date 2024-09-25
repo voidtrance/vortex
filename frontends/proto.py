@@ -13,20 +13,16 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.controllers.objects.vobj_base as vobj
-from vortex.controllers.types import ModuleTypes
+from collections import namedtuple
+from vortex.lib.ext_enum import ExtIntEnum, auto
 
-class Fan(vobj.VirtualObjectBase):
-    type = ModuleTypes.FAN
-    commands = [(0, "set_speed", ["speed"], None)]
-    def __init__(self, *args):
-        super().__init__(*args)
-        self._speed = 0.0
-    def exec_command(self, cmd_id, cmd, opts):
-        ret = super().exec_command(cmd_id, cmd, opts)
-        if ret:
-            return ret
-        self._speed = float(opts.get("speed")) / 100
-        self.complete_command(cmd_id, 0)
-    def get_status(self):
-        return {"speed" : self._speed}
+__all__ = ["CommandStatus", "Response", "Completion"]
+
+class CommandStatus(ExtIntEnum):
+    SUCCESS = auto()
+    FAIL = auto()
+    QUEUED = auto()
+    COMPLETE = auto()
+
+Response = namedtuple("Response", ["status", "data"])
+Completion = namedtuple("Completion", ["id", "status"])

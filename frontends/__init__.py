@@ -19,8 +19,11 @@ import logging
 import select
 import os
 import time
+import pickle
+import threading
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends.lib import create_pty
+from vortex.frontends.proto import *
 
 class BaseFrontend:
     PIPE_PATH = "/tmp/vortex"
@@ -31,6 +34,7 @@ class BaseFrontend:
         self._obj_name_2_id = {x: {} for x in ModuleTypes}
         self._obj_id_2_name = {x: {} for x in ModuleTypes}
         self._command_completion = {}
+        self._command_completion_lock = threading.Lock()
         self._run = True
         self._run_sequential = False
         self._query = None
@@ -160,17 +164,24 @@ class BaseFrontend:
             return False
         opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
 
-        logging.debug(f"Submitting command: {obj_id} {cmd_id} {opts} {timestamp}")
-        cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
-        logging.debug(f"Command ID:{cmd_id}")
-        self._command_completion[cmd_id] = cmd
+        logging.debug(f"Submitting command: {self.get_object_name(klass, obj_id)} {cmd_id} {opts} {timestamp}")
+        with self._command_completion_lock:
+            cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
+            logging.debug(f"Command ID:{cmd_id}")
+            self._command_completion[cmd_id] = cmd
         if self._run_sequential:
             self.wait_for_command(cmd_id)
         return cmd_id
 
     def complete_command(self, id, result):
-        self._command_completion.pop(id)
+        with self._command_completion_lock:
+            self._command_completion.pop(id)
 
+    def respond(self, code, data):
+        response = Response(code, data)
+        response = pickle.dumps(response)
+        self._fd.write(b'#$' + response + b'$#')
+        
     def __del__(self):
         self._fd.close()
         os.unlink(self.PIPE_PATH)
