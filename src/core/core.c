@@ -192,13 +192,6 @@ static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
 	return NULL;
     }
 
-    if (controller_work_thread_create(core_process_work, core, 0)) {
-	object_cache_destroy(core->event_cache);
-	free(core->completions);
-	type->tp_free((PyObject *)core);
-	return NULL;
-    }
-
     core_call_data.object_lookup = core_object_find;
     core_call_data.object_list = core_object_list;
     core_call_data.completion_callback = core_object_command_complete;
@@ -295,6 +288,12 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
     }
 
     Py_INCREF(core->python_complete_cb);
+
+    if (controller_work_thread_create(core_process_work, self,
+				      KHZ_TO_HZ(500))) {
+	PyErr_Format(VortexCoreError, "Failed to start processing thread");
+	return NULL;
+    }
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
 	core_object_t *object;
@@ -563,6 +562,9 @@ static PyObject *core_exec_command(PyObject *self, PyObject *args,
         return NULL;
     }
 
+    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+             "Submitting %u for %s %s", obj_cmd_id,
+	     ObjectTypeNames[object->type], object->name);
     if (object->exec_command) {
 	cmd->command_id = cmd_id;
 	cmd->object_cmd_id = obj_cmd_id;
