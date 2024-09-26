@@ -74,12 +74,12 @@ class Thermistor(ObjectDef):
 class Heater(ObjectDef):
     class HeaterConfig(ctypes.Structure):
         _fields_ = [("power", ctypes.c_uint16),
-                    ("max_temp", ctypes.c_uint32)]
+                    ("max_temp", ctypes.c_float)]
     class HeaterSetTempCommandOpts(ctypes.Structure):
-        _fields_ = [("temperature", ctypes.c_uint32)]
+        _fields_ = [("temperature", ctypes.c_float)]
     class HeaterStatus(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float),
-                    ("max_temp", ctypes.c_uint32)]
+                    ("max_temp", ctypes.c_float)]
     class HeaterEventTempReached(ctypes.Structure):
         _fields_ = [("temp", ctypes.c_float)]
     def __init__(self):

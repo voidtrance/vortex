@@ -24,12 +24,12 @@ enum {
 };
 
 struct heater_set_temperature_args {
-    uint32_t temperature;
+    float temperature;
 };
 
 typedef struct {
     float temperature;
-    uint32_t max_temp;
+    float max_temp;
 } heater_status_t;
 
 #endif

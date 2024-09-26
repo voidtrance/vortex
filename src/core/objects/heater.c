@@ -27,11 +27,11 @@
 #include "heater.h"
 #include <cache.h>
 
-#define AMBIENT_TEMP 25
+#define AMBIENT_TEMP 25.0
 
 typedef struct {
     uint16_t power;
-    uint32_t max_temp;
+    float max_temp;
 } heater_config_params_t;
 
 typedef struct {
@@ -42,7 +42,7 @@ typedef struct {
     float target_temp;
     float base_temp;
     float temp;
-    uint32_t max_temp;
+    float max_temp;
     uint64_t max_ramp_duration;
     uint64_t pos;
 } heater_t;
@@ -82,12 +82,14 @@ heater_t *object_create(const char *name, void *config_ptr) {
 	return NULL;
     }
 
+    heater_reset((core_object_t *)heater);
     return heater;
 }
 
 static void heater_reset(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
 
+    heater->temp = AMBIENT_TEMP;
     heater->base_temp = heater->temp;
     heater->target_temp = AMBIENT_TEMP;
 }
@@ -105,15 +107,12 @@ static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
 	args->temperature > heater->max_temp)
 	return -1;
 
-    heater->set_temp = args->temperature;
-    if (heater->set_temp > AMBIENT_TEMP) {
-        heater->base_temp = AMBIENT_TEMP;
-        heater->target_temp = heater->set_temp;
-    } else {
-	heater->base_temp = heater->temp;
-	heater->target_temp = AMBIENT_TEMP;
-    }
+    heater->pos = 0;
+    heater->base_temp = heater->temp;
+    heater->target_temp = args->temperature;
 
+    log_debug(heater, "base: %.15f, target: %.15f, temp: %.15f",
+	      heater->base_temp, heater->target_temp, heater->temp);
     return 0;
 }
 
@@ -137,10 +136,10 @@ static float interpolate(uint64_t *p_pos, float base, float limit,
     uint64_t pos = *p_pos;
     float val;
 
-    if (base <= limit)
-	pos = min(pos + time_delta, dur);
+    if (pos + time_delta < dur)
+	pos += time_delta;
     else
-	pos = max(pos - time_delta, 0);
+	pos = dur;
     step_val = (float)pos / dur;
     if (base <= limit)
 	val = (base + (limit - base) * powout(step_val, 3));
@@ -159,19 +158,22 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     uint64_t duration;
 
     heater->timestep = timestep;
-    if (heater->set_temp == 0.0 || heater->temp == heater->set_temp)
+    if (heater->temp == heater->target_temp)
        return;
 
     /*
      * Use interpolation function to approximate temperature
      * ramp.
      */
-    duration = heater->max_ramp_duration *
-	(heater->target_temp / heater->max_temp);
+    if (heater->target_temp < heater->base_temp)
+	duration = heater->max_ramp_duration;
+    else
+	duration = heater->max_ramp_duration *
+	    (heater->target_temp / heater->max_temp);
     heater->temp = interpolate(&heater->pos, heater->base_temp,
 			       heater->target_temp, time_delta,
 			       duration);
-    heater->temp = roundl(heater->temp * 100) / 100;
+    heater->temp = roundf(heater->temp * 1000) / 1000;
     log_debug(heater, "heater %s temp: %f", heater->object.name, heater->temp);
 
     if (heater->temp != heater->target_temp)
