@@ -130,13 +130,15 @@ class Axis(ObjectDef):
 
 class Probe(ObjectDef):
     class ProbeConfig(ctypes.Structure):
-        _fields_ = [("z_offset", ctypes.c_float),
+        _fields_ = [("toolhead", ctypes.c_char * 64),
+                    ("offsets", ctypes.c_float * len(AxisType)),
                     ("range", ctypes.c_float)]
     class ProbeStatus(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool),
-                    ("position", ctypes.c_double)]
+                    ("offsets", ctypes.c_float * len(AxisType)),
+                    ("position", ctypes.c_double * len(AxisType))]
     class ProbeEventTriggered(ctypes.Structure):
-        _fields_ = [("position", ctypes.c_double)]
+        _fields_ = [("position", ctypes.c_double * len(AxisType))]
     def __init__(self):
         super().__init__(ModuleTypes.PROBE)
         self.events = {ModuleEvents.PROBE_TRIGGERED: self.ProbeEventTriggered}

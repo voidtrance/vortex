@@ -19,14 +19,16 @@
 #define __PROBE_H__
 #include <stdint.h>
 #include <stdbool.h>
+#include <kinematics.h>
 
 typedef struct {
     bool triggered;
-    double position;
+    float offsets[AXIS_TYPE_MAX];
+    double position[AXIS_TYPE_MAX];
 } probe_status_t;
 
 typedef struct {
-    double position;
+    double position[AXIS_TYPE_MAX];
 } probe_trigger_event_data_t;
 
 #endif
