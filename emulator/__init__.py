@@ -18,6 +18,7 @@ import logging
 import importlib
 import time
 from os import strerror
+from re import search
 from collections import OrderedDict
 from vortex.lib.constants import *
 from vortex.core import VortexCoreError
@@ -129,6 +130,11 @@ class Emulator:
         self._monitor = None
 
     def set_frequency(self, frequency=0):
+        if isinstance(frequency, str):
+            i = search(r'\d*', frequency).end()
+            frequency, order = int(frequency[:i]), frequency[i:].upper()
+            logging.debug(f"{frequency} {order}, {order}2HZ, {eval(f"{order}2HZ")}")
+            frequency = frequency * eval(f"{order}2HZ")
         if (frequency / MHZ2HZ) > 10:
             logging.warning("Frequency greater than 10MHz may result in inaccurate timing")
         self._frequency = frequency or self._controller.FREQUENCY
