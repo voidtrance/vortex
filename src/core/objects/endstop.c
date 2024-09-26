@@ -103,6 +103,8 @@ static void endstop_update(core_object_t *object, uint64_t ticks,
     bool state = endstop->triggered;
 
     endstop->axis->get_state(endstop->axis, &status);
+    log_debug(endstop, "type: %u, position: %.15f, state: %u",
+	      endstop->type, status.position, state);
     if ((endstop->type == ENDSTOP_TYPE_MIN && status.position == 0) ||
 	(endstop->type == ENDSTOP_TYPE_MAX && status.position == status.length))
 	endstop->triggered = true;
@@ -129,6 +131,7 @@ static void endstop_status(core_object_t *object, void *status) {
     endstop_status_t *s = (endstop_status_t *)status;
 
     s->triggered = endstop->triggered;
+    s->axis = endstop->axis_type;
     strncpy((char *)s->type, endstop_type_names[endstop->type], 3);
 }
 

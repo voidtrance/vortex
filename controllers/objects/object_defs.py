@@ -93,7 +93,8 @@ class Endstop(ObjectDef):
                     ("axis", ctypes.c_char)]
     class EndstopStatus(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool),
-                    ("type", ctypes.c_char * 4)]
+                    ("type", ctypes.c_char * 4),
+                    ("axis", ctypes.c_int)]
     class EndstopTriggerEvent(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool)]
     def __init__(self):

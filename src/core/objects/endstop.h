@@ -18,10 +18,12 @@
 #ifndef __ENDSTOP_H__
 #define __ENDSTOP_H__
 #include <stdbool.h>
+#include <kinematics.h>
 
 typedef struct {
     bool triggered;
     const char type[4];
+    axis_type_t axis;
 } endstop_status_t;
 
 #endif
