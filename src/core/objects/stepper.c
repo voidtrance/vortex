@@ -177,7 +177,7 @@ int stepper_move(core_object_t *object, void *args) {
     stepper->accel.start = 0;
     stepper->decel.start = 0;
 
-    log_debug(stepper, "Stepper %s moving %.20f steps in %u",
+    log_debug(stepper, "Stepper %s moving %lu steps in %u",
 	      stepper->object.name, stepper->move_steps, stepper->dir);
     return 0;
 }
@@ -202,7 +202,7 @@ void stepper_status(core_object_t *object, void *status) {
     stepper_t *stepper = (stepper_t *)object;
 
     s->enabled = stepper->enabled;
-    s->steps = (int64_t)stepper->current_step;
+    s->steps = (int64_t)round(stepper->current_step);
     s->spr = stepper->steps_per_rotation;
     s->microsteps = stepper->microsteps;
     s->speed = stepper->spns;
