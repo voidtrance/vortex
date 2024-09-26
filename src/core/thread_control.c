@@ -67,13 +67,13 @@ static void *core_update_thread(void *arg) {
     struct core_thread_args *args = (struct core_thread_args *)arg;
     core_object_t *object = args->data;
     struct timespec ts, te;
-    float tick = (1000.0 / (args->frequency / 1000000));
+    float tick = (1000.0 / ((float)args->frequency / 1000000));
     uint64_t ticks = 0;
     uint64_t runtime = 0;
     int64_t sleep_counter = 0;
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, args->name, "step duration: %f",
-	     tick);
+             tick);
     args->ret = 0;
     while (*(volatile int *)args->control == 1) {
 	int64_t delay;
@@ -90,6 +90,7 @@ static void *core_update_thread(void *arg) {
 	clock_gettime(CLOCK_MONOTONIC_RAW, &te);
 	time = timespec_delta(ts, te);
 	delay = (int64_t)tick - time;
+	sleep_counter += delay;
         if (delay <= 0 || delay > tick)
 	    goto count;
         te.tv_nsec += (uint64_t)delay;
@@ -113,7 +114,10 @@ static void *core_generic_thread(void *arg) {
 
     args->ret = 0;
     if (args->frequency)
-	step_duration = ((float)1000 / (args->frequency / 1000000));
+	step_duration = ((float)1000 / ((float)args->frequency / 1000000));
+
+    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core", "step duration: %f",
+             step_duration);
 
     while (*(volatile int *)args->control == 1) {
 	long delay;
@@ -213,6 +217,7 @@ int controller_work_thread_create(work_callback_t callback, void *user_data,
     STAILQ_INSERT_TAIL(&core_threads, data, entry);
     return 0;
 }
+
 int controller_thread_start(void) {
     core_control_data_t *data;
     int ret;
