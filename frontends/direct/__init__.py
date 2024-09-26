@@ -23,10 +23,10 @@ class DirectFrontend(BaseFrontend):
         super().__init__()
 
     def _process_command(self, data):
-        cmd = data.decode()
-        logging.debug(f"Received command: {cmd.strip()}")
+        cmd = data.decode().strip()
+        logging.debug(f"Received command: {cmd}")
         try:
-            parts = cmd.strip().split(':', maxsplit=4)
+            parts = cmd.split(':', maxsplit=4)
             klass, object, cmd = parts[:3]
             opts = ""
             timestamp = 0
@@ -35,7 +35,14 @@ class DirectFrontend(BaseFrontend):
             if len(parts) == 5:
                 timestamp = int(parts[4])
         except ValueError as e:
-            logging.error(f"Unable to parse command: {e}")
+            if cmd == "reset":
+                status = self.reset()
+                if status:
+                    super().respond(CommandStatus.SUCCESS, True)
+                else:
+                    super().respond(CommandStatus.FAIL, False)
+            else:
+                logging.error(f"Unable to parse command: {e}")
             return
 
         klass = ModuleTypes[klass]
