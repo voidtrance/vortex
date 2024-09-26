@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
 from vortex.controllers.types import ModuleTypes
+from errno import *
 
 class Fan(vobj.VirtualObjectBase):
     type = ModuleTypes.FAN
@@ -26,6 +27,9 @@ class Fan(vobj.VirtualObjectBase):
         ret = super().exec_command(cmd_id, cmd, opts)
         if ret:
             return ret
+        speed = float(opts.get("speed"))
+        if speed <= 0. or speed >= 100.:
+            return -EINVAL
         self._speed = float(opts.get("speed")) / 100
         self.complete_command(cmd_id, 0)
     def get_status(self):
