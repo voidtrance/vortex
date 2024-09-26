@@ -31,8 +31,17 @@
 #define GHZ_TO_NSEC(x) (1/(x))
 #define HZ_TO_NSEC(x) MHZ_TO_NSEC((x) / MHZ_TO_HZ(1))
 
-#define max(a, b) ((a <= (typeof(a))b) ? b : a)
-#define min(a, b) ((a <= (typeof(a))b) ? a : b)
+#define max(a, b) ({__typeof__(a) _a = a; \
+	    __typeof__(b) _b = b;	  \
+	    _a <= _b ? _b : _a; })
+#define min(a, b) ({__typeof__(a) _a = a;	\
+	    __typeof__(b) _b = b;		\
+	    _a <= _b ? _a : _b; })
+
+static inline double clamp(double d, double min, double max) {
+    const double t = d < min ? min : d;
+    return t > max ? max : t;
+}
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 

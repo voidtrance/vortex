@@ -198,15 +198,10 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 	break;
     }
 
-    log_debug(axis, "position: %.15f, homed: %u, command: %u",
-	      axis->position, axis->homed);
+    if (axis->length != AXIS_NO_LENGTH)
+	axis->position = clamp(axis->position, 0.0, (double)axis->length);
 
-    if (axis->length != AXIS_NO_LENGTH) {
-	if (!axis->endstop_is_max && axis->position <= 0)
-	    axis->position = 0;
-	else if (axis->endstop_is_max && axis->position >= axis->length)
-	    axis->position = axis->length;
-    }
+    log_debug(axis, "position: %.15f, homed: %u", axis->position, axis->homed);
 }
 
 static void axis_status(core_object_t *object, void *status) {

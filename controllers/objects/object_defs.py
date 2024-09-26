@@ -115,7 +115,7 @@ class Axis(ObjectDef):
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
                     ("length", ctypes.c_float),
-                    ("axis", ctypes.c_int),
+                    ("type", ctypes.c_int),
                     ("position", ctypes.c_double),
                     ("motors", (ctypes.c_char * 64) * 8),
                     ("endstop", ctypes.c_char * 64)]
