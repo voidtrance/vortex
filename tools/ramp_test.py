@@ -175,6 +175,10 @@ def ramp(a, b, dur, mode):
         val = (a - (a-b)*calc(k,mode))
     return val
 
+if len(sys.argv) == 0:
+    print("ramp_test.py <start> <end> <duration> <algorithm>")
+    sys.exit(0)
+
 a = float(sys.argv[1])
 b = float(sys.argv[2])
 d = float(sys.argv[3])
@@ -182,7 +186,7 @@ c = eval(f"{sys.argv[4].upper()}")
 
 x = a
 step = 1
-while x < b:
+while x != b:
     x = ramp(a, b, d, c)
     print(f"{int(time.time())}: temp {x:f}")
     step += 1
