@@ -42,6 +42,7 @@
 #include "objects/probe.h"
 #include "objects/stepper.h"
 #include "objects/thermistor.h"
+#include "objects/toolhead.h"
 
 static const char *module_path = NULL;
 static PyObject *VortexCoreError;
@@ -1110,6 +1111,9 @@ static PyObject *core_get_status(PyObject *self, PyObject *args) {
             break;
         case OBJECT_TYPE_THERMISTOR:
             state = calloc(1, sizeof(thermistor_status_t));
+	    break;
+	case OBJECT_TYPE_TOOLHEAD:
+	    state = calloc(1, sizeof(toolhead_status_t));
 	    break;
 	default:
 	    break;

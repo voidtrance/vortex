@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from argparse import Namespace
 from ..types import ModuleTypes, ModuleEvents
+from vortex.emulator.kinematics import AxisType
 import ctypes
 
 class ObjectDef(Namespace):
@@ -139,3 +140,15 @@ class Probe(ObjectDef):
     def __init__(self):
         super().__init__(ModuleTypes.PROBE)
         self.events = {ModuleEvents.PROBE_TRIGGERED: self.ProbeEventTriggered}
+
+class Toolhead(ObjectDef):
+    class ToolheadConfig(ctypes.Structure):
+        _fields_ = [("axes", ctypes.POINTER(ctypes.c_char_p))]
+    class ToolheadStatus(ctypes.Structure):
+        _fields_ = [("axes", ctypes.c_int * len(AxisType)),
+                    ("position", ctypes.c_double * len(AxisType))]
+    class ToolheadEventOrigin(ctypes.Structure):
+        _fields_ = [("position", ctypes.c_double * len(AxisType))]
+    def __init__(self):
+        super().__init__(ModuleTypes.TOOLHEAD)
+        self.events = {ModuleEvents.TOOLHEAD_ORIGIN: self.ToolheadEventOrigin}

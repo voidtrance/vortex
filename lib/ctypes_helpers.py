@@ -72,7 +72,7 @@ def fill_ctypes_struct(instance, data):
                 #else:
                 try:
                     instance[i] = attempt_value_conversion(t, val)
-                except:
+                except Exception as e:
                     raise TypeError(f"{str(instance)}: {str(e)}")
             else:
                 fill_ctypes_struct(instance[i], val)

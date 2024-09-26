@@ -105,7 +105,7 @@ class MainWindow(Gtk.Window):
                 if value and round(value, precision):
                     value = round(value, precision)
         elif isinstance(value, list):
-            value = ", ".join([x for x in value if x])
+            value = ", ".join([str(x) for x in value if not isinstance(x,str) or x])
         return str(value)
     
     def populate_grids(self, data):

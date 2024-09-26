@@ -19,6 +19,7 @@
 #define __EVENTS_H__
 #include <stdint.h>
 #include <stdbool.h>
+#include <kinematics.h>
 #include "auto-events.h"
 #include "objects/object_defs.h"
 
@@ -43,6 +44,10 @@ typedef struct {
 typedef struct {
   const char *axis;
 } axis_homed_event_data_t;
+
+typedef struct {
+    double position[AXIS_TYPE_MAX];
+} toolhead_origin_event_data_t;
 
 /*
  * Object event handler type.
