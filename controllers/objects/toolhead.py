@@ -26,12 +26,12 @@ class Toolhead(vobj.VirtualObjectBase):
         axes = self.lookup.object_by_klass(ModuleTypes.AXIS)
         status = self.query([x.id for x in axes])
         for axis in axes:
-            if status[axis.id]["axis"] in axis_types:
+            if status[axis.id]["type"] in axis_types:
                 axes_ids.append(axis.id)
         status = self.query(axes_ids)
-        toolhead_status = dict.fromkeys(self.config.axes, None)
+        toolhead_status = dict.fromkeys([x.upper() for x in self.config.axes], None)
         for i, id in enumerate(axes_ids):
-            toolhead_status[self.config.axes[i]] = status[id]["position"]
+            toolhead_status[self.config.axes[i].upper()] = status[id]["position"]
         event_sent = getattr(self, "event_sent", False)
         if list(toolhead_status.values()) == [0.0] * len(toolhead_status.keys()):
             if not event_sent:
