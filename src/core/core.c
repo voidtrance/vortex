@@ -49,6 +49,7 @@ static PyObject *VortexCoreError;
 typedef core_object_t *(*object_create_func_t)(const char *, void *);
 
 #define MAX_COMPLETIONS 256
+#define MAX_PROCESSING_BATCH 64
 
 typedef struct {
     struct __comp_entry {
@@ -594,6 +595,7 @@ static void core_process_work(void *arg) {
     core_command_t *cmd, *cmd_next;
     core_event_t *event, *event_next;
     bool empty;
+    size_t batch_count = 0;
 
     /* First, process any submitted commands. */
     pthread_mutex_lock(&core->cmds.lock);
@@ -605,7 +607,7 @@ static void core_process_work(void *arg) {
     pthread_mutex_lock(&core->cmds.lock);
     cmd = STAILQ_FIRST(&core->cmds.list);
     pthread_mutex_unlock(&core->cmds.lock);
-    while (cmd) {
+    while (cmd && batch_count++ < MAX_PROCESSING_BATCH) {
 	core_object_t *object;
 
 	cmd_next = STAILQ_NEXT(cmd, entry);
@@ -625,6 +627,8 @@ static void core_process_work(void *arg) {
 	cmd = cmd_next;
     }
 
+    batch_count = 0;
+
   do_events:
     pthread_mutex_lock(&core->events.lock);
     empty = STAILQ_EMPTY(&core->events.list);
@@ -635,7 +639,7 @@ static void core_process_work(void *arg) {
     pthread_mutex_lock(&core->events.lock);
     event = STAILQ_FIRST(&core->events.list);
     pthread_mutex_unlock(&core->events.lock);
-    while (event) {
+    while (event && batch_count++ < MAX_PROCESSING_BATCH) {
 	event_subscription_t *subscription;
 
 	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
@@ -695,9 +699,11 @@ static void core_process_work(void *arg) {
 	event = event_next;
     }
 
+    batch_count = 0;
+
   do_completions:
     comps = core->completions;
-    while (comps->tail != comps->head) {
+    while (comps->tail != comps->head && batch_count++ < MAX_PROCESSING_BATCH) {
 	PyGILState_STATE state;
 	PyObject *args;
 	bool handled = false;
@@ -766,7 +772,7 @@ static void core_object_command_complete(uint64_t cmd_id, int result,
 	(comps->head == comps->size && comps->tail != 0)) {
 	comps->entries[comps->head].id = cmd_id;
 	comps->entries[comps->head].result = result;
-	comps->head = (comps->head + 1) % comps->size;;
+	comps->head = (comps->head + 1) % comps->size;
     } else {
 	void *ptr  = realloc(comps->entries,
 			     (comps->size * 2) * sizeof(*comps->entries));
