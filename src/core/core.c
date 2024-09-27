@@ -1164,7 +1164,7 @@ static PyObject *core_reset(PyObject *self, PyObject *args) {
     }
 
     controller_thread_pause();
-    if (PyList_Check(object_list)) {
+    if (object_list && PyList_Check(object_list)) {
 	Py_ssize_t size = PyList_Size(object_list);
 	Py_ssize_t i;
 
@@ -1184,19 +1184,19 @@ static PyObject *core_reset(PyObject *self, PyObject *args) {
 		object->reset(object);
 	}
     } else {
-        core_object_type_t type;
+	core_object_type_t type;
 
-        for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-            core_object_t *object;
+	for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+	    core_object_t *object;
 
 	    LIST_FOREACH(object, &core->objects[type], entry) {
 		if (object->reset)
 		    object->reset(object);
 	    }
-        }
+	}
     }
-    controller_thread_resume();
 
+    controller_thread_resume();
     Py_RETURN_TRUE;
 }
 
