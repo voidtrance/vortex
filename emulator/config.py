@@ -65,7 +65,11 @@ class Configuration:
             if section == "machine":
                 continue
             klass, name = section.split(maxsplit=1)
-            yield ModuleTypes[klass], name, self.__parse_section(section)
+            klass_enum = getattr(ModuleTypes, klass.upper(), None)
+            if klass_enum is None:
+                logging.error(f"Unknown klass '{klass}'")
+                continue
+            yield klass_enum, name, self.__parse_section(section)
 
     def _get(self, value):
         def convert(v, t):

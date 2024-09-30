@@ -17,20 +17,20 @@ import vortex.controllers.objects.vobj_base as vobj
 from vortex.controllers.types import ModuleTypes
 from errno import *
 
-class Fan(vobj.VirtualObjectBase):
-    type = ModuleTypes.FAN
-    commands = [(0, "set_speed", ["speed"], None)]
+class PWMPin(vobj.VirtualObjectBase):
+    type = ModuleTypes.PWM_PIN
+    commands = [(0, "set_cycle", ["cycle"], None)]
     def __init__(self, *args):
         super().__init__(*args)
-        self._speed = 0.0
+        self._cycle = 0.0
     def exec_command(self, cmd_id, cmd, opts):
         ret = super().exec_command(cmd_id, cmd, opts)
         if ret:
             return ret
-        speed = float(opts.get("speed"))
-        if speed <= 0. or speed >= 100.:
+        cycle = float(opts.get("cycle"))
+        if cycle <= 0. or cycle >= 100.:
             return -EINVAL
-        self._speed = float(opts.get("speed")) / 100
+        self._cycle = cycle / 100
         self.complete_command(cmd_id, 0)
     def get_status(self):
-        return {"speed" : self._speed}
+        return {"cycle" : self._cycle}
