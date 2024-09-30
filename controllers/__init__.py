@@ -23,15 +23,8 @@ from collections import namedtuple
 from vortex.controllers.types import ModuleTypes
 import vortex.core
 import vortex.lib.ctypes_helpers
+from vortex.lib.utils import Counter
 
-class Counter:
-    def __init__(self):
-        self.x = 0
-    def count(self):
-        y = self.x
-        self.x += 1
-        return y
-    
 class Pins:
     __c = Counter()
     def __init__(self, name, start, end=None):
@@ -49,7 +42,7 @@ class Pins:
         return self._name
     def __iter__(self):
         for pin in range(self._start, self._end+1):
-            yield (f"{self._name}{pin}", self.__c.count())
+            yield (f"{self._name}{pin}", self.__c.next())
 
 class _Objects:
     _frozen = False

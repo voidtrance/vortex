@@ -13,5 +13,20 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['constants.py', 'ctypes_helpers.py',
-                    'ext_enum.py', 'utils.py'], subdir: 'vortex/lib')
+import inspect
+
+class Counter():
+    def __init__(self, start=0):
+        self._value = start
+    def next(self):
+        value, self._value = self._value, self._value + 1
+        return value
+    def __setattr__(self, name, value):
+        stack = inspect.stack()
+        caller = stack[1].frame.f_locals.get("self", None)
+        if not caller or not isinstance(caller, Counter):
+            raise AttributeError('Class attributes cannot be set')
+        function = getattr(caller, stack[1].frame.f_code.co_name)
+        if function not in (self.__init__, self.next):
+            raise KeyError('Class attributes cannot be set')
+        super().__setattr__(name, value)
