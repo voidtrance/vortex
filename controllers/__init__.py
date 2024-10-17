@@ -110,6 +110,7 @@ class Controller(core.VortexCore):
         self._objects = _Objects()
         self.objects = ObjectLookUp(self._objects)
         self.object_defs = {x: None for x in ModuleTypes}
+        self.frequency = self.FREQUENCY
         self._virtual_objects = {}
         self._completion_callback = None
         self._event_handlers = {}
@@ -166,7 +167,11 @@ class Controller(core.VortexCore):
             self._objects.add_object(klass, name, object_id)
     def start(self, frequency, completion_cb):
         self._completion_callback = completion_cb
-        super().start(frequency, self._completion_callback)
+        if frequency:
+            self.frequency = frequency
+        super().start(self.frequency, self._completion_callback)
+    def get_frequency(self):
+        return self.frequency
     def virtual_command_complete(self, cmd_id, status):
         self._completion_callback(cmd_id, status)
     def get_params(self):

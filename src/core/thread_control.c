@@ -56,52 +56,61 @@ typedef struct core_control_data {
 
 typedef STAILQ_HEAD(core_threads_list, core_control_data) core_thread_list_t;
 core_thread_list_t core_threads;
-static bool __initialized = false;
+static pthread_once_t initialized = PTHREAD_ONCE_INIT;
+static bool time_control = false;
+
+static uint64_t controller_ticks = 0;
+static uint64_t controller_runtime = 0;
 
 #define DEFAULT_SCHED_POLICY SCHED_FIFO
 
 #define timespec_delta(s, e)                                                   \
     ((SEC_TO_NSEC((e).tv_sec - (s).tv_sec)) + ((e).tv_nsec - (s).tv_nsec))
 
-static void *core_update_thread(void *arg) {
+static void *core_time_control_thread(void *arg) {
     struct core_thread_args *args = (struct core_thread_args *)arg;
-    core_object_t *object = args->data;
-    struct timespec ts, te;
     float tick = (1000.0 / ((float)args->frequency / 1000000));
-    uint64_t ticks = 0;
-    uint64_t runtime = 0;
-    int64_t sleep_counter = 0;
+    struct timespec sleep = { .tv_sec = 0, .tv_nsec = tick };
+    struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000 };
+    struct timespec start;
+    struct timespec now;
+
+    args->ret = 0;
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, args->name, "step duration: %f",
              tick);
-    args->ret = 0;
-    while (*(volatile int *)args->control == 1) {
-	int64_t delay;
-	uint64_t time;
 
+    while (*(volatile int *)args->control == 1) {
+	uint64_t delta;
 	if (*(volatile bool *)args->pause) {
-	    ts.tv_nsec = 50000;
-	    clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &ts, NULL);
+	    clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &pause, NULL);
 	    continue;
 	}
 
-	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-	object->update(object, ticks, runtime);
-	clock_gettime(CLOCK_MONOTONIC_RAW, &te);
-	time = timespec_delta(ts, te);
-	delay = (int64_t)tick - time;
-	sleep_counter += delay;
-        if (delay <= 0 || delay > tick)
-	    goto count;
-        te.tv_nsec += (uint64_t)delay;
-        clock_nanosleep(CLOCK_MONOTONIC_RAW, TIMER_ABSTIME, &te, NULL);
-        time = timespec_delta(ts, te);
-    count:
-        runtime += time;
-	ticks += (uint64_t)(roundf(((float)time / tick) * 100) / 100);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+	sched_yield();
+        clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+	delta = timespec_delta(start, now);
+	controller_ticks += (uint64_t)((float)delta / tick);
+	controller_runtime += delta;
+    }
+}
+
+static void *core_update_thread(void *arg) {
+    struct core_thread_args *args = (struct core_thread_args *)arg;
+    core_object_t *object = args->data;
+    uint64_t current_tick = 0;
+
+    args->ret = 0;
+    while (*(volatile int *)args->control == 1) {
+	if (current_tick != controller_ticks) {
+	    object->update(object, controller_ticks, controller_runtime);
+	    current_tick = controller_ticks;
+	}
+
+	sched_yield();
     }
 
-    args->frequency_match = sleep_counter;
     pthread_exit(&args->ret);
 }
 
@@ -109,8 +118,7 @@ static void *core_generic_thread(void *arg) {
     struct core_thread_args *args = (struct core_thread_args *)arg;
     work_callback_t callback = (work_callback_t)args->callback;
     float step_duration = 0.0;
-    struct timespec sleep_time = {0};
-    struct timespec ts, te;
+    struct timespec sleep_time;
 
     args->ret = 0;
     if (args->frequency)
@@ -118,17 +126,11 @@ static void *core_generic_thread(void *arg) {
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core", "step duration: %f",
              step_duration);
+    sleep_time.tv_sec = 0;
+    sleep_time.tv_nsec = step_duration;
 
     while (*(volatile int *)args->control == 1) {
-	long delay;
-
-	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
 	callback(args->data);
-	clock_gettime(CLOCK_MONOTONIC_RAW, &te);
-        delay = max((long)step_duration - timespec_delta(ts, te), 0);
-        if (delay <= 0 || delay > step_duration)
-	    continue;
-        sleep_time.tv_nsec = delay;
         nanosleep(&sleep_time, NULL);
     }
 
@@ -174,13 +176,38 @@ int start_thread(struct core_control_data *thread_data) {
     return 0;
 }
 
+static int create_clock_thread(uint64_t frequency) {
+    core_control_data_t *data;
+
+    data = calloc(1, sizeof(*data));
+    if (!data)
+	return -ENOMEM;
+
+    data->args.name = strdup("time_control");
+    data->args.frequency = frequency;
+    data->args.callback = NULL;
+    data->args.data = NULL;
+    data->thread_func = core_time_control_thread;
+    STAILQ_INSERT_TAIL(&core_threads, data, entry);
+    return 0;
+}
+
+void controller_thread_list_init(void) {
+    STAILQ_INIT(&core_threads);
+}
+
 int controller_thread_create(core_object_t *object, const char *name,
 			     uint64_t frequency) {
     core_control_data_t *data;
 
-    if (!__initialized) {
-      STAILQ_INIT(&core_threads);
-      __initialized = true;
+    pthread_once(&initialized, controller_thread_list_init);
+    if (!time_control) {
+	int ret;
+
+	ret = create_clock_thread(frequency);
+	if (ret)
+	    return ret;
+	time_control = true;
     }
 
     data = calloc(1, sizeof(*data));
@@ -200,16 +227,13 @@ int controller_work_thread_create(work_callback_t callback, void *user_data,
 				  uint64_t frequency) {
     core_control_data_t *data;
 
-    if (!__initialized) {
-      STAILQ_INIT(&core_threads);
-      __initialized = true;
-    }
-
+    pthread_once(&initialized, controller_thread_list_init);
 
     data = calloc(1, sizeof(*data));
     if (!data)
 	return -ENOMEM;
 
+    data->args.name = strdup("worker");
     data->args.frequency = frequency;
     data->args.callback = callback;
     data->args.data = user_data;
@@ -224,12 +248,11 @@ int controller_thread_start(void) {
 
     STAILQ_FOREACH(data, &core_threads, entry) {
 	ret = start_thread(data);
-	if (ret)
+	if (ret) {
+	    controller_thread_stop();
 	    break;
+	}
     }
-
-    if (ret)
-	controller_thread_stop();
 
     return ret;
 }
@@ -241,12 +264,16 @@ void controller_thread_stop(void) {
 	if (data->control.do_run) {
 	    data->control.do_run = 0;
 	    pthread_join(data->control.thread_id, NULL);
-	    if (data->args.name)
-		core_log(LOG_LEVEL_INFO, OBJECT_TYPE_NONE, data->args.name,
-			 "update frequency match: %ld",
-			 data->args.frequency_match);
 	}
     }
+}
+
+uint64_t controller_thread_get_clock_ticks(void) {
+    return controller_ticks;
+}
+
+uint64_t controller_thread_get_runtime(void) {
+    return controller_runtime;
 }
 
 void controller_thread_pause(void) {

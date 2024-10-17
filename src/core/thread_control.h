@@ -29,6 +29,8 @@ int controller_work_thread_create(work_callback_t callback, void *user_data,
 				  uint64_t frequency);
 int controller_thread_start(void);
 void controller_thread_stop(void);
+uint64_t controller_thread_get_clock_ticks(void);
+uint64_t controller_thread_get_runtime(void);
 void controller_thread_pause(void);
 void controller_thread_resume(void);
 void controller_thread_destroy(void);

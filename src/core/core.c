@@ -124,8 +124,6 @@ typedef struct {
     core_object_list_t objects[OBJECT_TYPE_MAX];
     core_command_list_t cmds;
     core_command_list_t submitted;
-    uint64_t ticks;
-    uint64_t runtime;
 
     /* Command completion */
     core_object_completion_data_t *completions;
@@ -235,8 +233,6 @@ static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     pthread_mutex_init(&self->submitted.lock, NULL);
     STAILQ_INIT(&self->submitted.list);
 
-    self->ticks = 0;
-    self->runtime = 0;
     self->completions->head = 0;
     self->completions->tail = 0;
 
@@ -1049,15 +1045,15 @@ static PyObject *core_python_event_submit(PyObject *self, PyObject *args) {
 }
 
 static PyObject *core_get_ticks(PyObject *self, PyObject *args) {
-    core_t *core = (core_t *)self;
-    PyObject *ticks = PyLong_FromUnsignedLongLong(core->ticks);
-    return ticks;
+    uint64_t ticks = controller_thread_get_clock_ticks();
+    PyObject *py_ticks = PyLong_FromUnsignedLongLong(ticks);
+    return py_ticks;
 }
 
 static PyObject *core_get_runtime(PyObject *self, PyObject *args) {
-    core_t *core = (core_t *)self;
-    PyObject *runtime = PyLong_FromUnsignedLongLong(core->runtime);
-    return runtime;
+    uint64_t runtime = controller_thread_get_runtime();
+    PyObject *py_runtime = PyLong_FromUnsignedLongLong(runtime);
+    return py_runtime;
 }
 
 static PyObject *core_get_status(PyObject *self, PyObject *args) {

@@ -122,7 +122,9 @@ class Emulator:
             {"reset": controller.reset,
              "query": controller.query_objects,
              "event_register": controller.event_register,
-             "event_unregister": controller.event_unregister})
+             "event_unregister": controller.event_unregister,
+             "get_ticks":  controller.get_clock_ticks,
+             "get_runtime": controller.get_runtime})
         self._controller = controller
         self._scheduled_queue = ScheduleQueue()
         self._run_emulation = True
@@ -137,7 +139,7 @@ class Emulator:
             frequency = frequency * eval(f"{order}2HZ")
         if (frequency / MHZ2HZ) > 10:
             logging.warning("Frequency greater than 10MHz may result in inaccurate timing")
-        self._frequency = frequency or self._controller.FREQUENCY
+        self._frequency = frequency
 
     def start_monitor(self):
         self._monitor = monitor.MonitorServer(self._controller, self._command_queue)
@@ -157,6 +159,7 @@ class Emulator:
             print(str(e))
             self._controller.stop()
             return
+        self._frontend.set_emulation_frequency(self._controller.get_frequency())
         self._frontend.run()
         while self._run_emulation:
             timestep = self._controller.get_clock_ticks()

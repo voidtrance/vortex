@@ -39,9 +39,12 @@ class BaseFrontend:
         self._run_sequential = False
         self._query = None
         self.reset = None
+        self.get_controller_clock_ticks = None
+        self.get_controller_runtime = None
         self.is_reset = False
         self.event_register = lambda a, b, c, d: False
         self.event_unregister = lambda a, b, c, d: False
+        self.emulation_frequency = 0
         try:
             os.mkfifo(self.PIPE_PATH)
         except FileExistsError:
@@ -60,6 +63,8 @@ class BaseFrontend:
             return
         self._query = func_set.get("query", None)
         self.reset = func_set.get("reset", None)
+        self.get_controller_clock_ticks = func_set.get("get_ticks", None)
+        self.get_controller_runtime = func_set.get("get_runtime", None)
         if "event_register" in func_set:
             self.event_register = func_set["event_register"]
         if "event_unregister" in func_set:
@@ -79,6 +84,9 @@ class BaseFrontend:
                 for obj in objects[klass]:
                     self._obj_name_2_id[klass][obj[0]] = obj[1]
                     self._obj_id_2_name[klass][obj[1]] = obj[0]
+
+    def set_emulation_frequency(self, frequency):
+        self.emulation_frequency = frequency
 
     def set_kinematics_model(self, model):
         self.kinematics = model
