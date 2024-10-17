@@ -40,6 +40,14 @@ class Pins:
     @property
     def name(self):
         return self._name
+    @property
+    def min(self):
+        return self._start
+    @property
+    def max(self):
+        return self._end
+    def __len__(self):
+        return self._end - self._start + 1
     def __iter__(self):
         for pin in range(self._start, self._end+1):
             yield (f"{self._name}{pin}", self.__c.next())
@@ -181,10 +189,7 @@ class Controller(core.VortexCore):
             if self.object_defs[klass] is not None:
                 cmds[klass] += self.object_defs[klass].commands
         params["commands"] = cmds
-        pins = []
-        for pin_set in self.PINS:
-            pins += [x for x in pin_set]
-        params["pins"] = pins
+        params["pins"] = self.PINS
         objects = {x: [] for x in ModuleTypes}
         for klass, name, id in self.objects:
             objects[klass].append((name, id))

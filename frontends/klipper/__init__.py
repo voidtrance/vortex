@@ -14,11 +14,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import ctypes
-import select
-import os
+import zlib
+import json
+import time
 from vortex.frontends import BaseFrontend
-import vortex.frontends.klipper as msgproto
-import vortex.frontends.lib
+from vortex.lib.utils import Counter
+from vortex.controllers.types import ModuleTypes
+import vortex.frontends.klipper.msgproto as msgproto
+import vortex.frontends.klipper.klipper_proto as proto
 
 def create_message(size):
     class MessageBlock(ctypes.Structure):
@@ -29,86 +32,146 @@ def create_message(size):
                     ("sync", ctypes.c_byte)]
     return MessageBlock
 
-class KlipperFrontend(BaseFrontend):
-    PIPE_FILE = "/tmp/klipper_uds"
-    BLOCK_SYNC = 0x7e
-    MIN_MSG_LEN = 5
-    MAX_MSG_LEN = 64
-    SEQ_DEST = 0x10
-    SEQ_NUM_MASK = 0xF
+# The following set of commands must be implemented at a
+# minimum:
+# (Source: https://github.com/Annex-Engineering/anchor/blob/master/anchor/src/lib.rs)
+# | `get_uptime`     | Must respond with `uptime` |
+# | `get_clock`      | Must respond with `clock`  |
+# | `emergency_stop` | Can be a no-op             |
+# | `allocate_oids`  | Can be a no-op             |
+# | `get_config`     | Must reply with `config`   |
+# | `config_reset`   | See example                |
+# | `finalize_config`| See example                |
 
+class KlipperFrontend(BaseFrontend):
+    STATS_SUMSQ_BASE = 256
     def __init__(self):
         super().__init__()
-        self.next_sequence = self.SEQ_DEST
+        self.next_sequence = 1
         self.serial_data = bytes()
         self.mp = msgproto.MessageParser()
+        # Skip first two values used by default messages
+        self.counter = Counter(2)
+        self.all_commands = {}
+        self.identity = None
+        #self.stats_count = 0
+        #self.stats_sum = 0
+        #self.stats_sumsq = 0
+        self.move_queue = []
+        self.config_crc = 0
+        self.shutdown = False
+        self.oid_count = 0
 
-    def _calc_crc(self, data):
-        crc = ctypes.c_uint16(0xffff)
-        for i in range(len(data) - 3):
-            e = ctypes.c_uint8(data[i])
-            e.value = e.value ^ (crc.value & 0xff)
-            e.value = e.value ^ (e.value << 4)
-            crc.value = ((e.value << 8) | crc.value >> 8) ^ (e.value >> 4) ^ (e.value << 3)
-        return crc
- 
-    def _forward_to_next(self, data):
-        if data[0] == self.BLOCK_SYNC:
-            return None, data[1:]
-        
-        i = data.find(bytes([self.BLOCK_SYNC]))
-        if i == -1:
-            return None, data
-        return None, data[i+1:]
-    
-    def parse_message_block(self, data):
-        if len(data) < self.MIN_MSG_LEN:
-            return None, data
-        
-        msg_len = data[0]
-        if msg_len < self.MIN_MSG_LEN or msg_len > self.MAX_MSG_LEN:
-            return self._forward_to_next(data)            
-        
-        if len(data) < msg_len:
-            return None, data
-        
-        message = data[:msg_len]
-        print(message)
-        # verify sync byte
-        if message[-1] != self.BLOCK_SYNC:
-            print("msg sync failed")
-            return self._forward_to_next(data)
-        
-        # verify sequence destination
-        if message[1] & ~self.SEQ_NUM_MASK != self.SEQ_DEST:
-            print("msg dest failed")
-            return self._forward_to_next(data)
-        
-        # verify CRC
-        msg_crc = message[-3] << 8 | message[-2]
-        crc = self._calc_crc(message)
-        if crc != msg_crc:
-            print("msg crc failed")
-            return self._forward_to_next(data)
-        
-        if message[1] != self.next_sequence:
-            print("msg seq failed")
-            return None, data[msg_len+1:]
-        
-        # Advance the sequence number only on successful message
-        # parsing. This way all other cases end up sending a NAK.
-        self.next_sequence = (message[1] + 1) & self.SEQ_NUM_MASK | self.SEQ_DEST
-        return message[3:-3], data
-    
-    def send_ack_nak(self, device):
-        msg = bytearray(self.MIN_MSG_LEN)
-        msg[0] = self.MIN_MSG_LEN
-        msg[1] = self.next_sequence
-        crc = self._calc_crc(msg)
-        msg[2] = crc.value >> 8
-        msg[3] = crc.value & 0xF
-        msg[4] = self.BLOCK_SYNC
-        device.write(msg)
+    def _add_commands(self, cmd_set):
+        for name, cmd in vars(cmd_set).items():
+            self.all_commands[name] = cmd
+            self.identity["commands"][cmd.command] = self.counter.next()
+            if cmd.response:
+                self.identity["responses"][cmd.response] = self.counter.next()
+
+    def create_identity(self):
+        self.identity = {x: {} for x in \
+                         ["commands", "enumerations",
+                          "config", "responses"]}
+        self.identity["version"] = "96cceed2"
+        self.tag_to_cmd = {}
+        base, pins = 0, {}
+        for pin_set in self._raw_controller_params["pins"]:
+            pins[f"{pin_set.name}{pin_set.min}"] = \
+                [base + pin_set.min, len(pin_set)]
+            base += len(pin_set)
+        self.identity["enumerations"]["pin"] = pins
+
+        # Setup basic Klipper commands
+        # Identify commands use static tags
+        msg = list(msgproto.DefaultMessages.keys())[0]
+        self.identity["responses"][msg] = msgproto.DefaultMessages[msg]
+        msg = list(msgproto.DefaultMessages.keys())[1]
+        self.identity["commands"][msg] = msgproto.DefaultMessages[msg]
+        for name, cmd in vars(proto.KLIPPER_PROTOCOL.basecmd).items():
+            self.all_commands[name] = cmd
+            if cmd.command in msgproto.DefaultMessages:
+                continue
+            self.identity["commands"][cmd.command] = self.counter.next()
+            if cmd.response:
+                self.identity["responses"][cmd.response] = self.counter.next()
+        self.identity["config"]["CLOCK_FREQ"] = self.emulation_frequency
+        self.identity["config"]["STATS_SUMSQ_BASE"] = self.STATS_SUMSQ_BASE
+
+        # Setup stepper commands
+        if self.get_object_id_set(ModuleTypes.STEPPER):
+            self._add_commands(proto.KLIPPER_PROTOCOL.stepper)
+
+        # Setup endstop commands
+        if self.get_object_id_set(ModuleTypes.ENDSTOP):
+            self._add_commands(proto.KLIPPER_PROTOCOL.gpiocmds)
+
+        self.identity_resp = json.dumps(self.identity).encode()
+        # Create local command maps
+        self.mp.process_identify(self.identity_resp, False)
+        print(self.identity)
+        self.identity_resp = zlib.compress(self.identity_resp)
+
+    #def klipper_stats(self):
+    #    tick = self.get_controller_clock_ticks()
+    #    diff = tick - self.start_tick
+    #    self.stats_sum += diff
+
+    def run(self):
+        self.create_identity()
+        self.start_tick = self.get_controller_clock_ticks()
+        super().run()
+
+    def respond(self, data=[]):
+        msg_len = msgproto.MESSAGE_MIN + len(data)
+        seq = (self.next_sequence & msgproto.MESSAGE_SEQ_MASK) | msgproto.MESSAGE_DEST
+        msg = [msg_len, seq] + data
+        msg += msgproto.crc16_ccitt(msg)
+        msg.append(msgproto.MESSAGE_SYNC)
+        #print("response: ", msg)
+        self._fd.write(bytearray(msg))
+        self._fd.flush()
+
+    def identify(self, cmd, offset, count):
+        self._test = None
+        response = cmd.response
+        msg = self.mp.lookup_command(response)
+        data = self.identity_resp[offset:offset+count]
+        resp = msg.encode_by_name(offset=offset, data=data)
+        self.respond(resp)
+        return True
+
+    def get_uptime(self, cmd):
+        runtime = self.get_controller_clock_ticks() - self.start_tick
+        msg = self.mp.lookup_command(cmd.response)
+        resp = msg.encode_by_name(high=((runtime >> 32) & 0xffffffff),
+                                  clock=(runtime & 0xffffffff))
+        self.respond(resp)
+        return True
+
+    def get_clock(self, cmd):
+        now = self.get_controller_clock_ticks()
+        msg = self.mp.lookup_command(cmd.response)
+        resp = msg.encode_by_name(clock=(now & 0xffffffff))
+        self.respond(resp)
+        return True
+
+    def get_config(self, cmd):
+        move_count = len(self.move_queue)
+        msg = self.mp.lookup_command(cmd.response)
+        resp = msg.encode_by_name(is_config=int(move_count != 0),
+                                  crc=self.config_crc, is_shutdown=self.shutdown,
+                                  move_count=move_count)
+        self.respond(resp)
+        return True
+
+    def allocate_oids(self, cmd, count):
+        self.oid_count = count
+        return True
+
+    def finalize_config(self, cmd, crc):
+        self.config_crc = crc
+        return True
 
     def _process_command(self, data):
         self.serial_data += data
@@ -119,8 +182,24 @@ class KlipperFrontend(BaseFrontend):
             elif i < 0:
                 self.serial_data = self.serial_data[-i:]
                 continue
-            msg_params = self.mp.parse(self.serial_data[:i])
-            print(msg_params)
+            block = self.serial_data[:i]
+            #print("recv'ed: ", [x for x in block])
+            block_seq = block[msgproto.MESSAGE_POS_SEQ] & msgproto.MESSAGE_SEQ_MASK
+            if block_seq == self.next_sequence:
+                self.next_sequence = (self.next_sequence + 1) & msgproto.MESSAGE_SEQ_MASK
+                pos = msgproto.MESSAGE_HEADER_SIZE
+                while 1:
+                    msgid, param_pos = self.mp.msgid_parser.parse(block, pos)
+                    mid = self.mp.messages_by_id.get(msgid, self.mp.unknown)
+                    msg_params, pos = mid.parse(block, pos)
+                    print("message: ", mid.name, msg_params)
+                    cmd = self.all_commands[mid.name]
+                    handler = getattr(self, mid.name)
+                    if not handler(cmd=cmd, **msg_params):
+                        raise self.mp._error("Failed command handler")
+                    if pos >= len(block) - msgproto.MESSAGE_TRAILER_SIZE:
+                        break
+            self.respond()
             self.serial_data = self.serial_data[i:]
 
 def create():
