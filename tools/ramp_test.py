@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-import sys
 import math
 import time
+import argparse
+import plotly.graph_objects as go
 
 def powin(a, b):
     return math.pow(a, b)
@@ -46,6 +47,40 @@ BACK_INOUT          = 0x1C,
 BOUNCE_IN           = 0x1D,
 BOUNCE_OUT          = 0x1E,
 BOUNCE_INOUT        = 0x1F
+
+ALGOS = [
+    'LINEAR',
+    'QUADRATIC_IN',
+    'QUADRATIC_OUT',
+    'QUADRATIC_INOUT',
+    'CUBIC_IN',
+    'CUBIC_OUT',
+    'CUBIC_INOUT',
+    'QUARTIC_IN',
+    'QUARTIC_OUT',
+    'QUARTIC_INOUT',
+    'QUINTIC_IN',
+    'QUINTIC_OUT',
+    'QUINTIC_INOUT',
+    'SINUSOIDAL_IN',
+    'SINUSOIDAL_OUT',
+    'SINUSOIDAL_INOUT',
+    'EXPONENTIAL_IN',
+    'EXPONENTIAL_OUT',
+    'EXPONENTIAL_INOUT',
+    'CIRCULAR_IN',
+    'CIRCULAR_OUT',
+    'CIRCULAR_INOUT',
+    'ELASTIC_IN',
+    'ELASTIC_OUT',
+    'ELASTIC_INOUT',
+    'BACK_IN',
+    'BACK_OUT',
+    'BACK_INOUT',
+    'BOUNCE_IN',
+    'BOUNCE_OUT',
+    'BOUNCE_INOUT',
+]
 
 def calc(k, mode):
     if k == 0 or k == 1:
@@ -155,38 +190,105 @@ def calc(k, mode):
     return k
         
 
-pos = 0
-t = time.time_ns()
-def ramp(a, b, dur, mode):
-    global pos, t
-    dur *= 1000000000
-    now = time.time_ns()
-    delta = now - t
-    t = now
-    if pos + delta < dur:
-        pos += delta
+class RampData:
+    def __init__(self):
+        self.p = 0
+        self.t = 0
+    @property
+    def pos(self):
+        return self.p
+    @pos.setter
+    def pos(self, value):
+        self.p = value
+    @property
+    def delta(self):
+        n = time.time()
+        d = n - self.t
+        self.t = n
+        return d
+    def reset(self):
+        self.p = 0
+        self.t = time.time()
+
+def ramp(a, b, dur, mode, data):
+    delta = data.delta
+    if data.pos + delta < dur:
+        data.pos += delta
     else:
-        pos = dur
-    k = pos / dur
-    print(f"delta={delta:f} k={k:.20f}")
+        data.pos = dur
+    k = data.pos / dur
     if b >= a:
         val = (a + (b-a)*calc(k,mode))
     else:
         val = (a - (a-b)*calc(k,mode))
     return val
 
-if len(sys.argv) == 0:
-    print("ramp_test.py <start> <end> <duration> <algorithm>")
-    sys.exit(0)
+def make_graph(data):
+    graph = go.Scatter(x=list(range(1, len(data)+1)),
+                        y=data,
+                       mode="lines")
+    fig = go.Figure()
+    fig.add_trace(graph)
+    fig.update_layout(autosize=False, height=200, width=200,
+                      margin={'autoexpand': False, 'l': 0, 'r': 0,
+                              't': 0, 'b': 0})
+    return fig
 
-a = float(sys.argv[1])
-b = float(sys.argv[2])
-d = float(sys.argv[3])
-c = eval(f"{sys.argv[4].upper()}")
+def output_graph(graphs, filename):
+    prefix = """<html>
+<head>
+<style>
+div.plotly-graph-top { display: inline-block; }
+table { display: inline-block; vertical-align: top; }
+th { text-align: left; background-color: #e4f0f5; }
+th.title { text-align: center; background-color: #3f87a6; }
+</style>
+</head>
+<body>"""
+    suffix = "</body></html>"""
 
-x = a
-step = 1
-while x != b:
-    x = ramp(a, b, d, c)
-    print(f"{int(time.time())}: temp {x:f}")
-    step += 1
+    with open(filename, 'w') as fd:
+        fd.write(prefix)
+        for algo in graphs:
+            fd.write(f"<table><tr><th class='title'>{algo}</th></tr>")
+            fd.write("<tr><td>")
+            html = graphs[algo].to_html(full_html=False, include_plotlyjs=True)
+            html = html.replace("<div>", "<div class=\"plotly-graph-top\">")
+            fd.write(html)
+            fd.write("</td></tr></table></div></div>")
+        fd.write(suffix)
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--graph", type=str, default=None,
+                    help="""If present, it is the filename where
+                    graphs will be generated""")
+parser.add_argument("--algo", choices=ALGOS + ["ALL"], nargs="+",
+                    help="Ramp algorithm")
+parser.add_argument("start", type=float, help="Start of ramp range")
+parser.add_argument("end", type=float, help="End of ramp range")
+parser.add_argument("duration", type=int, help="Ramp duration (in seconds)")
+
+opts = parser.parse_args()
+
+if opts.algo == ["ALL"]:
+    opts.algo = ALGOS
+
+values = {x: [] for x in opts.algo}
+graphs = {x: None for x in opts.algo}
+markers = "-\\|/"
+ramp_data = RampData()
+for algo in opts.algo:
+    algov = eval(f"{algo.upper()}")
+    value = opts.start
+    ramp_data.reset()
+    while value != opts.end:
+        print(f"Generating {algo.upper()} values... {markers[len(values[algo]) % len(markers)]}\r", end="")
+        value = ramp(opts.start, opts.end, opts.duration, algov, ramp_data)
+        values[algo].append(value)
+        time.sleep(0.5)
+    print()
+
+    if opts.graph:
+        graphs[algo] = make_graph(values[algo])
+
+output_graph(graphs, opts.graph)
