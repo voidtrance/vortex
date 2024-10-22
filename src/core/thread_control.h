@@ -23,8 +23,9 @@
 
 typedef void (*work_callback_t)(void *user_data);
 
-int controller_thread_create(core_object_t *object, const char *name,
-			     uint64_t frequency);
+int controller_thread_create(core_object_t *object, const char *name);
+int controller_timer_thread_create(uint64_t frequency,
+				   uint64_t update_frequency);
 int controller_work_thread_create(work_callback_t callback, void *user_data,
 				  uint64_t frequency);
 int controller_thread_start(void);

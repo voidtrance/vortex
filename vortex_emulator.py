@@ -38,12 +38,11 @@ def create_arg_parser():
     controller.add_argument("-c", "--controller", required=True,
                             help="""The HW controller to be used for the
                             emulation. This argument is required.""")
-    controller.add_argument("-F", "--frequency", default=0,
-                            help="""Custom frequency that the HW controller
-                            should use. By default, each HW controller
-                            sets their own frequency. This option can be
-                            used to override that value.""")
-
+    controller.add_argument("-F", "--frequency", default="200Hz",
+                            help="""This is the frequency with which the
+                            object update loop will run. Controllers still
+                            clock ticks are still updated based on their
+                            defined frequency.""")
     debug = parser.add_argument_group("Debug Options")
     debug.add_argument("-d", "--debug", choices=logging._nameToLevel.keys(),
                         default="INFO",

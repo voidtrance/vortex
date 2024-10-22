@@ -173,13 +173,11 @@ class Controller(core.VortexCore):
                     continue
                 object_id = self.create_object(klass, name, ctypes.addressof(obj_conf))
             self._objects.add_object(klass, name, object_id)
-    def start(self, frequency, completion_cb):
+    def start(self, update_frequency, completion_cb):
         self._completion_callback = completion_cb
-        if frequency:
-            self.frequency = frequency
-        super().start(self.frequency, self._completion_callback)
+        super().start(self.FREQUENCY, update_frequency, self._completion_callback)
     def get_frequency(self):
-        return self.frequency
+        return self.FREQUENCY
     def virtual_command_complete(self, cmd_id, status):
         self._completion_callback(cmd_id, status)
     def get_params(self):

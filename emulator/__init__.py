@@ -135,8 +135,9 @@ class Emulator:
         if isinstance(frequency, str):
             i = search(r'\d*', frequency).end()
             frequency, order = int(frequency[:i]), frequency[i:].upper()
-            logging.debug(f"{frequency} {order}, {order}2HZ, {eval(f"{order}2HZ")}")
-            frequency = frequency * eval(f"{order}2HZ")
+            if order.lower() != "hz":
+                logging.debug(f"{frequency} {order}, {order}2HZ, {eval(f"{order}2HZ")}")
+                frequency = frequency * eval(f"{order}2HZ")
         if (frequency / MHZ2HZ) > 10:
             logging.warning("Frequency greater than 10MHz may result in inaccurate timing")
         self._frequency = frequency

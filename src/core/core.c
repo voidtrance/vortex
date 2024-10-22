@@ -274,9 +274,10 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     core_object_type_t type;
     uint64_t frequency;
+    uint64_t update_frequency;
     int ret;
 
-    if (PyArg_ParseTuple(args, "KO", &frequency,
+    if (PyArg_ParseTuple(args, "KKO", &frequency, &update_frequency,
 			 &core->python_complete_cb) == -1)
         return NULL;
 
@@ -287,9 +288,14 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
 
     Py_INCREF(core->python_complete_cb);
 
+    if (controller_timer_thread_create(frequency, update_frequency)) {
+	PyErr_Format(VortexCoreError, "Failed to create timer thread");
+	return NULL;
+    }
+
     if (controller_work_thread_create(core_process_work, self,
 				      KHZ_TO_HZ(500))) {
-	PyErr_Format(VortexCoreError, "Failed to start processing thread");
+	PyErr_Format(VortexCoreError, "Failed to create processing thread");
 	return NULL;
     }
 
@@ -307,7 +313,7 @@ static PyObject *core_start(PyObject *self, PyObject *args) {
 
 	    snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
 		     object->name);
-	    if (controller_thread_create(object, name, frequency)) {
+	    if (controller_thread_create(object, name)) {
 		controller_thread_destroy();
 		return NULL;
 	    }
