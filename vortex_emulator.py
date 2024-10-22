@@ -35,7 +35,7 @@ def create_arg_parser():
                           command queue as they are received.""")
 
     controller = parser.add_argument_group("Controller Options")
-    controller.add_argument("-c", "--controller", required=True,
+    controller.add_argument("-c", "--controller", default=None,
                             help="""The HW controller to be used for the
                             emulation. This argument is required.""")
     controller.add_argument("-F", "--frequency", default="200Hz",
@@ -70,6 +70,9 @@ def main():
     config = vortex.emulator.config.Configuration()
     config.read(opts.config)
 
+    if opts.controller:
+        config.override_controller(opts.controller)
+
     frontend = vortex.frontends.create_frontend(opts.frontend)
     if frontend is None:
         logging.error(f"Did not find fronted '{opts.frontend}'")
@@ -77,13 +80,12 @@ def main():
 
     frontend.set_sequential_mode(opts.sequential)
 
-    controller = vortex.emulator.load_mcu(opts.controller, config)
-    if controller is None:
-        logging.error(f"Did not find controller '{opts.controller}'")
+    try:
+        emulation = vortex.emulator.Emulator(frontend, config)
+    except vortex.emulator.EmulatorError as err:
+        print(err)
         return errno.ENOENT
     
-    emulation = vortex.emulator.Emulator(controller,  frontend,
-                                         config.get_machine_config())
     emulation.set_frequency(opts.frequency)
     if opts.monitor:
         emulation.start_monitor()

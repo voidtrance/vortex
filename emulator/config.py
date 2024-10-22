@@ -60,6 +60,9 @@ class Configuration:
         if self._parser.has_section(section):
             return self.__parse_section(section)
 
+    def override_controller(self, controller):
+        self._parser.set("machine", "controller", controller)
+
     def __iter__(self):
         for section in self._parser.sections():
             if section == "machine":

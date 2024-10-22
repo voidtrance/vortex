@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import queue
 import logging
+import inspect
 import importlib
 import time
 from os import strerror
@@ -22,7 +23,6 @@ from re import search
 from collections import OrderedDict
 from vortex.lib.constants import *
 from vortex.core import VortexCoreError
-from vortex.controllers.types import ModuleTypes, ModuleEvents
 import vortex.emulator.monitor as monitor
 import vortex.emulator.kinematics as kinematics
 
@@ -97,35 +97,45 @@ class ScheduleQueue:
             command = self.get(timestamp)
         return None
 
+class EmulatorError(Exception): pass
+
 def load_mcu(name, config):
+    # Get base controller class
+    base_module = importlib.import_module("vortex.controllers")
+    base_class = getattr(base_module, "Controller")
     try:
         module = importlib.import_module(f"vortex.controllers.{name}")
     except ImportError as e:
         logging.error(f"Failed to create {name} controller: {str(e)}")
         return None
-    module_object = getattr(module, "__controller__", None)
-    if module_object:
-        return module_object(config)
-    return None
+    members = inspect.getmembers(module, inspect.isclass)
+    controllers = [x[1] for x in members if issubclass(x[1], base_class) and \
+                   x[1] is not base_class]
+    if len(controllers) == 0:
+        raise EmulatorError(f"Controller '{name}' not found")
+    if len(controllers) > 1:
+        raise EmulatorError(f"Too many controller objects in '{name}'")
+    return controllers[0](config)
 
 class Emulator:
-    def __init__(self, controller, frontend, machine_config):
+    def __init__(self, frontend, config):
         self._command_queue = CommandQueue()
-        self._kinematics = kinematics.Kinematics(machine_config.kinematics,
-                                                 controller)
+        machine = config.get_machine_config()
+        self._controller = load_mcu(machine.controller, config)
+        self._kinematics = kinematics.Kinematics(machine.kinematics,
+                                                 self._controller)
         self._frontend = frontend
         self._frontend.set_command_queue(self._command_queue)
         self._frontend.set_kinematics_model(self._kinematics)
-        controller_params = controller.get_params()
+        controller_params = self._controller.get_params()
         self._frontend.set_controller_data(controller_params)
         self._frontend.set_controller_functions(
-            {"reset": controller.reset,
-             "query": controller.query_objects,
-             "event_register": controller.event_register,
-             "event_unregister": controller.event_unregister,
-             "get_ticks":  controller.get_clock_ticks,
-             "get_runtime": controller.get_runtime})
-        self._controller = controller
+            {"reset": self._controller.reset,
+             "query": self._controller.query_objects,
+             "event_register": self._controller.event_register,
+             "event_unregister": self._controller.event_unregister,
+             "get_ticks":  self._controller.get_clock_ticks,
+             "get_runtime": self._controller.get_runtime})
         self._scheduled_queue = ScheduleQueue()
         self._run_emulation = True
         self._frequency = 0

@@ -13,7 +13,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-from vortex.controllers.objects import *
 from vortex.controllers import Pins
 from vortex.controllers import Controller
 
@@ -25,5 +24,3 @@ class STM32F446(Controller):
     FREQUENCY = 12000000
     def __init__(self, config):
         super().__init__(config)
-
-__controller__ = STM32F446
