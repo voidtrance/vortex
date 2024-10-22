@@ -28,6 +28,8 @@
 #include <cache.h>
 
 #define AMBIENT_TEMP 25.0
+#define MAX_RAMP_UP_DURATION 120
+#define MAX_RAMP_DOWN_DURATION 240
 
 typedef struct {
     uint16_t power;
@@ -45,6 +47,7 @@ typedef struct {
     float max_temp;
     uint64_t max_ramp_duration;
     uint64_t pos;
+    uint64_t ramp_duration;
 } heater_t;
 
 static object_cache_t *heater_event_cache = NULL;
@@ -72,7 +75,8 @@ heater_t *object_create(const char *name, void *config_ptr) {
     heater->object.get_state = heater_status;
     heater->object.name = strdup(name);
     heater->pos = 0;
-    heater->max_ramp_duration = SEC_TO_NSEC(120.0 * 100 / config->power);
+    heater->max_ramp_duration = SEC_TO_NSEC(MAX_RAMP_UP_DURATION * 100 /
+					    config->power);
     heater->max_temp = config->max_temp;
 
     if (object_cache_create(&heater_event_cache,
@@ -92,6 +96,7 @@ static void heater_reset(core_object_t *object) {
     heater->temp = AMBIENT_TEMP;
     heater->base_temp = heater->temp;
     heater->target_temp = AMBIENT_TEMP;
+    heater->pos = 0;
 }
 
 static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
@@ -101,15 +106,34 @@ static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     if (cmd->object_cmd_id != HEATER_COMMAND_SET_TEMP)
 	return -1;
 
+    // If a command is still running, immediately complete it.
+    if (heater->command.command_id)
+	CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
+
     heater->command = *cmd;
     args = (struct heater_set_temperature_args *)cmd->args;
-    if (args->temperature < AMBIENT_TEMP ||
-	args->temperature > heater->max_temp)
+    if (args->temperature < 0 || args->temperature > heater->max_temp)
 	return -1;
 
     heater->pos = 0;
     heater->base_temp = heater->temp;
-    heater->target_temp = args->temperature;
+    heater->target_temp = max(args->temperature, AMBIENT_TEMP);
+
+    /* Ramping up duration is a percentage of the max ramp up
+     * duration (which is a function of the heater's power).
+     *
+     * Ramping down is based on a static duration. This should
+     * better emulate real-world temperature drops.
+     *
+     * Both ramp up and down final durations depend on the ratio
+     * of the target temp to the max heater temp.
+     */
+    if (heater->target_temp < heater->base_temp)
+	heater->ramp_duration = SEC_TO_NSEC(MAX_RAMP_DOWN_DURATION);
+    else
+	heater->ramp_duration = heater->max_ramp_duration;
+
+    heater->ramp_duration *= (heater->target_temp / heater->max_temp);
 
     log_debug(heater, "base: %.15f, target: %.15f, temp: %.15f",
 	      heater->base_temp, heater->target_temp, heater->temp);
@@ -127,24 +151,32 @@ static void heater_status(core_object_t *object, void *status) {
 static float powout(float value, uint8_t p) {
     if (value == 0 || value == 1)
 	return value;
-    return 1 - powl(1 - value, p);
+    return 1 - powf(1 - value, p);
+}
+
+static float linear(float value) {
+    return value;
+}
+
+static float sinusoidal_inout(float value) {
+    return -0.5 * (cosf(M_PI * value) - 1);
 }
 
 static float interpolate(uint64_t *p_pos, float base, float limit,
-			 uint64_t time_delta, uint64_t dur) {
+                         uint64_t time_delta, uint64_t dur) {
     float step_val;
     uint64_t pos = *p_pos;
     float val;
 
     if (pos + time_delta < dur)
-	pos += time_delta;
+        pos += time_delta;
     else
-	pos = dur;
+        pos = dur;
     step_val = (float)pos / dur;
     if (base <= limit)
-	val = (base + (limit - base) * powout(step_val, 3));
+	val = (base + (limit - base) * sinusoidal_inout(step_val));
     else
-	val = (base - (base - limit) * powout(step_val, 5));
+	val = (base - (base - limit) * linear(step_val));
 
     *p_pos = pos;
     return val;
@@ -165,14 +197,9 @@ static void heater_update(core_object_t *object, uint64_t ticks,
      * Use interpolation function to approximate temperature
      * ramp.
      */
-    if (heater->target_temp < heater->base_temp)
-	duration = heater->max_ramp_duration;
-    else
-	duration = heater->max_ramp_duration *
-	    (heater->target_temp / heater->max_temp);
     heater->temp = interpolate(&heater->pos, heater->base_temp,
 			       heater->target_temp, time_delta,
-			       duration);
+			       heater->ramp_duration);
     heater->temp = roundf(heater->temp * 1000) / 1000;
     log_debug(heater, "heater %s temp: %f", heater->object.name, heater->temp);
 
@@ -180,6 +207,8 @@ static void heater_update(core_object_t *object, uint64_t ticks,
 	return;
 
     CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
+    heater->command.command_id = 0;
+    heater->command.object_cmd_id = HEATER_COMMAND_MAX;
 
     data = object_cache_alloc(heater_event_cache);
     if (data) {
