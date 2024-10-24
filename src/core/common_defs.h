@@ -98,7 +98,8 @@ static inline core_object_t *core_id_to_object(core_object_id_t id) {
 	(type), ((core_object_t *)(obj))->call_data.cb_data))
 #define CORE_CMD_COMPLETE(obj, id, status)				\
     (((core_object_t *)(obj))->call_data.completion_callback(		\
-	(id), (status),	((core_object_t *)(obj))->call_data.cb_data))
+	__atomic_exchange_n(&(id), 0,  __ATOMIC_SEQ_CST), (status),	\
+	((core_object_t *)(obj))->call_data.cb_data))
 #define CORE_EVENT_REGISTER(obj, type, event, name, handler)		\
     (((core_object_t *)(obj))->call_data.event_register(		\
 	(type), (event), (name), ((core_object_t *)(obj)), (handler),	\
