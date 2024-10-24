@@ -76,6 +76,7 @@ class TestFramework:
         self._complete = {}
         self._current_test = None
         self._logfile = logfile
+        self._logfile_lock = threading.Lock()
 
     @property
     def controller(self):
@@ -87,6 +88,9 @@ class TestFramework:
 
     def set_log_level(self, level=0):
         self._logger.set_level(level)
+
+    def logging_enabled(self):
+        return self._logfile is not None
 
     def log(self, level, fmt, *args):
         self._logger.log(level, fmt, *args)
@@ -100,22 +104,27 @@ class TestFramework:
     def begin(self, test_name):
         self._current_test = test_name
         print(f"Running test '{self._current_test}'...", end=" ", flush=True)
+        self._write_logfile("=" * 30 + "\n")
+        self._write_logfile(f"Running test '{self._current_test}\n")
 
     def passed(self, msg=None):
         msg = f"{Color.GREEN}PASS{Color.END}" + ((" " + msg) if msg else "")
         print(msg)
+        self._write_logfile(f"Test '{self._current_test}: PASS\n")
         self._current_test = None
         return TestStatus.PASS
 
     def failed(self, msg=None):
         msg = f"{Color.RED}FAIL{Color.END}" + ((" " + msg) if msg else "")
         print(msg)
+        self._write_logfile(f"Test '{self._current_test}: FAIL\n")
         self._current_test = None
         return TestStatus.FAIL
 
     def waived(self, msg=None):
         msg = f"{Color.BLUE}WAIVE{Color.RED}" + ((" " + msg) if msg else "")
         print(msg)
+        self._write_logfile(f"Test '{self._current_test}: WAIVE\n")
         self._current_test = None
         return TestStatus.WAIVE
 
@@ -179,6 +188,7 @@ class TestFramework:
     def get_status(self, objects):
         if isinstance(objects, int):
             objects = [objects]
+        self._write_logfile(f"status: {objects}")
         return self._query("query", {"objects": objects})
 
     def run_command(self, cmd):
@@ -224,12 +234,17 @@ class TestFramework:
         fd = self._emulator.stdout.fileno()
         fl = fcntl.fcntl(fd, fcntl.F_GETFL)
         fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-        with open("emulator.log", "wb") as fd:
-            while self._collect:
-                data = self._emulator.stdout.read(64)
-                if data:
-                    fd.write(data)
-                    fd.flush()
+        while self._collect:
+            data = self._emulator.stdout.read()
+            if data:
+                self._write_logfile(data)
+
+    def _write_logfile(self, data):
+        if isinstance(data, str):
+            data = data.encode()
+        with self._logfile_lock:
+            self._logfile.write(data)
+            self._logfile.flush()
 
     def _emulator_read(self):
         response = b''
@@ -244,22 +259,21 @@ class TestFramework:
     def _launch_emulator(self):
         path = os.path.dirname(os.path.dirname(__file__))
         cmd = [os.path.join(path, "vortex_emulator.py"), "-C", self._config_file,
-               "-f", self._frontend, "-c", self._controller, "-M",
-               "-F", "10KHz"]
+               "-f", self._frontend, "-c", self._controller, "-M"]
         if self._logfile is not None:
             if os.path.exists(self._logfile):
                 os.unlink(self._logfile)
-            cmd += ["-d", "DEBUG", "-l", self._logfile]
+            cmd += ["-d", "DEBUG"]
         self._logger.log(1, "Cmd: %s", " ".join(cmd))
+        self._logfile = open(self._logfile, "wb")
         self._emulator = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                           stderr=subprocess.STDOUT)
         while not os.path.exists(VORTEX_PATH) or not os.path.exists(VORTEX_SOCKET_PATH):
             time.sleep(0.5)
         self._collect = True
-        if self._logfile is None:
-            self._collector = threading.Thread(None, self._emulator_collector,
-                                               "emulator_collector")
-            self._collector.start()
+        self._collector = threading.Thread(None, self._emulator_collector,
+                                           "emulator_collector")
+        self._collector.start()
         return self._emulator
 
     def _connect_monitor(self):
@@ -309,6 +323,8 @@ class TestFramework:
             if self._collector:
                 self._collector.join()
             self._response_parser.join()
+        if self._logfile:
+            self._logfile.close()
 
     def __del__(self):
         self.terminate()
