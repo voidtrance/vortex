@@ -103,19 +103,19 @@ static void endstop_update(core_object_t *object, uint64_t ticks,
     bool state = endstop->triggered;
 
     endstop->axis->get_state(endstop->axis, &status);
-    log_debug(endstop, "type: %u, position: %.15f, state: %u",
-	      endstop->type, status.position, state);
     if ((endstop->type == ENDSTOP_TYPE_MIN && status.position == 0) ||
 	(endstop->type == ENDSTOP_TYPE_MAX && status.position == status.length))
 	endstop->triggered = true;
     else
         endstop->triggered = false;
 
+    log_debug(endstop, "type: %u, position: %.15f, state: %u, old: %u",
+	      endstop->type, status.position, endstop->triggered, state);
     /*
-    * Only submit trigger events when the emulation is running.
-    * Otherwise, the event could be erroneously submitted when
-    * the object is initialized.
-    */
+     * Only submit trigger events when the emulation is running.
+     * Otherwise, the event could be erroneously submitted when
+     * the object is initialized.
+     */
     if (state != endstop->triggered && runtime) {
 	event = object_cache_alloc(endstop_event_cache);
 	if (!event)
