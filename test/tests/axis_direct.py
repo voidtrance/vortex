@@ -56,7 +56,7 @@ def test_axis(framework, axis, obj_id, kinematics):
     axis_type = AxisType(axis_status["type"])
     if axis_status["length"] != -1:
         if not framework.assertEQ(axis_status["homed"], False):
-            return False
+            return framework.failed()
     axis_motors = [x for x in axis_status["motors"] if x]
     initial_position = axis_status["position"]
     motors = framework.get_objects("stepper")

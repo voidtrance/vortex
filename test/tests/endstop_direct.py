@@ -78,7 +78,6 @@ def test_endstop(framework, name, obj_id):
         framework.wait_for_completion(cmd_id)
     axis_status = framework.get_status(axis["id"])[axis["id"]]
     axis_position = axis_status["position"]
-    print(f"{endstop_status}, {axis_status}")
     if (endstop_status["type"] == "min" and axis_position == 0) or \
         (endstop_status["type"] == "max" and 
          axis_position == axis_status["length"]):

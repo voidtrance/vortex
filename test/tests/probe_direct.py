@@ -101,6 +101,7 @@ def create_probe(framework, name, id):
     probe.id = id
     probe.klass = framework.get_object_klass("probe")
     probe_config = framework.get_config_section(probe.klass, probe.name)
+    probe.range = probe_config.range
     probe.toolhead = create_toolhead(framework, probe_config.toolhead)
     if probe.toolhead == TestStatus.FAIL:
         return probe.toolhead
@@ -121,8 +122,6 @@ def test_probe(framework, name, obj_id, kinematics):
             framework.wait_for_completion(cmd_id)
     probe_status = framework.get_status(probe.id)[probe.id]
     toolhead_status = framework.get_status(probe.toolhead.id)[probe.toolhead.id]
-    print(toolhead_status)
-    print(probe_status)
     should_be_triggered = True
     for i, p in enumerate(probe_status["position"]):
         should_be_triggered &= p <= probe_status["offsets"][i]
@@ -135,15 +134,15 @@ def test_probe(framework, name, obj_id, kinematics):
             distance = probe_status["position"][int(axis)] - \
                 toolhead_status["position"][int(axis)] + 1
         else:
-            distance = probe_status["offsets"][int(axis)] - \
-                toolhead_status["position"][int(axis)]
+            distance = -toolhead_status["position"][int(axis)]
         status = move_axis(framework, probe.toolhead, axis, distance)                       
         if not framework.assertEQ(status, 0):
             return framework.failed()
+    framework.log(0, "probe status query")
     probe_status = framework.get_status(probe.id)[probe.id]
     toolhead_status = framework.get_status(probe.toolhead.id)[probe.toolhead.id]
-    print(toolhead_status)
-    print(probe_status)
+    if not framework.assertEQ(probe_status["triggered"], not should_be_triggered):
+        return framework.failed()
     return framework.passed()
     
 def run_test(framework):
@@ -153,4 +152,5 @@ def run_test(framework):
     probes = framework.get_objects("probe")
     kinematics = framework.get_machine_config().kinematics
     for probe in probes:
+        framework.begin(f"probe_direct for '{probe['name']}'")
         test_probe(framework, probe["name"], probe["id"], kinematics)

@@ -58,8 +58,9 @@ def run_stepper_test(framework, stepper, obj_id):
     if not framework.assertEQ(status, 0):
         return framework.failed()
     delta_time = end - start
-    # Increase expected time by 30% to allow for completion latency
-    if not framework.assertLT(round(delta_time, 2), travel_time * 1.3):
+    # Increase expected time to allow for completion latency
+    factor = 1.5 if framework.logging_enabled else 1.3
+    if not framework.assertLT(round(delta_time, 2), travel_time * factor):
         return framework.failed()
     return framework.passed()
 
@@ -71,7 +72,6 @@ def run_test(framework):
     klasses = {n:v for v, n in klasses.items()}
     stepper_klass = klasses["stepper"]
     steppers = framework.get_objects(stepper_klass)
-    status = None
     for stepper in steppers:
         framework.begin(f"stepper_direct for {stepper['name']}")
         run_stepper_test(framework, stepper["name"], stepper["id"])

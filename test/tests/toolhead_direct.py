@@ -118,11 +118,12 @@ def test_toolhead(framework, toolhead):
     return framework.passed()
 
 def run_test(framework):
-    framework.begin("toolhead_direct")
     if framework.frontend != "direct":
+        framework.begin("toolhead_direct")
         return framework.waive()
     toolheads = framework.get_objects("toolhead")
     for t in toolheads:
+        framework.begin(f"toolhead '{t['name']}'")
         toolhead = create_toolhead(framework, t["name"])
         if toolhead == TestStatus.FAIL:
             continue

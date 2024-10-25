@@ -20,7 +20,12 @@ dependencies = []
 def wait_for_temp(framework, cmd_id, obj_id, start, target):
     temp = start
     while not framework.command_is_complete(cmd_id):
-        wait = 10 * (abs(temp - start) / abs(target - start)) or 1
+        # Wait an increasing amount of time before querying the
+        # object to account for the slowdown in the ramp when
+        # approaching target temperature. But use a minimum of
+        # 0.1 seconds to allow for some change.
+        min_wait = 0.5 if framework.logging_enabled() else 0.1
+        wait = max(10 * (abs(temp - start) / abs(target - start)) or 1, min_wait)
         time.sleep(wait)
         heater_status = framework.get_status(obj_id)[obj_id]
         if heater_status["temperature"] == target:
@@ -42,41 +47,41 @@ def run_heater_test(framework, heater, obj_id):
     target_temp = initial_temp + 30
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={target_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, initial_temp, target_temp):
-        return False
+        return framework.failed()
     heater_status = framework.get_status(obj_id)[obj_id]
     temp = heater_status["temperature"]
     if not framework.assertEQ(temp, target_temp):
-        return False
+        return framework.failed()
     target_temp = temp + 10
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={target_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, temp, target_temp):
-        return False
+        return framework.failed()
     heater_status = framework.get_status(obj_id)[obj_id]
     temp = heater_status["temperature"]
     if not framework.assertEQ(temp, target_temp):
-        return False
+        return framework.failed()
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={max_temp + 5}")
     result = framework.wait_for_completion(cmd_id)
     if not framework.assertNE(result, 0):
-        return False
+        return framework.failed()
     heater_status = framework.get_status(obj_id)[obj_id]
     if not framework.assertEQ(heater_status["temperature"], temp):
-        return False
+        return framework.failed()
     target_temp = temp - 15
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={target_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, temp, target_temp):
-        return False
+        return framework.failed()
     heater_status = framework.get_status(obj_id)[obj_id]
     temp = heater_status["temperature"]
     if not framework.assertEQ(temp, target_temp):
-        return False
+        return framework.failed()
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={initial_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, temp, initial_temp):
-        return False
+        return framework.failed()
     heater_status = framework.get_status(obj_id)[obj_id]
     if not framework.assertEQ(heater_status["temperature"], initial_temp):
-        return False
-    return True
+        return framework.failed()
+    return framework.passed()
 
 def run_test(framework):
     if framework.frontend != "direct":
@@ -88,5 +93,4 @@ def run_test(framework):
     heaters = framework.get_objects(heater_klass)
     for heater in heaters:
         framework.begin(f"heater_direct for {heater['name']}")
-        if run_heater_test(framework, heater["name"], heater["id"]):
-            framework.passed()
+        run_heater_test(framework, heater["name"], heater["id"])

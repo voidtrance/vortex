@@ -16,41 +16,41 @@
 
 dependencies = []
 
-def test_fan(framework, name, obj_id):
-    fan_status = framework.get_status(obj_id)[obj_id]
-    initial_speed = fan_status["speed"]
-    if not framework.assertGE(initial_speed, 0.0) or \
-        not framework.assertLE(initial_speed, 1.0):
+def test_pin(framework, name, obj_id):
+    pin_status = framework.get_status(obj_id)[obj_id]
+    initial_cycle = pin_status["cycle"]
+    if not framework.assertGE(initial_cycle, 0.0) or \
+        not framework.assertLE(initial_cycle, 1.0):
         return framework.failed()
-    cmd_id = framework.run_command(f"fan:{name}:set_speed:speed={initial_speed + 30}")
+    cmd_id = framework.run_command(f"pwm_pin:{name}:set_cycle:cycle={initial_cycle + 30}")
     status = framework.wait_for_completion(cmd_id)
     if not framework.assertEQ(status, 0):
         return framework.failed()
-    fan_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(fan_status["speed"], (initial_speed + 30) / 100):
+    pin_status = framework.get_status(obj_id)[obj_id]
+    if not framework.assertEQ(pin_status["cycle"], (initial_cycle + 30) / 100):
         return framework.failed()
-    speed = fan_status["speed"] * 100 - 10
-    cmd_id = framework.run_command(f"fan:{name}:set_speed:speed={speed}")
+    cycle = pin_status["cycle"] * 100 - 10
+    cmd_id = framework.run_command(f"pwm_pin:{name}:set_cycle:cycle={cycle}")
     status = framework.wait_for_completion(cmd_id)
     if not framework.assertEQ(status, 0):
         return framework.failed()
-    fan_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(fan_status["speed"], speed / 100):
+    pin_status = framework.get_status(obj_id)[obj_id]
+    if not framework.assertEQ(pin_status["cycle"], cycle / 100):
         return framework.failed()
-    cmd_id = framework.run_command(f"fan:{name}:set_speed:speed=110")
+    cmd_id = framework.run_command(f"pwm_pin:{name}:set_cycle:cycle=110")
     status = framework.wait_for_completion(cmd_id)
     if not framework.assertNE(status, 0):
         return framework.failed()
-    cmd_id = framework.run_command(f"fan:{name}:set_speed:speed=-10")
+    cmd_id = framework.run_command(f"pwm_pin:{name}:set_cycle:cycle=-10")
     status = framework.wait_for_completion(cmd_id)
     if not framework.assertNE(status, 0):
         return framework.failed()
     return framework.passed()
 
 def run_test(framework):
-    framework.begin("fan_direct")
+    framework.begin("pwm_direct")
     if framework.frontend != "direct":
         return framework.waive()
-    fans = framework.get_objects("fan")
-    for fan in fans:
-        test_fan(framework, fan["name"], fan["id"])
+    pins = framework.get_objects("pwm_pin")
+    for pin in pins:
+        test_pin(framework, pin["name"], pin["id"])
