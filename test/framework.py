@@ -32,16 +32,18 @@ VORTEX_PATH = "/tmp/vortex"
 VORTEX_SOCKET_PATH = "/tmp/vortex_monitor"
 
 class Logger:
-    def __init__(self):
+    def __init__(self, log_writer):
         self._level = 0
+        self._writer = log_writer
     def set_level(self, level):
         self._level = level
     def log(self, level, fmt, *args):
         if level <= self._level:
-            msg = fmt
+            msg = f"{time.time()} {fmt}"
             if args:
                 msg = msg % args
-            print(f"{msg}", file=sys.stderr)
+            print(msg, file=sys.stderr)
+            self._writer(msg + "\n")
 
 class Color(ExtIntEnum):
     RED    = (auto(), '\33[31m')
@@ -66,7 +68,7 @@ class TestFramework:
         self._config.read(config_file)
         self._frontend = frontend
         self._controller = controller
-        self._logger = Logger()
+        self._logger = Logger(self._write_logfile)
         self._emulator = None
         self._klasses = []
         self._objects = {}
@@ -240,6 +242,8 @@ class TestFramework:
                 self._write_logfile(data)
 
     def _write_logfile(self, data):
+        if self._logfile is None:
+            return
         if isinstance(data, str):
             data = data.encode()
         with self._logfile_lock:
@@ -264,8 +268,8 @@ class TestFramework:
             if os.path.exists(self._logfile):
                 os.unlink(self._logfile)
             cmd += ["-d", "DEBUG"]
+            self._logfile = open(self._logfile, "wb")
         self._logger.log(1, "Cmd: %s", " ".join(cmd))
-        self._logfile = open(self._logfile, "wb")
         self._emulator = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                           stderr=subprocess.STDOUT)
         while not os.path.exists(VORTEX_PATH) or not os.path.exists(VORTEX_SOCKET_PATH):

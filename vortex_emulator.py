@@ -65,7 +65,8 @@ def main():
     parser = create_arg_parser()
     opts = parser.parse_args()
 
-    logging.basicConfig(filename=opts.logfile, level=opts.debug)
+    logging.basicConfig(filename=opts.logfile, level=opts.debug,
+                        format="%(created)f %(levelname)s: %(message)s")
 
     config = vortex.emulator.config.Configuration()
     config.read(opts.config)

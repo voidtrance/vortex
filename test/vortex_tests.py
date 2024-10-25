@@ -25,7 +25,7 @@ def generate_parser():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-C", "--config", required=True,
                         help="""Vortex configuration file""")
-    parser.add_argument("-v", "--verbose", action="count",
+    parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="""Verbosity level""")
     parser.add_argument("-c", "--controller", default="stm32f4",
                         help="""HW controller to test.""")
