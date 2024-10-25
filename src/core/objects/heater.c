@@ -106,15 +106,15 @@ static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     if (cmd->object_cmd_id != HEATER_COMMAND_SET_TEMP)
 	return -1;
 
-    // If a command is still running, immediately complete it.
-    if (heater->command.command_id)
-	CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
-
-    heater->command = *cmd;
     args = (struct heater_set_temperature_args *)cmd->args;
     if (args->temperature < 0 || args->temperature > heater->max_temp)
 	return -1;
 
+    // If a command is still running, immediately complete it.
+    if (heater->command.command_id)
+      CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
+
+    heater->command = *cmd;
     heater->pos = 0;
     heater->base_temp = heater->temp;
     heater->target_temp = max(args->temperature, AMBIENT_TEMP);
@@ -187,7 +187,6 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     heater_t *heater = (heater_t *)object;
     uint64_t time_delta = timestep - heater->timestep;
     heater_temp_reached_event_data_t *data;
-    uint64_t duration;
 
     heater->timestep = timestep;
     if (heater->temp == heater->target_temp)
