@@ -79,6 +79,7 @@ class TestFramework:
         self._current_test = None
         self._logfile = logfile
         self._logfile_lock = threading.Lock()
+        self._emulation_frequency = 200 # Hz
 
     @property
     def controller(self):
@@ -190,7 +191,14 @@ class TestFramework:
     def get_status(self, objects):
         if isinstance(objects, int):
             objects = [objects]
-        self._write_logfile(f"status: {objects}")
+        # Give emulator two update cycles before querying status
+        # so objects can update.
+        # However, logging significantly slows down the emulator
+        # so in that case, give it extra long
+        if self.logging_enabled:
+            time.sleep(0.2)
+        else:
+            time.sleep(2. / self._emulation_frequency)
         return self._query("query", {"objects": objects})
 
     def run_command(self, cmd):
@@ -263,7 +271,8 @@ class TestFramework:
     def _launch_emulator(self):
         path = os.path.dirname(os.path.dirname(__file__))
         cmd = [os.path.join(path, "vortex_emulator.py"), "-C", self._config_file,
-               "-f", self._frontend, "-c", self._controller, "-M"]
+               "-f", self._frontend, "-c", self._controller, "-M", "-F",
+               f"{self._emulation_frequency}Hz"]
         if self._logfile is not None:
             if os.path.exists(self._logfile):
                 os.unlink(self._logfile)
