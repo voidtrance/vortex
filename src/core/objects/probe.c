@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <time.h>
 #include <kinematics.h>
+#include <pthread.h>
 #include "../debug.h"
 #include "../common_defs.h"
 #include "../events.h"
@@ -47,6 +48,7 @@ typedef struct {
     float range;
     float fuzz;
     bool triggered;
+    pthread_mutex_t lock;
 } probe_t;
 
 static object_cache_t *probe_event_cache = NULL;
@@ -62,6 +64,7 @@ static int probe_init(core_object_t *object) {
 	return -ENOENT;
     }
 
+    probe->fuzz = random_float_limit(0, probe->range);
     return 0;
 }
 
@@ -70,44 +73,39 @@ static void probe_get_state(core_object_t *object, void *state) {
     probe_status_t *s = (probe_status_t *)state;
 
     memset(s, 0, sizeof(*s));
+    pthread_mutex_lock(&probe->lock);
     memcpy(s->position, probe->position, sizeof(s->position));
     memcpy(s->offsets, probe->offsets, sizeof(s->offsets));
     s->triggered = probe->triggered;
+    pthread_mutex_unlock(&probe->lock);
 }
 
 static void probe_update(core_object_t *object, uint64_t ticks,
 			 uint64_t runtime) {
     probe_t *probe = (probe_t *)object;
     toolhead_status_t status;
-    bool within_range = true;
+    bool state = probe->triggered;
     size_t i;
 
     probe->toolhead->get_state(probe->toolhead, &status);
+    pthread_mutex_lock(&probe->lock);
+    probe->triggered = true;
     for (i = 0; i < AXIS_TYPE_MAX; i++) {
-	log_debug(probe, "Toolhead axis %u: %.15f", i, status.position[i]);
 	probe->position[i] = status.position[i] + probe->offsets[i];
-	within_range &= status.position[i] <= probe->fuzz;
+	probe->triggered &= status.position[i] <= probe->fuzz;
     }
+    pthread_mutex_unlock(&probe->lock);
 
-    if (within_range) {
+    if (probe->triggered && !state) {
         probe_trigger_event_data_t *data;
-        bool state = probe->triggered;
 
-        probe->triggered = true;
-
-	// Send event only when probe is triggered.
-	if (!state) {
-	    data = object_cache_alloc(probe_event_cache);
-	    if (data) {
-		memcpy(data->position, probe->position, sizeof(data->position));
-		CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED, data);
-	    }
+	data = object_cache_alloc(probe_event_cache);
+	if (data) {
+	    memcpy(data->position, probe->position, sizeof(data->position));
+	    CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED, data);
 	}
-    } else {
-	if (probe->triggered)
-	    probe->fuzz = random_float_limit(0, probe->range);
-
-        probe->triggered = false;
+    } else if (!probe->triggered && state) {
+	probe->fuzz = random_float_limit(0, probe->range);
     }
 }
 
@@ -123,7 +121,6 @@ static void probe_destroy(core_object_t *object) {
 probe_t *object_create(const char *name, void *config_ptr) {
     probe_t *probe;
     probe_config_params_t *config = (probe_config_params_t *)config_ptr;
-    size_t i;
 
     probe = calloc(1, sizeof(*probe));
     if (!probe)
@@ -138,6 +135,7 @@ probe_t *object_create(const char *name, void *config_ptr) {
     probe->toolhead_name = strdup(config->toolhead);
     memcpy(probe->offsets, config->offset, sizeof(probe->offsets));
     probe->range = config->range;
+    pthread_mutex_init(&probe->lock, NULL);
 
     if (object_cache_create(&probe_event_cache,
 			    sizeof(probe_trigger_event_data_t))) {
