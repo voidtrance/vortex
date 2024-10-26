@@ -30,6 +30,7 @@ struct heater_set_temperature_args {
 typedef struct {
     float temperature;
     float max_temp;
+    char pin[8];
 } heater_status_t;
 
 #endif

@@ -17,16 +17,18 @@ import inspect
 
 class Counter():
     def __init__(self, start=0):
-        self._value = start
+        self._start = self._value = start
     def next(self):
         value, self._value = self._value, self._value + 1
         return value
+    def reset(self):
+        self._value = self._start
     def __setattr__(self, name, value):
         stack = inspect.stack()
         caller = stack[1].frame.f_locals.get("self", None)
         if not caller or not isinstance(caller, Counter):
             raise AttributeError('Class attributes cannot be set')
         function = getattr(caller, stack[1].frame.f_code.co_name)
-        if function not in (self.__init__, self.next):
+        if function not in (self.__init__, self.next, self.reset):
             raise KeyError('Class attributes cannot be set')
         super().__setattr__(name, value)

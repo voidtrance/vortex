@@ -20,6 +20,7 @@
 
 typedef struct {
     double resistance;
+    char pin[8];
 } thermistor_status_t;
 
 #endif

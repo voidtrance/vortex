@@ -33,7 +33,10 @@ class Stepper(ObjectDef):
                     ("microsteps", ctypes.c_uint32),
                     ("start_speed", ctypes.c_uint32),
                     ("steps_per_mm", ctypes.c_uint32),
-                    ("driver", ctypes.c_char * 16)]
+                    ("driver", ctypes.c_char * 16),
+                    ("enable_pin", ctypes.c_char * 8),
+                    ("dir_pin", ctypes.c_char * 8),
+                    ("step_pin", ctypes.c_char * 8)]
     class StepperEnableCommandOpts(ctypes.Structure):
         _fields_ = [("enable", ctypes.c_bool)]
     class StepperSetSpeedCommandOpts(ctypes.Structure):
@@ -52,7 +55,10 @@ class Stepper(ObjectDef):
                     ("speed", ctypes.c_double),
                     ("accel", ctypes.c_double),
                     ("decel", ctypes.c_double),
-                    ("steps_per_mm", ctypes.c_uint)]
+                    ("steps_per_mm", ctypes.c_uint),
+                    ("enable_pin", ctypes.c_char * 8),
+                    ("dir_pin", ctypes.c_char * 8),
+                    ("step_pin", ctypes.c_char * 8)]
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
@@ -67,20 +73,24 @@ class Thermistor(ObjectDef):
     class ThermistorConfig(ctypes.Structure):
         _fields_ = [("sensor_type", ctypes.c_char * 64),
                     ("heater", ctypes.c_char * 64),
-                    ("beta", ctypes.c_uint32)]
+                    ("beta", ctypes.c_uint32),
+                    ("pin", ctypes.c_char * 8)]
     class ThermistorStatus(ctypes.Structure):
-        _fields_ = [("resistance", ctypes.c_double)]
+        _fields_ = [("resistance", ctypes.c_double),
+                    ("pin", ctypes.c_char * 8)]
     def __init__(self):
         super().__init__(ModuleTypes.THERMISTOR)
 class Heater(ObjectDef):
     class HeaterConfig(ctypes.Structure):
         _fields_ = [("power", ctypes.c_uint16),
+                    ("pin", ctypes.c_char * 8),
                     ("max_temp", ctypes.c_float)]
     class HeaterSetTempCommandOpts(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float)]
     class HeaterStatus(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float),
-                    ("max_temp", ctypes.c_float)]
+                    ("max_temp", ctypes.c_float),
+                    ("pin", ctypes.c_char * 8)]
     class HeaterEventTempReached(ctypes.Structure):
         _fields_ = [("temp", ctypes.c_float)]
     def __init__(self):
@@ -91,11 +101,13 @@ class Heater(ObjectDef):
 class Endstop(ObjectDef):
     class EndstopConfig(ctypes.Structure):
         _fields_ = [("type", ctypes.c_char * 4),
-                    ("axis", ctypes.c_char)]
+                    ("axis", ctypes.c_char),
+                    ("pin", ctypes.c_char * 8)]
     class EndstopStatus(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool),
                     ("type", ctypes.c_char * 4),
-                    ("axis", ctypes.c_int)]
+                    ("axis", ctypes.c_int),
+                    ("pin", ctypes.c_char * 8)]
     class EndstopTriggerEvent(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool)]
     def __init__(self):
@@ -132,11 +144,13 @@ class Probe(ObjectDef):
     class ProbeConfig(ctypes.Structure):
         _fields_ = [("toolhead", ctypes.c_char * 64),
                     ("offsets", ctypes.c_float * len(AxisType)),
-                    ("range", ctypes.c_float)]
+                    ("range", ctypes.c_float),
+                    ("pin", ctypes.c_char * 8)]
     class ProbeStatus(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool),
                     ("offsets", ctypes.c_float * len(AxisType)),
-                    ("position", ctypes.c_double * len(AxisType))]
+                    ("position", ctypes.c_double * len(AxisType)),
+                    ("pin", ctypes.c_char * 8)]
     class ProbeEventTriggered(ctypes.Structure):
         _fields_ = [("position", ctypes.c_double * len(AxisType))]
     def __init__(self):

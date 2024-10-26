@@ -17,7 +17,6 @@
  */
 #ifndef __PROBE_H__
 #define __PROBE_H__
-#include <stdint.h>
 #include <stdbool.h>
 #include <kinematics.h>
 
@@ -25,6 +24,7 @@ typedef struct {
     bool triggered;
     float offsets[AXIS_TYPE_MAX];
     double position[AXIS_TYPE_MAX];
+    char pin[8];
 } probe_status_t;
 
 typedef struct {

@@ -29,4 +29,4 @@ class DigitalPin(vobj.VirtualObjectBase):
         self._state = bool(opts.get("state"))
         self.complete_command(cmd_id, 0)
     def get_status(self):
-        return {"state" : self._state}
+        return {"state" : self._state, "pin": self.config.pin}

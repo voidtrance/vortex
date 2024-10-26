@@ -41,6 +41,7 @@ const char *endstop_type_names[] = {
 typedef struct {
     const char type[4];
     const char axis;
+    char pin[8];
 } endstop_config_params_t;
 
 typedef struct {
@@ -48,6 +49,7 @@ typedef struct {
     core_object_t *axis;
     axis_type_t axis_type;
     endstop_type_t type;
+    char pin[8];
     bool triggered;
 } endstop_t;
 
@@ -132,6 +134,7 @@ static void endstop_status(core_object_t *object, void *status) {
 
     s->triggered = endstop->triggered;
     s->axis = endstop->axis_type;
+    strncpy(s->pin, endstop->pin, sizeof(s->pin));
     strncpy((char *)s->type, endstop_type_names[endstop->type], 3);
 }
 
@@ -166,6 +169,7 @@ endstop_t *object_create(const char *name, void *config_ptr) {
     endstop->object.get_state = endstop_status;
     endstop->object.destroy = endstop_destroy;
     endstop->axis_type = kinematics_axis_type_from_char(config->axis);
+    strncpy(endstop->pin, config->pin, sizeof(endstop->pin));
 
     for (type = 0; type < ENDSTOP_TYPE_END; type++) {
 	if (!strncmp(config->type, endstop_type_names[type],

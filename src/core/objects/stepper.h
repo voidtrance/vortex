@@ -61,6 +61,9 @@ typedef struct {
     double accel;
     double decel;
     uint32_t steps_per_mm;
+    char enable_pin[8];
+    char dir_pin[8];
+    char step_pin[8];
 } stepper_status_t;
 
 #endif

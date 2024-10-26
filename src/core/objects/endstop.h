@@ -24,6 +24,7 @@ typedef struct {
     bool triggered;
     const char type[4];
     axis_type_t axis;
+    char pin[8];
 } endstop_status_t;
 
 #endif

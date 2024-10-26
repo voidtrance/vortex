@@ -36,6 +36,7 @@ typedef struct {
     const char toolhead[64];
     float offset[AXIS_TYPE_MAX];
     float range;
+    char pin[8];
 } probe_config_params_t;
 
 
@@ -47,6 +48,7 @@ typedef struct {
     double position[AXIS_TYPE_MAX];
     float range;
     float fuzz;
+    char pin[8];
     bool triggered;
     pthread_mutex_t lock;
 } probe_t;
@@ -73,9 +75,10 @@ static void probe_get_state(core_object_t *object, void *state) {
     probe_status_t *s = (probe_status_t *)state;
 
     memset(s, 0, sizeof(*s));
+    strncpy(s->pin, probe->pin, sizeof(s->pin));
+    memcpy(s->offsets, probe->offsets, sizeof(s->offsets));
     pthread_mutex_lock(&probe->lock);
     memcpy(s->position, probe->position, sizeof(s->position));
-    memcpy(s->offsets, probe->offsets, sizeof(s->offsets));
     s->triggered = probe->triggered;
     pthread_mutex_unlock(&probe->lock);
 }
@@ -135,6 +138,7 @@ probe_t *object_create(const char *name, void *config_ptr) {
     probe->toolhead_name = strdup(config->toolhead);
     memcpy(probe->offsets, config->offset, sizeof(probe->offsets));
     probe->range = config->range;
+    strncpy(probe->pin, config->pin, sizeof(probe->pin));
     pthread_mutex_init(&probe->lock, NULL);
 
     if (object_cache_create(&probe_event_cache,

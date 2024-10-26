@@ -33,6 +33,7 @@
 
 typedef struct {
     uint16_t power;
+    char pin[8];
     float max_temp;
 } heater_config_params_t;
 
@@ -48,6 +49,7 @@ typedef struct {
     uint64_t max_ramp_duration;
     uint64_t pos;
     uint64_t ramp_duration;
+    char pin[8];
 } heater_t;
 
 static object_cache_t *heater_event_cache = NULL;
@@ -78,6 +80,7 @@ heater_t *object_create(const char *name, void *config_ptr) {
     heater->max_ramp_duration = SEC_TO_NSEC(MAX_RAMP_UP_DURATION * 100 /
 					    config->power);
     heater->max_temp = config->max_temp;
+    strncpy(heater->pin, config->pin, sizeof(heater->pin));
 
     if (object_cache_create(&heater_event_cache,
 			    sizeof(heater_temp_reached_event_data_t))) {
@@ -146,6 +149,7 @@ static void heater_status(core_object_t *object, void *status) {
 
     s->temperature = heater->temp;
     s->max_temp = heater->max_temp;
+    strncpy(s->pin, heater->pin, sizeof(s->pin));
 }
 
 static float powout(float value, uint8_t p) {

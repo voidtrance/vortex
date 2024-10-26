@@ -33,4 +33,4 @@ class PWMPin(vobj.VirtualObjectBase):
         self._cycle = cycle / 100
         self.complete_command(cmd_id, 0)
     def get_status(self):
-        return {"cycle" : self._cycle}
+        return {"cycle" : self._cycle, "pin": self.config.pin}

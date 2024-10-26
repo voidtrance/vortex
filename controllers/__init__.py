@@ -25,6 +25,7 @@ import vortex.core
 import vortex.lib.ctypes_helpers
 from vortex.lib.utils import Counter
 
+class PinError(Exception): pass
 class Pins:
     __c = Counter()
     def __init__(self, name, start, end=None):
@@ -37,6 +38,7 @@ class Pins:
                 raise ValueError("'end' is None")
             self._start = start
             self._end = end
+        self._value = self._start
     @property
     def name(self):
         return self._name
@@ -46,9 +48,16 @@ class Pins:
     @property
     def max(self):
         return self._end
+    def next(self):
+        if self._value >= self._end:
+            raise PinError("Value exceeds pin range")
+        pin = f"{self.name}{self._value}"
+        self._value = self.__c.next()
+        return pin
     def __len__(self):
         return self._end - self._start + 1
     def __iter__(self):
+        self.__c.reset()
         for pin in range(self._start, self._end+1):
             yield (f"{self._name}{pin}", self.__c.next())
 
@@ -115,6 +124,7 @@ class Controller(core.VortexCore):
             logging.warning("With DEBUG and higher logging levels")
             logging.warning("controller timing will be imprecise!")
         super().__init__(debug=debug_level)
+        self._pin_index = 0
         self._objects = _Objects()
         self.objects = ObjectLookUp(self._objects)
         self.object_defs = {x: None for x in ModuleTypes}
@@ -155,6 +165,7 @@ class Controller(core.VortexCore):
                 self.object_defs[klass] is None:
                 logging.error(f"No definitions for klass '{klass}'")
                 continue
+            self._assign_pins(klass, options)
             if self.object_defs[klass].virtual:
                 obj = self.object_defs[klass](options, self.objects,
                                               self.query_objects,
@@ -173,6 +184,25 @@ class Controller(core.VortexCore):
                     continue
                 object_id = self.create_object(klass, name, ctypes.addressof(obj_conf))
             self._objects.add_object(klass, name, object_id)
+    def _get_next_pin(self):
+        pin_set = self.PINS[self._pin_index]
+        try:
+            pin = pin_set.next()
+        except PinError:
+            self._pin_index += 1
+            if self._pin_index >= len(self.PINS):
+                return None
+            pin = self._get_next_pin()
+        return pin
+    def _assign_pins(self, klass, options):
+        if klass == ModuleTypes.STEPPER:
+            options.enable_pin = self._get_next_pin()
+            options.dir_pin = self._get_next_pin()
+            options.step_pin = self._get_next_pin()
+        elif klass in (ModuleTypes.THERMISTOR, ModuleTypes.HEATER,
+                       ModuleTypes.ENDSTOP, ModuleTypes.PROBE,
+                       ModuleTypes.DIGITAL_PIN, ModuleTypes.PWM_PIN):
+            options.pin = self._get_next_pin()
     def start(self, update_frequency, completion_cb):
         self._completion_callback = completion_cb
         super().start(self.FREQUENCY, update_frequency, self._completion_callback)
