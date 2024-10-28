@@ -20,20 +20,42 @@
 #include <stdint.h>
 #include "common_defs.h"
 
+typedef enum {
+    CORE_THREAD_TYPE_UPDATE,
+    CORE_THREAD_TYPE_TIMER,
+    CORE_THREAD_TYPE_OBJECT,
+    CORE_THREAD_TYPE_WORKER,
+} core_thread_type_t;
 
-typedef void (*work_callback_t)(void *user_data);
+typedef struct {
+    union {
+	struct {
+	    uint64_t tick_frequency;
+	    uint64_t update_frequency;
+	} update;
+	struct {
+	    void (*callback)(uint64_t, void *);
+	    void *data;
+	} timer;
+	struct {
+	    core_object_t *object;
+	    const char *name;
+	} object;
+	struct {
+	    uint64_t frequency;
+	    void (*callback)(void *);
+	    void *data;
+	} worker;
+    };
+} core_thread_args_t;
 
-int controller_thread_create(core_object_t *object, const char *name);
-int controller_timer_thread_create(uint64_t frequency,
-				   uint64_t update_frequency);
-int controller_work_thread_create(work_callback_t callback, void *user_data,
-				  uint64_t frequency);
-int controller_thread_start(void);
-void controller_thread_stop(void);
-uint64_t controller_thread_get_clock_ticks(void);
-uint64_t controller_thread_get_runtime(void);
-void controller_thread_pause(void);
-void controller_thread_resume(void);
-void controller_thread_destroy(void);
+int core_thread_create(core_thread_type_t type, core_thread_args_t *args);
+int core_threads_start(void);
+void core_threads_stop(void);
+uint64_t core_get_clock_ticks(void);
+uint64_t core_get_runtime(void);
+void core_threads_pause(void);
+void core_threads_resume(void);
+void core_threads_destroy(void);
 
 #endif

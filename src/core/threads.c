@@ -29,7 +29,7 @@
 #include <sys/queue.h>
 #include <utils.h>
 #include "core.h"
-#include "thread_control.h"
+#include "threads.h"
 #include "debug.h"
 
 struct core_thread_control {
@@ -40,20 +40,7 @@ struct core_thread_control {
 
 struct core_thread_args {
     const char *name;
-    union {
-	struct {
-	    void *object;
-	} update;
-	struct {
-	    void *callback;
-	    void *data;
-	    uint64_t frequency;
-        } worker;
-	struct {
-	    uint64_t frequency;
-	    uint64_t update;
-	} timer;
-    };
+    core_thread_args_t args;
     int *control;
     bool *pause;
     int ret;
@@ -61,6 +48,7 @@ struct core_thread_args {
 
 typedef struct core_control_data {
     STAILQ_ENTRY(core_control_data) entry;
+    core_thread_type_t type;
     struct core_thread_control control;
     struct core_thread_args args;
     void *(*thread_func)(void *);
@@ -121,26 +109,27 @@ static long timer_update_wake(int32_t *flag) {
 }
 
 static void *core_time_control_thread(void *arg) {
-    struct core_thread_args *args = (struct core_thread_args *)arg;
-    float tick = (1000.0 / ((float)args->timer.frequency / 1000000));
-    float update = (1000.0 / ((float)args->timer.update / 1000000));
+    struct core_thread_args *data = (struct core_thread_args *)arg;
+    core_thread_args_t *args = &data->args;
+    float tick = (1000.0 / ((float)args->update.tick_frequency / 1000000));
+    float update = (1000.0 / ((float)args->update.update_frequency / 1000000));
     struct timespec sleep = { .tv_sec = update / SEC_TO_NSEC(1),
 	.tv_nsec = (uint64_t)update % SEC_TO_NSEC(1) };
     struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000 };
     struct timespec start;
     struct timespec now;
 
-    args->ret = 0;
+    data->ret = 0;
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, args->name,
+    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, data->name,
 	     "step duration: %f, tick: %f", update, tick);
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    while (*(volatile int *)args->control == 1) {
+    while (*(volatile int *)data->control == 1) {
 	uint64_t delta;
 
 	/* Pause after threads have been signaled. */
-	if (*(volatile bool *)args->pause) {
+	if (*(volatile bool *)data->pause) {
 	    global_time_data.paused = true;
 	    clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &pause, NULL);
 	    continue;
@@ -156,29 +145,46 @@ static void *core_time_control_thread(void *arg) {
 	global_time_data.controller_ticks += (uint64_t)((float)delta / tick);
 	timer_update_wake(&global_time_data.trigger);
     }
+
+    pthread_exit(&data->ret);
+}
+
+static void *core_timer_thread(void *arg) {
+    struct core_thread_args *data = (struct core_thread_args *)arg;
+    core_thread_args_t *args = &data->args;
+
+    data->ret = 0;
+    while (*(volatile int *)data->control == 1) {
+	timer_update_wait(&global_time_data.trigger);
+	args->timer.callback(global_time_data.controller_ticks,
+			     args->timer.data);
+    }
+
+    pthread_exit(&data->ret);
 }
 
 static void *core_update_thread(void *arg) {
-    struct core_thread_args *args = (struct core_thread_args *)arg;
-    core_object_t *object = args->update.object;
+    struct core_thread_args *data = (struct core_thread_args *)arg;
+    core_thread_args_t *args = &data->args;
+    core_object_t *object = args->object.object;
 
-    args->ret = 0;
-    while (*(volatile int *)args->control == 1) {
+    data->ret = 0;
+    while (*(volatile int *)data->control == 1) {
 	timer_update_wait(&global_time_data.trigger);
 	object->update(object, global_time_data.controller_ticks,
 		       global_time_data.controller_runtime);
     }
 
-    pthread_exit(&args->ret);
+    pthread_exit(&data->ret);
 }
 
 static void *core_generic_thread(void *arg) {
-    struct core_thread_args *args = (struct core_thread_args *)arg;
-    work_callback_t callback = (work_callback_t)args->worker.callback;
+    struct core_thread_args *data = (struct core_thread_args *)arg;
+    core_thread_args_t *args = &data->args;
     float step_duration = 0.0;
     struct timespec sleep_time;
 
-    args->ret = 0;
+    data->ret = 0;
     if (args->worker.frequency)
 	step_duration = ((float)1000 / ((float)args->worker.frequency / 1000000));
 
@@ -187,12 +193,12 @@ static void *core_generic_thread(void *arg) {
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = step_duration;
 
-    while (*(volatile int *)args->control == 1) {
-	callback(args->worker.data);
+    while (*(volatile int *)data->control == 1) {
+	args->worker.callback(args->worker.data);
         nanosleep(&sleep_time, NULL);
     }
 
-    pthread_exit(&args->ret);
+    pthread_exit(&data->ret);
 }
 
 int start_thread(struct core_control_data *thread_data) {
@@ -234,70 +240,52 @@ int start_thread(struct core_control_data *thread_data) {
     return 0;
 }
 
-void controller_thread_list_init(void) {
+static void core_thread_list_init(void) {
     STAILQ_INIT(&core_threads);
 }
 
-int controller_thread_create(core_object_t *object, const char *name) {
+int core_thread_create(core_thread_type_t type, core_thread_args_t *args) {
     core_control_data_t *data;
 
-    pthread_once(&initialized, controller_thread_list_init);
+    pthread_once(&initialized, core_thread_list_init);
 
     data = calloc(1, sizeof(*data));
     if (!data)
       return -ENOMEM;
 
-    data->args.name = strdup(name);
-    data->args.update.object = object;
-    data->thread_func = core_update_thread;
+    memcpy(&data->args.args, args, sizeof(data->args));
+    data->type = type;
+
+    switch (type) {
+    case CORE_THREAD_TYPE_UPDATE:
+	data->thread_func = core_time_control_thread;
+	data->args.name = strdup("time_control");
+	break;
+    case CORE_THREAD_TYPE_TIMER:
+	data->thread_func = core_timer_thread;
+	data->args.name = strdup("timer");
+	break;
+    case CORE_THREAD_TYPE_OBJECT:
+	data->thread_func = core_update_thread;
+	data->args.name = strdup(args->object.name);
+	break;
+    case CORE_THREAD_TYPE_WORKER:
+	data->thread_func = core_generic_thread;
+	data->args.name = strdup("worker");
+    }
+
     STAILQ_INSERT_TAIL(&core_threads, data, entry);
     return 0;
 }
 
-int controller_timer_thread_create(uint64_t frequency,
-				   uint64_t update_frequency) {
-    core_control_data_t *data;
-
-    pthread_once(&initialized, controller_thread_list_init);
-    data = calloc(1, sizeof(*data));
-    if (!data)
-      return -ENOMEM;
-
-    data->args.name = strdup("time_control");
-    data->args.timer.frequency = frequency;
-    data->args.timer.update = update_frequency;
-    data->thread_func = core_time_control_thread;
-    STAILQ_INSERT_TAIL(&core_threads, data, entry);
-    return 0;
-}
-
-int controller_work_thread_create(work_callback_t callback, void *user_data,
-				  uint64_t frequency) {
-    core_control_data_t *data;
-
-    pthread_once(&initialized, controller_thread_list_init);
-
-    data = calloc(1, sizeof(*data));
-    if (!data)
-	return -ENOMEM;
-
-    data->args.name = strdup("worker");
-    data->args.worker.frequency = frequency;
-    data->args.worker.callback = callback;
-    data->args.worker.data = user_data;
-    data->thread_func = core_generic_thread;
-    STAILQ_INSERT_TAIL(&core_threads, data, entry);
-    return 0;
-}
-
-int controller_thread_start(void) {
+int core_threads_start(void) {
     core_control_data_t *data;
     int ret;
 
     STAILQ_FOREACH(data, &core_threads, entry) {
 	ret = start_thread(data);
 	if (ret) {
-	    controller_thread_stop();
+	    core_threads_stop();
 	    break;
 	}
     }
@@ -305,7 +293,7 @@ int controller_thread_start(void) {
     return ret;
 }
 
-void controller_thread_stop(void) {
+void core_threads_stop(void) {
     core_control_data_t *data;
 
     STAILQ_FOREACH(data, &core_threads, entry) {
@@ -321,15 +309,15 @@ void controller_thread_stop(void) {
 	pthread_join(data->control.thread_id, NULL);
 }
 
-uint64_t controller_thread_get_clock_ticks(void) {
+uint64_t core_get_clock_ticks(void) {
     return global_time_data.controller_ticks;
 }
 
-uint64_t controller_thread_get_runtime(void) {
+uint64_t core_get_runtime(void) {
     return global_time_data.controller_runtime;
 }
 
-void controller_thread_pause(void) {
+void core_threads_pause(void) {
     core_control_data_t *data;
     struct timespec ts = {.tv_sec = 0, .tv_nsec = 50000};
 
@@ -340,7 +328,7 @@ void controller_thread_pause(void) {
 	nanosleep(&ts, NULL);
 }
 
-void controller_thread_resume(void) {
+void core_threads_resume(void) {
     core_control_data_t *data;
     struct timespec ts = {.tv_sec = 0, .tv_nsec = 50000};
 
@@ -351,7 +339,7 @@ void controller_thread_resume(void) {
 	nanosleep(&ts, NULL);
 }
 
-void controller_thread_destroy(void) {
+void core_threads_destroy(void) {
     core_control_data_t *data, *next;
 
     if (STAILQ_EMPTY(&core_threads))
@@ -361,6 +349,8 @@ void controller_thread_destroy(void) {
     while (data) {
 	next = STAILQ_NEXT(data, entry);
 	free((char *)data->args.name);
+	if (data->type == CORE_THREAD_TYPE_OBJECT)
+	    free((char *)data->args.args.object.name);
 	free(data);
 	data = next;
     }

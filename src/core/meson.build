@@ -24,11 +24,10 @@ subdir('kinematics')
 subdir('objects')
 
 py.extension_module('_vortex_core',
-                    ['core.c', 'thread_control.c', auto_gen_events,  auto_gen_types],
+                    ['core.c', 'threads.c', auto_gen_events,  auto_gen_types],
                     dependencies: [core_utils_dep, core_kinematics_dep, pthreads],
                     install: true,
                     install_dir: py.get_install_dir(pure: false) / 'vortex/core',
                     link_args: ['-Wl,-rpath=$ORIGIN/lib'])
                     #install_rpath: '$ORIGIN/lib')
 py.install_sources(['__init__.py'], subdir: 'vortex/core')
-
