@@ -35,6 +35,7 @@
 #include "events.h"
 #include "common_defs.h"
 #include "threads.h"
+#include "timers.h"
 #include "objects/object_defs.h"
 #include "objects/axis.h"
 #include "objects/endstop.h"
@@ -477,6 +478,8 @@ static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
 static void vortex_core_dealloc(core_t *self) {
     core_object_type_t type;
 
+    core_timers_free();
+
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
 	core_object_t *object;
 	core_object_t *object_next;
@@ -606,6 +609,7 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
 
     /* Allow external threads to avoid deadlocks. */
     Py_BEGIN_ALLOW_THREADS;
+    core_timers_disarm();
     core_threads_stop();
     Py_END_ALLOW_THREADS;
 
@@ -1234,6 +1238,66 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
     Py_RETURN_TRUE;
 }
 
+static uint64_t core_timer_handler(uint64_t ticks, void *data) {
+    PyObject *py_reschedule;
+    PyGILState_STATE state;
+    uint64_t reschedule = 0;
+
+    state = PyGILState_Ensure();
+    py_reschedule = PyObject_CallFunction((PyObject *)data, "k", ticks);
+    if (py_reschedule)
+	reschedule = PyLong_AsUnsignedLong(py_reschedule);
+    else
+	PyErr_Print();
+    PyGILState_Release(state);
+    return reschedule;
+}
+
+static PyObject *vortex_core_register_timer(PyObject *self, PyObject *args) {
+    PyObject *callback;
+    PyObject *py_handle;
+    uint64_t timeout;
+    core_timer_t timer;
+    core_timer_handle_t handle;
+
+    if (!PyArg_ParseTuple(args, "Ok", &callback, &timeout))
+	return NULL;
+
+    if (!PyCallable_Check(callback)) {
+	PyErr_Format(VortexCoreError,
+		     "Callback argument should be a callable object");
+	return NULL;
+    }
+
+    Py_INCREF(callback);
+    timer.callback = core_timer_handler;
+    timer.data = (void *)callback;
+    handle = core_timer_register(timer, timeout);
+    py_handle = _Py_BuildValue_SizeT("k", handle);
+    return py_handle;
+}
+
+static PyObject *vortex_core_reschedule_timer(PyObject *self, PyObject *args) {
+    core_timer_handle_t handle;
+    uint64_t timeout;
+
+    if (!PyArg_ParseTuple(args, "kk", &handle, &timeout))
+	return NULL;
+
+    core_timer_reschedule(handle, timeout);
+    Py_RETURN_NONE;
+}
+
+static PyObject *vortex_core_unregister_timer(PyObject *self, PyObject *args) {
+    core_timer_handle_t handle;
+
+    if (!PyArg_ParseTuple(args, "k", &handle))
+	return NULL;
+
+    core_timer_unregister(handle);
+    Py_RETURN_NONE;
+}
+
 void core_log(core_log_level_t level, core_object_type_t type,
 	      const char *name, const char *fmt, ...) {
     va_list args;
@@ -1293,6 +1357,12 @@ static PyMethodDef VortexCoreMethods[] = {
      "Submit virtual object event"},
     {"pause", vortex_core_pause, METH_VARARGS, "Pause emulation"},
     {"reset", vortex_core_reset, METH_VARARGS, "Reset controller object state"},
+    {"register_timer", vortex_core_register_timer, METH_VARARGS,
+     "Register periodic timer"},
+    {"reschedule_timer", vortex_core_reschedule_timer, METH_VARARGS,
+     "Reschedule registered timer"},
+    {"unregister_timer", vortex_core_unregister_timer, METH_VARARGS,
+     "Unregister a periodic timer"},
     {NULL, NULL, 0, NULL}
 };
 

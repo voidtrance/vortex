@@ -130,6 +130,9 @@ class BaseFrontend:
     def stop(self):
         self._run = False
         self._thread.join()
+        cmds = list(self._command_completion.keys())
+        for cmd in cmds:
+            self.complete_command(cmd, -1)
 
     def set_sequential_mode(self, mode):
         self._run_sequential = mode
