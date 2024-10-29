@@ -176,6 +176,8 @@ class Controller(core.VortexCore):
                 self._virtual_objects[object_id] = obj
             else:
                 obj_conf = self.object_defs[klass].config()
+                if klass == ModuleTypes.THERMISTOR:
+                    options.adc_max = self.ADC_MAX
                 try:
                     vortex.lib.ctypes_helpers.fill_ctypes_struct(obj_conf, vars(options))
                 except TypeError as e:

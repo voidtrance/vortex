@@ -17,9 +17,11 @@
  */
 #ifndef __THERMISTRO_H__
 #define __THERMISTOR_H__
+#include <stdint.h>
 
 typedef struct {
     double resistance;
+    uint16_t adc;
     char pin[8];
 } thermistor_status_t;
 

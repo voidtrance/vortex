@@ -46,12 +46,16 @@ typedef struct {
     char heater[64];
     uint32_t beta_value;
     char pin[8];
+    uint32_t resistor;
+    uint16_t max_adc;
 } thermistor_config_params_t;
 
 typedef struct {
     core_object_t object;
     thermistor_type_t type;
     uint16_t beta;
+    uint16_t max_adc;
+    uint32_t resistor;
     char pin[8];
     const char *heater_name;
     core_object_t *heater;
@@ -70,6 +74,12 @@ static void thermistor_destroy(core_object_t *object);
 static inline float resistance_calc(float base, float temp) {
     return base * (1 + pt100_A * temp + pt100_B * temp * temp +
 		   (temp - 100) * pt100_C * temp * temp * temp);
+}
+
+static inline uint16_t calc_adc_value(float resistance, uint32_t resistor,
+				      uint16_t max_adc) {
+    return (uint16_t)round((resistance / ((float)resistor + resistance)) *
+			   (max_adc + 1));
 }
 
 static inline void calc_coefficiants(float temp, float resistance,
@@ -105,6 +115,8 @@ thermistor_t *object_create(const char *name, void *config_ptr) {
     thermistor->object.get_state = thermistor_status;
     thermistor->object.name = strdup(name);
     thermistor->heater_name = strdup(config->heater);
+    thermistor->resistor = config->resistor;
+    thermistor->max_adc = config->max_adc;
     strncpy(thermistor->pin, config->pin, sizeof(thermistor->pin));
 
     if (!strncmp(config->sensor_type, "pt100", strlen(config->sensor_type)) ||
@@ -141,6 +153,8 @@ static void thermistor_status(core_object_t *object, void *status) {
     thermistor_t *thermistor = (thermistor_t *)object;
 
     s->resistance = thermistor->resistance;
+    s->adc = calc_adc_value(thermistor->resistance, thermistor->resistor,
+			    thermistor->max_adc);
     strncpy(s->pin, thermistor->pin, sizeof(s->pin));
 }
 

@@ -74,9 +74,12 @@ class Thermistor(ObjectDef):
         _fields_ = [("sensor_type", ctypes.c_char * 64),
                     ("heater", ctypes.c_char * 64),
                     ("beta", ctypes.c_uint32),
-                    ("pin", ctypes.c_char * 8)]
+                    ("pin", ctypes.c_char * 8),
+                    ("resistor", ctypes.c_uint32),
+                    ("adc_max", ctypes.c_uint16)]
     class ThermistorStatus(ctypes.Structure):
         _fields_ = [("resistance", ctypes.c_double),
+                    ("adc", ctypes.c_uint16),
                     ("pin", ctypes.c_char * 8)]
     def __init__(self):
         super().__init__(ModuleTypes.THERMISTOR)
