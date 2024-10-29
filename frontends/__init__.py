@@ -39,6 +39,7 @@ class BaseFrontend:
         self._run = True
         self._run_sequential = False
         self._queue = CommandQueue(queue_size)
+        self.query = None
         self.reset = None
         self.get_controller_clock_ticks = None
         self.get_controller_runtime = None
@@ -102,7 +103,7 @@ class BaseFrontend:
         return None
 
     def query_object(self, objects):
-        return self._query(objects)
+        return self.query(objects)
 
     def get_object_id(self, klass, name):
         return self._obj_name_2_id[klass].get(name, None)

@@ -19,6 +19,7 @@ import importlib
 import time
 from os import strerror
 from re import search
+from argparse import Namespace
 from vortex.lib.constants import *
 from vortex.core import VortexCoreError
 import vortex.emulator.monitor as monitor
@@ -54,12 +55,21 @@ class Emulator:
         self._controller = load_mcu(machine.controller, config)
         self._kinematics = kinematics.Kinematics(machine.kinematics,
                                                  self._controller)
+        interface = Namespace()
+        interface.reset = self._controller.reset
+        interface.query = self._controller.query_objects
+        interface.event_register = self._controller.event_register
+        interface.event_unregister = self._controller.event_unregister
+        interface.get_ticks =  self._controller.get_clock_ticks
+        interface.get_runtime = self._controller.get_runtime
+        interface.register_timer = self._controller.register_timer
+        interface.reschedule_timer = self._controller.reschedule_timer
+        interface.unregister_timer = self._controller.unregister_timer
         self._frontend = frontend
         self._frontend.set_kinematics_model(self._kinematics)
         controller_params = self._controller.get_params()
         self._frontend.set_controller_data(controller_params)
         self._frontend.set_controller_interface(interface)
-
         self._run_emulation = True
         self._frequency = 0
         self._monitor = None
