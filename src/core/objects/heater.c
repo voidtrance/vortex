@@ -122,6 +122,11 @@ static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     heater->base_temp = heater->temp;
     heater->target_temp = max(args->temperature, AMBIENT_TEMP);
 
+    if (heater->target_temp == heater->temp) {
+	CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
+	return 0;
+    }
+
     /* Ramping up duration is a percentage of the max ramp up
      * duration (which is a function of the heater's power).
      *
