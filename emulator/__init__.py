@@ -78,7 +78,7 @@ class Emulator:
         if isinstance(frequency, str):
             i = search(r'\d*', frequency).end()
             frequency, order = int(frequency[:i]), frequency[i:].upper()
-            if order.lower() != "hz":
+            if order != "HZ":
                 logging.debug(f"{frequency} {order}, {order}2HZ, {eval(f"{order}2HZ")}")
                 frequency = frequency * eval(f"{order}2HZ")
         if (frequency / MHZ2HZ) > 10:
