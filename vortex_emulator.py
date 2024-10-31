@@ -94,6 +94,10 @@ def main():
     try:
         emulation.run()
     except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        print(f"Emulator exception: {e}")
+    finally:
         emulation.stop()
 
     return 0
