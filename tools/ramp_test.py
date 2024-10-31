@@ -223,6 +223,26 @@ def ramp(a, b, dur, mode, data):
         val = (a - (a-b)*calc(k,mode))
     return val
 
+def ramp_hybrid(a, b, c, dur, modes, ranges, data):
+    print(c, ranges, modes)
+    for i, r in enumerate(ranges):
+        if c >= r[0] and c < r[1]:
+            break
+    mode = modes[i]
+    print(mode, r)
+    delta = data.delta
+    if data.pos + delta < dur:
+        data.pos += delta
+    else:
+        data.pos = dur
+    k = data.pos / dur
+    if b >= a:
+        bp = ((b - a) * 0.8) + a
+        val = (a + (b-a)*calc(k, mode))
+    else:
+        val = (a - (a-b)*calc(k, mode))
+    return val
+
 def make_graph(data):
     graph = go.Scatter(x=list(range(1, len(data)+1)),
                         y=data,
@@ -264,6 +284,9 @@ parser.add_argument("--graph", type=str, default=None,
                     graphs will be generated""")
 parser.add_argument("--algo", choices=ALGOS + ["ALL"], nargs="+",
                     help="Ramp algorithm")
+parser.add_argument("--hybrid", default=None, type=str)
+parser.add_argument("--breakpoints", type=int, nargs="*",
+                    help="Breakpoint value for hybrid ramps.")
 parser.add_argument("start", type=float, help="Start of ramp range")
 parser.add_argument("end", type=float, help="End of ramp range")
 parser.add_argument("duration", type=int, help="Ramp duration (in seconds)")
@@ -273,17 +296,35 @@ opts = parser.parse_args()
 if opts.algo == ["ALL"]:
     opts.algo = ALGOS
 
+if opts.hybrid:
+    opts.algo = ["hybrid"]
 values = {x: [] for x in opts.algo}
 graphs = {x: None for x in opts.algo}
 markers = "-\\|/"
 ramp_data = RampData()
+use_hybric = False
 for algo in opts.algo:
-    algov = eval(f"{algo.upper()}")
+    if opts.hybrid:
+        algos = opts.hybrid.split(',')
+        algosv = [eval(f"{x.upper()}") for x in algos]
+        use_hybric = True
+    else:
+        algov = eval(f"{algo.upper()}")
     value = opts.start
     ramp_data.reset()
     while value != opts.end:
         print(f"Generating {algo.upper()} values... {markers[len(values[algo]) % len(markers)]}\r", end="")
-        value = ramp(opts.start, opts.end, opts.duration, algov, ramp_data)
+        if use_hybric:
+            assert len(algosv) == len(opts.breakpoints) + 1
+            assert opts.breakpoints[0] > opts.start and opts.breakpoints[-1] < opts.end
+            r = [opts.start] + opts.breakpoints + [opts.end]
+            ranges = []
+            for i in range(len(r) - 1):
+                ranges.append((r[i], r[i+1] - 1))
+            value = ramp_hybrid(opts.start, opts.end, value, opts.duration, algosv,
+                                ranges, ramp_data)
+        else:
+            value = ramp(opts.start, opts.end, opts.duration, algov, ramp_data)
         values[algo].append(value)
         time.sleep(0.5)
     print()
