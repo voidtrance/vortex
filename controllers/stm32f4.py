@@ -22,5 +22,12 @@ class STM32F446(Controller):
             Pins("PE", 0, 15), Pins("PF", 0, 15),
             Pins("PG", 0, 15), Pins("PH", 0, 15)]
     FREQUENCY = 12000000
+    MOTOR_COUNT = 8
+    PWM_COUNT = 8
+    HEATER_COUNT = 2
+    PROBE_COUNT = 1
+    ENDSTOP_COUNT = 5
+    THERMISTOR_COUNT = 5
+    ADC_MAX = 4095
     def __init__(self, config):
         super().__init__(config)

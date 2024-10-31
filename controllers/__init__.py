@@ -27,18 +27,18 @@ from vortex.lib.utils import Counter
 
 class PinError(Exception): pass
 class Pins:
-    __c = Counter()
     def __init__(self, name, start, end=None):
         self._name = name
         if isinstance(start, (tuple, list)):
-            self._start = range[0]
-            self._end = range[1]
+            self._start = start[0]
+            self._end = start[1]
         else:
             if end is None:
                 raise ValueError("'end' is None")
             self._start = start
             self._end = end
-        self._value = self._start
+        self.__c = Counter(self._start)
+        self._value = self.__c.next()
     @property
     def name(self):
         return self._name
@@ -58,8 +58,8 @@ class Pins:
         return self._end - self._start + 1
     def __iter__(self):
         self.__c.reset()
-        for pin in range(self._start, self._end+1):
-            yield (f"{self._name}{pin}", self.__c.next())
+        for _ in range(len(self)):
+            yield self.next()
 
 class _Objects:
     _frozen = False
@@ -115,6 +115,14 @@ class ObjectLookUp:
 
 class Controller(core.VortexCore):
     PINS = []
+    MOTOR_COUNT = 0
+    THERMISTOR_COUNT = 0
+    PWM_PIN_COUNT = 0
+    DIGITAL_PIN_COUNT = 0
+    ENDSTOP_COUNT = 0
+    PROBE_COUNT = 0
+    HEATER_COUNT = 0
+    FAN_COUNT = 0
     _libc = ctypes.CDLL("libc.so.6")
     _Command = namedtuple("Command", ['id', 'name', 'opts', 'defaults'])
     def __init__(self, config):
@@ -213,16 +221,27 @@ class Controller(core.VortexCore):
     def virtual_command_complete(self, cmd_id, status):
         self._completion_callback(cmd_id, status)
     def get_params(self):
-        params = {'commands': [], 'pins': [], "objects": [], "events": {}}
+        params = {'commands': [], "objects": [], "events": {}}
+        params["hw"] = {"type":self.__class__.__name__,
+                        "pins": self.PINS, "motors": self.MOTOR_COUNT,
+                        "thermistors": self.THERMISTOR_COUNT,
+                        "endstops": self.ENDSTOP_COUNT, "probe": self.PROBE_COUNT,
+                        "heaters": self.HEATER_COUNT, "pwm": self.PWM_PIN_COUNT,
+                        "digital": self.DIGITAL_PIN_COUNT,
+                        "adc_max": self.ADC_MAX}
         cmds = {x: [] for x in ModuleTypes}
         for klass in ModuleTypes:
             if self.object_defs[klass] is not None:
                 cmds[klass] += self.object_defs[klass].commands
         params["commands"] = cmds
-        params["pins"] = self.PINS
         objects = {x: [] for x in ModuleTypes}
         for klass, name, id in self.objects:
-            objects[klass].append((name, id))
+            status = self.query_objects([id])
+            pins = {}
+            for key, value in status[id].items():
+                if "pin" in key:
+                    pins[key] = value
+            objects[klass].append((name, id, pins))
         params["objects"] = objects
         events = {x: {} for x in ModuleTypes}
         for klass in ModuleTypes:
