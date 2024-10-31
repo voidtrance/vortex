@@ -54,6 +54,10 @@ class MonitorServer(threading.Thread):
                     response = self.get_object_list()
                 elif request["request"] == "query":
                     response = self.query_objects(request["objects"])
+                elif request["request"] == "commands":
+                    response = self.get_object_commands(request.get("klass", None))
+                elif request["request"] == "events":
+                    response = self.get_object_events(request.get("klass", None))
                 elif request["request"] == "pause":
                     self._controller.pause(request["action"])
                     response = True
@@ -87,3 +91,47 @@ class MonitorServer(threading.Thread):
         obj_list = [int(x) for x in obj_list]
         status = self._controller.query_objects(obj_list)
         return status
+
+    def get_object_commands(self, klass):
+        commands = {}
+        params = self._controller.get_params()
+        if klass is None:
+            klass_set = ModuleTypes
+        else:
+            klass_set = [klass]
+        for klass in klass_set:
+            if klass not in params["commands"]:
+                continue
+            command_set = params["commands"][klass]
+            commands[klass] = []
+            for command in command_set:
+                if command[2] is None:
+                    args = []
+                elif isinstance(command[2], list):
+                    args = command[2]
+                else:
+                    args = [x[0] for x in command[2]._fields_]
+                commands[klass].append({"id": command[0],
+                                        "name": command[1],
+                                        "args": args,
+                                        "defaults": command[3]})
+        return commands
+
+    def get_object_events(self, klass):
+        events = {}
+        params = self._controller.get_params()
+        if klass is None:
+            klass_set = ModuleTypes
+        else:
+            klass_set = [klass]
+        for klass in klass_set:
+            if klass not in params["events"]:
+                continue
+            event_set = params["events"][klass]
+            events[klass] = []
+            for event, args in event_set.items():
+                if args is not None:
+                    args = [x[0] for x in args._fields_]
+                events[klass].append({"id": event,
+                                      "args": [] if args is None else args})
+        return events
