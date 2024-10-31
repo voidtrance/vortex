@@ -56,17 +56,16 @@ class BaseFrontend:
         self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
         self._command_id_queue = []
 
-    def set_controller_functions(self, func_set):
-        if not isinstance(func_set, dict):
-            return
-        self._query = func_set.get("query", None)
-        self.reset = func_set.get("reset", None)
-        self.get_controller_clock_ticks = func_set.get("get_ticks", None)
-        self.get_controller_runtime = func_set.get("get_runtime", None)
-        if "event_register" in func_set:
-            self.event_register = func_set["event_register"]
-        if "event_unregister" in func_set:
-            self.event_unregister = func_set["event_unregister"]
+    def set_controller_interface(self, interface):
+        self.query = interface.query
+        self.reset = interface.reset
+        self.get_controller_clock_ticks = interface.get_ticks
+        self.get_controller_runtime = interface.get_runtime
+        self.event_register = interface.event_register
+        self.event_unregister = interface.event_unregister
+        self.register_timer = interface.register_timer
+        self.reschedule_timer = interface.reschedule_timer
+        self.unregister_timer = interface.unregister_timer
 
     def set_controller_data(self, data):
         self._raw_controller_params = data

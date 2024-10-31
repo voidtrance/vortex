@@ -58,14 +58,8 @@ class Emulator:
         self._frontend.set_kinematics_model(self._kinematics)
         controller_params = self._controller.get_params()
         self._frontend.set_controller_data(controller_params)
-        self._frontend.set_controller_functions(
-            {"reset": self._controller.reset,
-             "query": self._controller.query_objects,
-             "event_register": self._controller.event_register,
-             "event_unregister": self._controller.event_unregister,
-             "get_ticks":  self._controller.get_clock_ticks,
-             "get_runtime": self._controller.get_runtime})
-        self._scheduled_queue = ScheduleQueue()
+        self._frontend.set_controller_interface(interface)
+
         self._run_emulation = True
         self._frequency = 0
         self._monitor = None
