@@ -13,5 +13,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['__init__.py', 'msgproto.py', 'klipper_proto.py'],
+py.install_sources(['__init__.py', 'msgproto.py', 'klipper_proto.py',
+                    'analog_pin.py', 'digital_pin.py'],
                      subdir: 'vortex/frontends/klipper')

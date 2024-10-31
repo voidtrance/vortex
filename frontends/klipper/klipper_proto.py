@@ -1,4 +1,3 @@
-
 # vortex - GCode machine emulator
 # Copyright (C) 2024  Mitko Haralanov
 #
@@ -15,7 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from argparse import Namespace
-from vortex.lib.ext_enum import ExtIntEnum, auto
+from vortex.lib.ext_enum import ExtIntEnum, auto, unique
+
+@unique
+class ResponseTypes(ExtIntEnum):
+    ACK = auto()
+    NACK = auto()
+    RESPONSE = auto()
 
 class KlipperProtoFlags(ExtIntEnum):
 	HF_IN_SHUTDOWN = auto()
@@ -43,7 +48,7 @@ KLIPPER_PROTOCOL.basecmd.clear_shutdown = Namespace(command="clear_shutdown", fl
 KLIPPER_PROTOCOL.basecmd.identify = Namespace(command="identify offset=%u count=%c", flags=KlipperProtoFlags.HF_IN_SHUTDOWN, response="identify_response offset=%u data=%.*s")
 			
 # basecmd tasts
-KLIPPER_PROTOCOL.tasks.stats = Namespace(interval="5000000", response="stats count=%u sum=%u sumsq=%u")
+KLIPPER_PROTOCOL.tasks.stats = Namespace(command=None, interval="5000000", response="stats count=%u sum=%u sumsq=%u")
 
 # buttons commands
 KLIPPER_PROTOCOL.buttons.config_buttons = Namespace(command="config_buttons oid=%c button_count=%c", flags=None, response=None)
@@ -117,8 +122,7 @@ KLIPPER_PROTOCOL.trsync.config_trsync = Namespace(command="config_trsync oid=%c"
 KLIPPER_PROTOCOL.trsync.trsync_start = Namespace(command="trsync_start oid=%c report_clock=%u report_ticks=%u expire_reason=%c", flags=None, response=None)
 KLIPPER_PROTOCOL.trsync.trsync_set_timeout = Namespace(command="trsync_set_timeout oid=%c clock=%u", flags=None, response=None)
 KLIPPER_PROTOCOL.trsync.trsync_trigger = Namespace(command="trsync_trigger oid=%c reason=%c", flags=None, response=None)
-
-KLIPPER_PROTOCOL.trsync.trysync_state = Namespace(interval=0, response="trsync_state oid=%c can_trigger=%c trigger_reason=%c clock=%u")
+KLIPPER_PROTOCOL.trsync.trsync_state = Namespace(command=None, interval=0, response="trsync_state oid=%c can_trigger=%c trigger_reason=%c clock=%u")
 
 # sdiocmds commands
 KLIPPER_PROTOCOL.sdiocmds.config_sdio = Namespace(command="config_sdio oid=%c blocksize=%u", flags=None, response=None)

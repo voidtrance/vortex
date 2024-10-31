@@ -1,5 +1,14 @@
 import ctypes
 
+def create_message(size):
+    class MessageBlock(ctypes.Structure):
+        _fields_ = [("length", ctypes.c_byte),
+                    ("sequence", ctypes.c_byte),
+                    ("data", ctypes.c_byte * (size - 5)),
+                    ("crc", ctypes.c_byte * 2),
+                    ("sync", ctypes.c_byte)]
+    return MessageBlock
+
 class KlipperMessageParser():
     def _calc_crc(self, data):
         crc = ctypes.c_uint16(0xffff)
