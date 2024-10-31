@@ -13,14 +13,12 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import queue
 import logging
 import inspect
 import importlib
 import time
 from os import strerror
 from re import search
-from collections import OrderedDict
 from vortex.lib.constants import *
 from vortex.core import VortexCoreError
 import vortex.emulator.monitor as monitor
@@ -28,74 +26,6 @@ import vortex.emulator.kinematics as kinematics
 
 __all__ = ["Emulator"]
 
-class Command:
-    def __init__(self, obj_id, cmd_id, opts, timestamp=None):
-        self.obj_id, self.cmd_id, self.opts, self.time = \
-            obj_id, cmd_id, opts, timestamp
-        self.id = id(self)
-    def __str__(self):
-        return f"Command({self.id}, {self.obj_id}:{self.cmd_id}@{self.time})"
-        
-class CommandQueue(queue.Queue):
-    def put(self, command):
-        if not isinstance(command, Command):
-            raise ValueError("'command' is not a Command instance")
-        super().put(command)
-        return command.id
-    def queue_command(self, obj_id, cmd_id, opts, timestamp=None):
-        cmd = Command(obj_id, cmd_id, opts, timestamp)
-        return (self.put(cmd), cmd)
-
-class ScheduleQueue:
-    class TimeDict(OrderedDict):
-        def __setitem__(self, timestamp, value):
-            super().__setitem__(timestamp, queue.Queue())
-            self[timestamp].put(value)
-            if timestamp < list(self.keys())[-1]:
-                self.clear()
-                self.update(dict(sorted(self.items()))) 
-
-    def __init__(self):
-        # Queue of commands that are not scheduled at a specific
-        # time. These commands can be executed on the next emulator
-        # cycle.
-        self._now = queue.Queue()
-
-        # Command queues indexed by execution timestamp. These
-        # commands need to be executed at or before the specified
-        # time.
-        self._timeslots = self.TimeDict()
-
-    def put(self, command):
-        if command.time is None:
-            self._now.put(command)
-        else:
-            self._timeslots[command.time] = command
-
-    def get(self, timestamp):
-        # Return the first available command. If the non-scheduled
-        # queue has pending commands, return those first.
-        if not self._now.empty():
-            return self._now.get()
-        if self._timeslots:
-            # Get all timestamps on or before 'timestamp'.
-            stamps = [x for x in self._timeslots if x <= timestamp]
-            if not stamps:
-                return None
-            first = stamps[0]
-            command = self._timeslots[first].get()
-            if self._timeslots[first].empty():
-                self._timeslots.popitem(first)
-            return command
-        return None
-
-    def get_all(self, timestamp):
-        # Iterate over all commands scheduled on or before 'timestamp'
-        command = self.get(timestamp)
-        while command is not None:
-            yield command
-            command = self.get(timestamp)
-        return None
 
 class EmulatorError(Exception): pass
 
@@ -119,13 +49,12 @@ def load_mcu(name, config):
 
 class Emulator:
     def __init__(self, frontend, config):
-        self._command_queue = CommandQueue()
+        self._command_queue = frontend.get_queue()
         machine = config.get_machine_config()
         self._controller = load_mcu(machine.controller, config)
         self._kinematics = kinematics.Kinematics(machine.kinematics,
                                                  self._controller)
         self._frontend = frontend
-        self._frontend.set_command_queue(self._command_queue)
         self._frontend.set_kinematics_model(self._kinematics)
         controller_params = self._controller.get_params()
         self._frontend.set_controller_data(controller_params)
@@ -173,9 +102,12 @@ class Emulator:
         self._frontend.set_emulation_frequency(self._controller.get_frequency())
         self._frontend.run()
         while self._run_emulation:
-            timestep = self._controller.get_clock_ticks()
-            self._schedule_commands(timestep)
-            self._process_schedule(timestep)
+            command = self._command_queue.get()
+            ret = self._controller.exec_command(command.id, command.obj_id,
+                                                command.cmd_id, command.opts)
+            if ret:
+                logging.error(f"Failed to execute command: {strerror(abs(ret))}")
+                self._frontend.complete_command(command.id, ret)
     
     def stop(self):
         if self._monitor is not None:
@@ -183,23 +115,6 @@ class Emulator:
         self._frontend.stop()
         self._controller.stop()
 
-    def _schedule_commands(self, timestep):
-        if not self._command_queue.empty():
-            cmd = self._command_queue.get()
-            cmd.time = timestep
-            self._scheduled_queue.put(cmd)
-
     def _command_complete(self, command_id, result):
         self._frontend.complete_command(command_id, result)
-
-    def _process_schedule(self, timestamp):
-        for command in self._scheduled_queue.get_all(timestamp):
-            ret = self._controller.exec_command(command.id, command.obj_id,
-                                                command.cmd_id, command.opts)
-            if ret:
-                logging.error(f"Failed to execute command: {strerror(abs(ret))}")
-                self._frontend.complete_command(command.id, ret)
-            time.sleep(0.001)
-            
-
         

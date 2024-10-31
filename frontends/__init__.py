@@ -23,11 +23,12 @@ import pickle
 import threading
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends.lib import create_pty
+from vortex.frontends.queues import CommandQueue
 from vortex.frontends.proto import *
 
 class BaseFrontend:
     PIPE_PATH = "/tmp/vortex"
-    def __init__(self):
+    def __init__(self, queue_size=0):
         self._raw_controller_params = {}
         self._cmd_id_2_cmd = {x: {} for x in ModuleTypes}
         self._cmd_name_2_id = {x: {} for x in ModuleTypes}
@@ -37,7 +38,7 @@ class BaseFrontend:
         self._command_completion_lock = threading.Lock()
         self._run = True
         self._run_sequential = False
-        self._query = None
+        self._queue = CommandQueue(queue_size)
         self.reset = None
         self.get_controller_clock_ticks = None
         self.get_controller_runtime = None
@@ -54,9 +55,6 @@ class BaseFrontend:
         self._poll = select.poll()
         self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
         self._command_id_queue = []
-
-    def set_command_queue(self, queue):
-        self._queue = queue
 
     def set_controller_functions(self, func_set):
         if not isinstance(func_set, dict):
@@ -91,6 +89,9 @@ class BaseFrontend:
     def set_kinematics_model(self, model):
         self.kinematics = model
 
+    def get_queue(self):
+        return self._queue
+    
     def find_object(self, klass, *seq):
         '''Find object ID for object of type klass.
         The object name can be any of the values in seq.'''
@@ -163,7 +164,7 @@ class BaseFrontend:
             time.sleep(0.5)
             pending = set(self._command_completion.keys())
 
-    def queue_command(self, klass, object, cmd, opts, timestamp):
+    def queue_command(self, klass, object, cmd, opts):
         if self.is_reset:
             return False
         if isinstance(cmd, str):
@@ -175,9 +176,9 @@ class BaseFrontend:
             return False
         opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
 
-        logging.debug(f"Submitting command: {self.get_object_name(klass, obj_id)} {cmd_id} {opts} {timestamp}")
+        logging.debug(f"Submitting command: {self.get_object_name(klass, obj_id)} {cmd_id} {opts}")
         with self._command_completion_lock:
-            cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, timestamp)
+            cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts)
             logging.debug(f"Command ID:{cmd_id}")
             self._command_completion[cmd_id] = cmd
         if self._run_sequential:

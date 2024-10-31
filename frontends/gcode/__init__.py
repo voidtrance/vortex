@@ -79,8 +79,7 @@ class GCodeFrontend(BaseFrontend):
             cmd_id = self.queue_command(ModuleTypes.STEPPER,
                                         status[axis_id]["motors"][idx],
                                         "move",
-                                        f"steps={abs(distance)},direction={direction}",
-                                        0)
+                                        f"steps={abs(distance)},direction={direction}")
             if cmd_id is False:
                 logging.error("Failed to submit move command")
                 continue
@@ -158,7 +157,7 @@ class GCodeFrontend(BaseFrontend):
             for motor in motor_ids:
                 if not motor_status[motor_ids[motor]]["enabled"]:
                     cmd_id = self.queue_command(ModuleTypes.STEPPER, motor, "enable",
-                                              "enable=1", 0)
+                                              "enable=1")
                     if cmd_id is False:
                         logging.error("Failed to enable motor")
                     self.wait_for_command(cmd_id)
@@ -213,7 +212,7 @@ class GCodeFrontend(BaseFrontend):
             temp = cmd.get_param("S")
             cmd_id = self.queue_command(ModuleTypes.HEATER, object,
                                         "set_temperature",
-                                        f"temperature={temp.value}", 0)
+                                        f"temperature={temp.value}")
             if cmd_id is False:
                 logging.error("Failed to queue command")
                 return CommandStatus.FAIL
@@ -227,7 +226,7 @@ class GCodeFrontend(BaseFrontend):
         if object:
             speed = cmd.get_param("S")
             if self.queue_command(ModuleTypes.FAN, object,
-                                  "set_speed", f"speed={speed.value}", 0) is False:
+                                  "set_speed", f"speed={speed.value}") is False:
                 logging.error("Failed to queue command")
                 return CommandStatus.FAIL
             return CommandStatus.SUCCESS
@@ -248,7 +247,7 @@ class GCodeFrontend(BaseFrontend):
             temp = cmd.get_param("S")
             cmd_id = self.queue_command(ModuleTypes.HEATER, object,
                                         "set_temperature",
-                                        f"temperature={temp.value}", 0)
+                                        f"temperature={temp.value}")
             if cmd_id is False:
                 logging.error("Failed to queue command")
                 return CommandStatus.FAIL
@@ -273,7 +272,7 @@ class GCodeFrontend(BaseFrontend):
                     continue
                 cmd_id = self.queue_command(ModuleTypes.STEPPER, motor,
                                       "set_accel",
-                                      f"accel={accel.value},decel=0", 0)
+                                      f"accel={accel.value},decel=0")
                 if cmd_id is False:
                     logging.error("Failed to queue command")
                     return CommandStatus.FAIL
