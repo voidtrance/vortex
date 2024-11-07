@@ -47,8 +47,11 @@ class Stepper(ObjectDef):
     class StepperMoveCommandOpts(ctypes.Structure):
         _fields_ = [("direction", ctypes.c_uint8),
                     ("steps", ctypes.c_uint32)]
+    class StepperUsePinsCommandOpts(ctypes.Structure):
+        _fields_ = [("enable", ctypes.c_bool)]
     class StepperStatus(ctypes.Structure):
         _fields_ = [("enabled", ctypes.c_bool),
+                    ("use_pins", ctypes.c_bool),
                     ("steps", ctypes.c_int64),
                     ("spr", ctypes.c_uint16),
                     ("microsteps", ctypes.c_uint8),
@@ -66,7 +69,8 @@ class Stepper(ObjectDef):
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
                          (1, "set_speed", self.StepperSetSpeedCommandOpts, (0.,)),
                          (2, "set_accel", self.StepperSetAccelCommandOpts, (0.,)),
-                         (3, "move", self.StepperMoveCommandOpts, (0, 0))]
+                         (3, "move", self.StepperMoveCommandOpts, (0, 0)),
+                         (4, "use_pins", self.StepperUsePinsCommandOpts, (False,))]
         self.events = {ModuleEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
         
 class Thermistor(ObjectDef):

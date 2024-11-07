@@ -28,7 +28,7 @@
 typedef core_object_t *(*object_lookup_cb_t)(const core_object_type_t,
                                              const char *, void *);
 typedef core_object_t **(*object_list_cb_t)(const core_object_type_t, void *);
-typedef void (*complete_cb_t)(uint64_t, int, void *);
+typedef void (*complete_cb_t)(uint64_t, int64_t, void *);
 typedef uint64_t (*cmd_submit_cb_t)(core_object_t *, core_object_id_t, uint16_t,
 				    void *, complete_cb_t, void *);
 typedef void (*log_cb_t)(core_log_level_t, core_object_type_t, const char *,

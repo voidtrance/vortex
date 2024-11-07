@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
 #include "../debug.h"
 #include "object_defs.h"
 #include "../common_defs.h"
@@ -59,27 +60,32 @@ typedef struct {
     accel_data_t decel;
     stepper_move_dir_t dir;
     bool enabled;
+    bool use_pins;
+    uint8_t pin_word;
+    pthread_t pin_thread;
 } stepper_t;
 
 static object_cache_t *stepper_event_cache = NULL;
 
 void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep);
 int stepper_exec(core_object_t *object, core_object_command_t *cmd);
-int stepper_enable(core_object_t *object, void *args);
-int stepper_set_speed(core_object_t *object, void *args);
-int stepper_set_accel(core_object_t *object, void *args);
-int stepper_move(core_object_t *object, void *args);
+int stepper_enable(core_object_t *object, uint64_t id, void *args);
+int stepper_set_speed(core_object_t *object, uint64_t id, void *args);
+int stepper_set_accel(core_object_t *object, uint64_t id, void *args);
+int stepper_move(core_object_t *object, uint64_t id, void *args);
+int stepper_use_pins(core_object_t *object, uint64_t id, void *args);
 void stepper_reset(core_object_t *object);
 void stepper_status(core_object_t *object, void *status);
 void stepper_destroy(core_object_t *object);
 
-typedef int (*command_func_t)(core_object_t *object, void *args);
+typedef int (*command_func_t)(core_object_t *object, uint64_t id, void *args);
 
 static const command_func_t command_handlers[] = {
     [STEPPER_COMMAND_ENABLE] = stepper_enable,
     [STEPPER_COMMAND_SET_SPEED] = stepper_set_speed,
     [STEPPER_COMMAND_SET_ACCEL] = stepper_set_accel,
     [STEPPER_COMMAND_MOVE] = stepper_move,
+    [STEPPER_COMMAND_USE_PINS] = stepper_use_pins,
 };
 
 stepper_t *object_create(const char *name, void *config_ptr) {
@@ -124,7 +130,7 @@ void stepper_reset(core_object_t *object) {
     stepper->enabled = false;
 }
 
-int stepper_enable(core_object_t *object, void *args) {
+int stepper_enable(core_object_t *object, uint64_t id, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_enable_args *opts = (struct stepper_enable_args *)args;
 
@@ -133,7 +139,7 @@ int stepper_enable(core_object_t *object, void *args) {
     return 0;
 }
 
-int stepper_set_speed(core_object_t *object, void *args) {
+int stepper_set_speed(core_object_t *object, uint64_t id, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_set_speed_args *opts = (struct stepper_set_speed_args *)args;
 
@@ -142,7 +148,7 @@ int stepper_set_speed(core_object_t *object, void *args) {
     return 0;
 }
 
-int stepper_set_accel(core_object_t *object, void *args) {
+int stepper_set_accel(core_object_t *object, uint64_t id, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_set_accel_args *opts = (struct stepper_set_accel_args *)args;
 
@@ -163,7 +169,7 @@ int stepper_set_accel(core_object_t *object, void *args) {
     return 0;
 }
 
-int stepper_move(core_object_t *object, void *args) {
+int stepper_move(core_object_t *object, uint64_t id, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_move_args *opts = (struct stepper_move_args *)args;
 
@@ -181,6 +187,68 @@ int stepper_move(core_object_t *object, void *args) {
     return 0;
 }
 
+enum {
+    ENABLE_PIN = (1 << 0),
+    DIR_PIN = (1 << 1),
+    STEP_PIN = (1 << 2),
+};
+
+#define EN_DIR_MASK (ENABLE_PIN | DIR_PIN)
+
+static void *pin_monitor_thread(void *args) {
+    stepper_t *stepper = (stepper_t *)args;
+    struct timespec sleep = {.tv_sec = 0, .tv_nsec = 100 };
+    uint8_t old_val = 0;
+
+    while (*(volatile bool *)&stepper->use_pins) {
+	uint8_t val = __atomic_fetch_and(&stepper->pin_word, EN_DIR_MASK,
+					  __ATOMIC_SEQ_CST);
+
+	if (val != old_val) {
+	    int8_t inc;
+
+	    stepper->enabled = val & ENABLE_PIN;
+	    stepper->dir = val & DIR_PIN ? MOVE_DIR_FWD : MOVE_DIR_BACK;
+	    inc = stepper->dir == MOVE_DIR_FWD ? 1 : -1;
+	    stepper->current_step += !!(val & STEP_PIN) * inc;
+	    old_val = val;
+	}
+
+	nanosleep(&sleep, NULL);
+    }
+
+    return NULL;
+}
+
+int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
+    stepper_t *stepper = (stepper_t *)object;
+    struct stepper_use_pin_args *opts = (struct stepper_use_pin_args *)args;
+    int ret = 0;
+
+    if (opts->enable && !stepper->use_pins) {
+	pthread_attr_t attrs;
+
+	stepper->use_pins = true;
+	ret = pthread_attr_init(&attrs);
+	if (ret)
+	    goto out;
+
+	ret = pthread_create(&stepper->pin_thread, &attrs, pin_monitor_thread,
+			     stepper);
+        CORE_CMD_COMPLETE(stepper, id, (unsigned long)&stepper->pin_word);
+out:
+	pthread_attr_destroy(&attrs);
+	return 0;
+    } else {
+	// This will also stop the thread.
+	stepper->use_pins = false;
+	pthread_join(stepper->pin_thread, NULL);
+    }
+
+    CORE_CMD_COMPLETE(stepper, id, ret);
+    return ret;
+}
+
 int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
     stepper_t *stepper = (stepper_t *)object;
     int ret;
@@ -188,7 +256,8 @@ int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
     if (stepper->current_cmd)
 	return -1;
 
-    ret = command_handlers[cmd->object_cmd_id](object, cmd->args);
+    ret = command_handlers[cmd->object_cmd_id](object, cmd->command_id,
+					       cmd->args);
     if (ret)
 	return ret;
 
@@ -216,7 +285,7 @@ void stepper_update(core_object_t *object, uint64_t ticks, uint64_t timestep) {
     stepper_t *stepper = (stepper_t *)object;
     uint64_t delta  = timestep - stepper->last_timestep;
 
-    if (!stepper->current_cmd)
+    if (stepper->use_pins || !stepper->current_cmd)
 	goto done;
 
     if (stepper->current_cmd->object_cmd_id != STEPPER_COMMAND_MOVE) {

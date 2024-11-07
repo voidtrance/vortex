@@ -55,7 +55,7 @@ typedef core_object_t *(*object_create_func_t)(const char *, void *);
 typedef struct {
     struct __comp_entry {
 	uint64_t id;
-	int result;
+	int64_t result;
     } *entries;
     size_t size;
     size_t head;
@@ -143,7 +143,7 @@ static core_object_t **core_object_list(const core_object_type_t type,
 static void core_process_work(void *user_data);
 
 /* Object callbacks */
-static void core_object_command_complete(uint64_t command_id, int result,
+static void core_object_command_complete(uint64_t command_id, int64_t result,
 					 void *data);
 static int core_object_event_register(const core_object_type_t object_type,
 				      const core_object_event_type_t event,
@@ -322,7 +322,7 @@ static void core_process_work(void *arg) {
 
       python:
         state = PyGILState_Ensure();
-        args = Py_BuildValue("(ki)", comps->entries[comps->tail].id,
+        args = Py_BuildValue("(kk)", comps->entries[comps->tail].id,
 			     comps->entries[comps->tail].result);
 	if (!args) {
 	    PyErr_Print();
@@ -340,7 +340,7 @@ static void core_process_work(void *arg) {
     }
 }
 
-static void core_object_command_complete(uint64_t cmd_id, int result,
+static void core_object_command_complete(uint64_t cmd_id, int64_t result,
 					 void *data) {
     core_t *core = (core_t *)data;
     core_object_completion_data_t *comps = core->completions;

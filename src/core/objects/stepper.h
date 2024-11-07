@@ -31,6 +31,7 @@ enum {
     STEPPER_COMMAND_SET_SPEED,
     STEPPER_COMMAND_SET_ACCEL,
     STEPPER_COMMAND_MOVE,
+    STEPPER_COMMAND_USE_PINS,
     STEPPER_COMMAND_MAX,
 };
 
@@ -52,8 +53,13 @@ struct stepper_move_args {
     uint32_t steps;
 };
 
+struct stepper_use_pin_args {
+    bool enable;
+};
+
 typedef struct {
     bool enabled;
+    bool use_pins;
     int64_t steps;
     uint16_t spr;
     uint8_t microsteps;
