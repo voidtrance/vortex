@@ -38,13 +38,12 @@ def generate_stepper_config(section : str, name: str,
         pin = parse_pin(kconfig.get(section, pname))
         econfig.set(s, pname, pin)
     econfig.set(s, "microsteps", kconfig.get(section, "microsteps"))
-    econfig.set(s, "steps_per_rotation",
-                    kconfig.get(section, "full_steps_per_rotation"))
+    spr = kconfig.getint(section, "full_steps_per_rotation")
+    econfig.set(s, "steps_per_rotation", str(spr))
     rd = kconfig.getfloat(section, "rotation_distance")
     gr = kconfig.get(section, "gear_ratio", fallback="1:1")
-    spm = kconfig.getint(section, "full_steps_per_rotation") / rd
     i, o = [int(x) for x in gr.split(':')]
-    spm *= i / o
+    spm = (spr * (i / o)) / rd
     econfig.set(s, "steps_per_mm", str(int(spm)))
     econfig.set(s, "start_speed", "30")
 
@@ -66,7 +65,9 @@ def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser
     s = f"endstop endstop{name.upper()}"
     econfig.add_section(s)
     pe = kconfig.getfloat(section, "position_endstop")
-    if pe <= kconfig.getfloat(section, "position_min"):
+    minp = kconfig.getfloat(section, "position_min")
+    maxp = kconfig.getfloat(section, "position_max")
+    if abs(minp - pe) < abs(maxp - pe):
         econfig.set(s, "type", "min")
     else:
         econfig.set(s, "type", "max")
@@ -125,6 +126,29 @@ def generate_dpin_config(section : str, kconfig : Type[configparser.ConfigParser
 
 def generate_probe_config(section : str, kconfig : Type[configparser.ConfigParser],
                           econfig : Type[configparser.ConfigParser]) -> None:
+    print(f"Generating config for section '{section}'...")
+    klass, _, name = section.partition(" ")
+    if not name:
+        name = klass
+    if not econfig.has_section("toolhead"):
+        s = "toolhead toolheadA"
+        econfig.add_section(s)
+        toolhead_axis = []
+        for es in econfig.sections():
+            e_klass, _, e_name = es.partition(" ")
+            if e_klass == "axis":
+                axis_type = econfig.get(es, "type")
+                if axis_type != "e":
+                    toolhead_axis.append(axis_type)
+        econfig.set(s, "axes", ",".join(toolhead_axis))
+    s = f"probe probe{name.upper()}"
+    econfig.add_section(s)
+    econfig.set(s, "toolhead", "toolheadA")
+    offsets = [kconfig.get(section, "x_offset"), kconfig.get(section, "y_offset"),
+               kconfig.get(section, "z_offset")]
+    econfig.set(s, "offsets", ",".join(offsets))
+    econfig.set(s, "pin", kconfig.get(section, "pin"))
+    econfig.set(s, "range", "0.005")
     return
 
 def generate_thermistor_config(section : str, kconfig : Type[configparser.ConfigParser],
