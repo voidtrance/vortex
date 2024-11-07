@@ -201,9 +201,6 @@ static void axis_update(core_object_t *object, uint64_t ticks,
 	break;
     }
 
-    if (axis->length != AXIS_NO_LENGTH)
-	axis->position = clamp(axis->position, 0.0, (double)axis->length);
-
     log_debug(axis, "position: %.15f, homed: %u", axis->position, axis->homed);
 }
 

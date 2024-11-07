@@ -105,8 +105,8 @@ static void endstop_update(core_object_t *object, uint64_t ticks,
     bool state = endstop->triggered;
 
     endstop->axis->get_state(endstop->axis, &status);
-    if ((endstop->type == ENDSTOP_TYPE_MIN && status.position == 0) ||
-	(endstop->type == ENDSTOP_TYPE_MAX && status.position == status.length))
+    if ((endstop->type == ENDSTOP_TYPE_MIN && status.position <= 0) ||
+	(endstop->type == ENDSTOP_TYPE_MAX && status.position >= status.length))
 	endstop->triggered = true;
     else
         endstop->triggered = false;
