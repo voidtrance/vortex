@@ -18,8 +18,7 @@ import json
 import logging
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends import BaseFrontend
-from vortex.frontends.klipper import analog_pin
-from vortex.frontends.klipper import digital_pin
+from vortex.frontends.klipper.helpers import *
 from vortex.lib.utils import Counter
 import vortex.frontends.klipper.msgproto as msgproto
 import vortex.frontends.klipper.klipper_proto as proto
@@ -34,6 +33,13 @@ import vortex.frontends.klipper.klipper_proto as proto
 # | `get_config`     | Must reply with `config`   |
 # | `config_reset`   | See example                |
 # | `finalize_config`| See example                |
+
+STATIC_STRINGS = [
+    "ADC out of range",
+    "Unsupported command",
+    "Command failure",
+    "Invalid count parameter",
+]
 
 class KlipperFrontend(BaseFrontend):
     STATS_SUMSQ_BASE = 256
@@ -50,9 +56,11 @@ class KlipperFrontend(BaseFrontend):
         #self.stats_sum = 0
         #self.stats_sumsq = 0
         self.config_crc = 0
-        self.shutdown = False
         self.oid_count = 0
-        self._pin_map = {}
+        self._oid_map = {}
+        self._string_map = {}
+        self._shutdown = False
+        self._shutdown_reason = None
 
     def _add_commands(self, cmd_set):
         for name, cmd in vars(cmd_set).items():
@@ -67,12 +75,23 @@ class KlipperFrontend(BaseFrontend):
                                          "config", "responses"]}
         self.identity["version"] = "96cceed2"
         self.tag_to_cmd = {}
+
+        # Setup enumerations
         base, pins = 0, {}
         for pin_set in self._raw_controller_params["hw"]["pins"]:
             pins[f"{pin_set.name}{pin_set.min}"] = \
                 [base + pin_set.min, len(pin_set)]
             base += len(pin_set)
         self.identity["enumerations"]["pin"] = pins
+
+        static_string_counter = Counter()
+        for string in STATIC_STRINGS:
+            self._string_map[string] = static_string_counter.next()
+        self.identity["enumerations"]["static_string_id"] = self._string_map
+
+        # Setup basic config variables
+        self.identity["config"]["CLOCK_FREQ"] = self.emulation_frequency
+        self.identity["config"]["STATS_SUMSQ_BASE"] = self.STATS_SUMSQ_BASE
 
         # Setup basic Klipper commands
         # Identify commands use static tags
@@ -87,8 +106,9 @@ class KlipperFrontend(BaseFrontend):
             self.identity["commands"][cmd.command] = self.counter.next()
             if cmd.response:
                 self.identity["responses"][cmd.response] = self.counter.next()
-        self.identity["config"]["CLOCK_FREQ"] = self.emulation_frequency
-        self.identity["config"]["STATS_SUMSQ_BASE"] = self.STATS_SUMSQ_BASE
+
+        # Shutdown commands
+        self._add_commands(proto.KLIPPER_PROTOCOL.shutdown)
 
         # Setup stepper commands
         if self._raw_controller_params["hw"]["motors"]:
@@ -115,7 +135,6 @@ class KlipperFrontend(BaseFrontend):
         self.identity_resp = json.dumps(self.identity).encode()
         # Create local command maps
         self.mp.process_identify(self.identity_resp, False)
-        print(self.identity)
         self.identity_resp = zlib.compress(self.identity_resp)
 
     #def klipper_stats(self):
@@ -152,10 +171,12 @@ class KlipperFrontend(BaseFrontend):
             object_status = self.query_object(objects)
             for obj_id, status in object_status.items():
                 if klass == ModuleTypes.STEPPER:
-                    obj_pin = status.get("step_pin", None)
+                    pins = [status.get("step_pin", None),
+                            status.get("enable_pin", None),
+                            status.get("dir_pin", None)]
                 else:
-                    obj_pin = status.get("pin", None)
-                if obj_pin == pin:
+                    pins = [status.get("pin", None)]
+                if pin in pins:
                     return obj_id
         if klass is None:
             for klass in ModuleTypes:
@@ -171,11 +192,33 @@ class KlipperFrontend(BaseFrontend):
                 return obj_id, klass
         return None, None
     
+    def find_existing_object(self, obj_id):
+        for obj in self._oid_map.values():
+            if not isinstance(obj, int):
+                if obj.id == obj_id:
+                    return obj
+        return None
+
     def identify(self, cmd, offset, count):
         self._test = None
         data = self.identity_resp[offset:offset+count]
         self.respond(proto.ResponseTypes.RESPONSE, cmd, offset=offset, data=data)
         return True
+
+    def shutdown(self, reason):
+        self._shutdown_reason = reason
+        self._shutdown = True
+        for obj in self._oid_map.values():
+            obj.shutdown()
+        self.respond(proto.ResponseTypes.RESPONSE,
+                     proto.KLIPPER_PROTOCOL.shutdown.shutdown,
+                     clock=self.get_controller_clock_ticks(),
+                     static_string_id=reason)
+
+    def is_shutdown(self, reson):
+        self.respond(proto.ResponseTypes.RESPONSE,
+                     proto.KLIPPER_PROTOCOL.shutdown.is_shutdown,
+                     static_string_id=self._shutdown_reason)
 
     def get_uptime(self, cmd):
         runtime = self.get_controller_clock_ticks() - self.start_tick
@@ -192,7 +235,7 @@ class KlipperFrontend(BaseFrontend):
     def get_config(self, cmd):
         move_count = self._queue.max_size if self.config_crc else 0
         self.respond(proto.ResponseTypes.RESPONSE, cmd, is_config=int(move_count != 0),
-                      crc=self.config_crc, is_shutdown=self.shutdown,
+                      crc=self.config_crc, is_shutdown=self._shutdown,
                       move_count=move_count)
         return True
 
@@ -209,12 +252,12 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        self._pin_map[oid] = analog_pin.AnalogPin(self, oid, obj_id, klass, name)
+        self._oid_map[oid] = AnalogPin(self, oid, obj_id, klass, name)
         return True
     
     def query_analog_in(self, cmd, oid, clock, sample_ticks, sample_count,
                         rest_ticks, min_value, max_value, range_check_count):
-        pin = self._pin_map[oid]
+        pin = self._oid_map[oid]
         pin.schedule_query(cmd, clock, sample_ticks, sample_count,
                            rest_ticks, min_value, max_value, range_check_count)
         return True
@@ -225,22 +268,107 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        pin = digital_pin.DigitalPin(self, oid, obj_id, klass, name)
+        if klass == ModuleTypes.HEATER:
+            pin = HeaterPin(self, oid, obj_id, name)
+        elif klass == ModuleTypes.STEPPER:
+            stepper = self.find_existing_object(obj_id)
+            if stepper is None or not stepper.owns_pin(pin):
+                return False
+            pin = stepper.configure_pin(oid, pin)
+        else:
+            pin = DigitalPin(self, oid, obj_id, klass, name)
         pin.set_initial_value(value, default_value)
         pin.set_max_duration(max_duration)
-        self._pin_map[oid] = pin
+        self._oid_map[oid] = pin
         return True
 
     def set_digital_out_pwm_cycle(self, cmd, oid, cycle_ticks):
-        pin = self._pin_map[oid]
+        pin = self._oid_map[oid]
         pin.set_cycle_ticks(cycle_ticks)
         return True
 
     def queue_digital_out(self, cmd, oid, clock, on_ticks):
-        pin = self._pin_map[oid]
+        pin = self._oid_map[oid]
         pin.schedule_cycle(clock, on_ticks)
         return True
 
+    def config_stepper(self, cmd, oid, step_pin, dir_pin, invert_step,
+                       step_pulse_ticks):
+        obj_id, klass = self._find_object(step_pin, ModuleTypes.STEPPER)
+        if obj_id is None:
+            return False
+        name = self.get_object_name(klass, obj_id)
+        self._oid_map[oid] = Stepper(self, oid, obj_id, name,
+                                             invert_step, step_pulse_ticks)
+        return True
+
+    def stepper_get_position(self, cmd, oid):
+        stepper = self._oid_map[oid]
+        self.respond(proto.ResponseTypes.RESPONSE, cmd, oid=oid, pos=stepper.position)
+        return True
+
+    def stepper_stop_on_trigger(self, cmd, oid, trsync_oid):
+        stepper = self._oid_map[oid]
+        trsync = self._oid_map[trsync_oid]
+        trsync.add_signal(stepper.stop_moves)
+        return True
+
+    def set_next_step_dir(self, cmd, oid, dir):
+        stepper = self._oid_map[oid]
+        stepper.set_next_move_dir(dir)
+        return True
+
+    def queue_step(self, cmd, oid, interval, count, add):
+        stepper = self._oid_map[oid]
+        stepper.queue_move(interval, count, add)
+        return True
+
+    def reset_step_clock(self, cmd, oid, clock):
+        stepper = self._oid_map[oid]
+        stepper.reset_clock(clock)
+        return True
+
+    def config_endstop(self, cmd, oid, pin, pull_up):
+        obj_id, klass = self._find_object(pin, ModuleTypes.ENDSTOP)
+        if obj_id is None:
+            return False
+        name = self.get_object_name(klass, obj_id)
+        self._oid_map[oid] = EndstopPin(self, oid, obj_id, name)
+        return True
+
+    def endstop_home(self, cmd, oid, clock, sample_ticks, sample_count, rest_ticks,
+                     pin_value, trsync_oid, trigger_reason):
+        endstop = self._oid_map[oid]
+        trsync = self._oid_map[trsync_oid]
+        endstop.home(clock, sample_ticks, sample_count, rest_ticks, pin_value,
+                     trsync, trigger_reason)
+        return True
+
+    def endstop_query_state(self, cmd, oid):
+        endstop = self._oid_map[oid]
+        state = endstop.get_state()
+        state.update({"oid": oid})
+        self.respond(proto.ResponseTypes.RESPONSE, cmd, **state)
+        return True
+
+    def config_trsync(self, cmd, oid):
+        self._oid_map[oid] = TRSync(self, oid)
+        return True
+
+    def trsync_start(self, cmd, oid, report_clock, report_ticks, expire_reason):
+        trsync = self._oid_map[oid]
+        trsync.start(report_clock, report_ticks, expire_reason)
+        return True
+
+    def trsync_set_timeout(self, cmd, oid, clock):
+        trsync = self._oid_map[oid]
+        trsync.set_timeout(clock)
+        return True
+
+    def trsync_trigger(self, cmd, oid, reason):
+        trsync = self._oid_map[oid]
+        trsync.trigger(reason)
+        return True
 
     def _process_command(self, data):
         self.serial_data += data
@@ -252,7 +380,6 @@ class KlipperFrontend(BaseFrontend):
                 self.serial_data = self.serial_data[-i:]
                 continue
             block = self.serial_data[:i]
-            #print("recv'ed: ", [x for x in block])
             block_seq = block[msgproto.MESSAGE_POS_SEQ] & msgproto.MESSAGE_SEQ_MASK
             if block_seq == self.next_sequence:
                 self.next_sequence = (self.next_sequence + 1) & msgproto.MESSAGE_SEQ_MASK
@@ -263,9 +390,17 @@ class KlipperFrontend(BaseFrontend):
                     msg_params, pos = mid.parse(block, pos)
                     logging.debug(f"request: {mid.name} {msg_params}")
                     cmd = self.all_commands[mid.name]
+                    if self._shutdown and \
+                        proto.KlipperProtoFlags.HF_IN_SHUTDOWN not in cmd.flags:
+                        self.is_shutdown(self._shutdown_reason)
+                        break
+                    if not hasattr(self, mid.name):
+                        self.shutdown("Unsupported command")
+                        break
                     handler = getattr(self, mid.name)
                     if not handler(cmd=cmd, **msg_params):
-                        raise self.mp._error("Failed command handler")
+                        self.shutdown("Command failure")
+                        break
                     if pos >= len(block) - msgproto.MESSAGE_TRAILER_SIZE:
                         break
             self.respond(proto.ResponseTypes.ACK)
