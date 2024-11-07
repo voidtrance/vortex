@@ -38,6 +38,7 @@ typedef struct {
     const char *name;
     core_object_t *obj;
     uint32_t steps_per_mm;
+    uint32_t microsteps;
     int64_t initial_step;
     int64_t steps;
     bool move_complete;
@@ -102,6 +103,7 @@ static int axis_init(core_object_t *object) {
 	axis->motors[i].move_complete = true;
 	axis->motors[i].steps_per_mm = stepper_status.steps_per_mm;
 	axis->motors[i].initial_step = stepper_status.steps;
+	axis->motors[i].microsteps = stepper_status.microsteps;
     }
 
     if (axis->endstop_name) {
@@ -137,7 +139,8 @@ static void axis_event_handler(core_object_t *object, const char *name,
 }
 
 #define step_distance(motor)                                                   \
-    ((double)(motor.steps - motor.initial_step) / motor.steps_per_mm)
+    ((double)(motor.steps - motor.initial_step) / \
+     (motor.steps_per_mm * motor.microsteps))
 
 static void axis_update(core_object_t *object, uint64_t ticks,
 			uint64_t runtime) {
