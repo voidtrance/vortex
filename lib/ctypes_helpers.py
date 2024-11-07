@@ -38,9 +38,12 @@ def attempt_value_conversion(ctype, value):
             value = ""
         return bytes(value, "ascii")
     if ctype == ctypes.c_bool:
-        if value.lower() not in ConfigParser.BOOLEAN_STATES:
-            return value
-        return ConfigParser.BOOLEAN_STATES[value.lower()]
+        if isinstance(value, str):
+            if value.lower() in ConfigParser.BOOLEAN_STATES:
+                return ConfigParser.BOOLEAN_STATES[value.lower()]
+            else:
+                return value
+        return bool(value)
     if ctype in (ctypes.c_float, ctypes.c_double):
         return float(value)
     return int(value)
