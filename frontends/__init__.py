@@ -36,6 +36,7 @@ class BaseFrontend:
         self._obj_id_2_name = {x: {} for x in ModuleTypes}
         self._command_completion = {}
         self._command_completion_lock = threading.Lock()
+        self._command_results = {}
         self._run = True
         self._run_sequential = False
         self._queue = CommandQueue(queue_size)
@@ -129,8 +130,9 @@ class BaseFrontend:
         self._thread.start()
     
     def stop(self):
-        self._run = False
-        self._thread.join()
+        if self._thread:
+            self._run = False
+            self._thread.join()
         cmds = list(self._command_completion.keys())
         for cmd in cmds:
             self.complete_command(cmd, -1)
@@ -159,10 +161,13 @@ class BaseFrontend:
         if not isinstance(cmd_set, (list, tuple, set)):
             cmd_set = list(cmd_set)
         cmd_set = set(cmd_set)
-        pending = set(self._command_completion.keys())
-        while cmd_set & pending:
+        with self._command_completion_lock:
+            completed = set(self._command_results.keys())
+        while not cmd_set & completed:
             time.sleep(0.5)
-            pending = set(self._command_completion.keys())
+            with self._command_completion_lock:
+                completed = set(self._command_results.keys())
+        return [self._command_results[i] for i in cmd_set]
 
     def queue_command(self, klass, object, cmd, opts):
         if self.is_reset:
@@ -190,6 +195,7 @@ class BaseFrontend:
     def complete_command(self, id, result):
         with self._command_completion_lock:
             self._command_completion.pop(id)
+            self._command_results[id] = result
 
     def respond(self, code, data):
         response = Response(code, data)
