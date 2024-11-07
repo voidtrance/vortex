@@ -119,13 +119,9 @@ thermistor_t *object_create(const char *name, void *config_ptr) {
     thermistor->max_adc = config->max_adc;
     strncpy(thermistor->pin, config->pin, sizeof(thermistor->pin));
 
-    if (!strncmp(config->sensor_type, "pt100", strlen(config->sensor_type)) ||
-        !strncmp(config->sensor_type, "PT100", strlen(config->sensor_type)))
+    if (!strncasecmp(config->sensor_type, "pt1000", 6))
         thermistor->type = SENSOR_TYPE_PT100;
-    else if (!strncmp(config->sensor_type, "pt1000",
-                      strlen(config->sensor_type)) ||
-             !strncmp(config->sensor_type, "PT1000",
-                      strlen(config->sensor_type)))
+    else if (!strncasecmp(config->sensor_type, "pt100", 5))
         thermistor->type = SENSOR_TYPE_PT1000;
     else {
         thermistor->type = SENSOR_TYPE_B3950;
