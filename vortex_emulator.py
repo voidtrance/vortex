@@ -69,7 +69,11 @@ def main():
                         format="%(created)f %(levelname)s: %(message)s")
 
     config = vortex.emulator.config.Configuration()
-    config.read(opts.config)
+    try:
+        config.read(opts.config)
+    except Exception as e:
+        logging.error(e)
+        return errno.EINVAL
 
     if opts.controller:
         config.override_controller(opts.controller)

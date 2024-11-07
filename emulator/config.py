@@ -36,11 +36,14 @@ class Configuration:
                 else:
                     content.append(line)
         return content
+
     def read(self, filename):
         config_content = self._read_file(filename)
+        self._parser.read_string("\n".join(config_content))
+        if not self._parser.has_section("machine"):
+            raise configparser.NoSectionError("Configuration requires 'machine' section")
         for line in config_content:
             logging.debug("CONFIG: " + line)
-        self._parser.read_string("\n".join(config_content))
 
     def get(self, type, name, option):
         if not isinstance(type, ModuleTypes):
