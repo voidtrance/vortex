@@ -18,6 +18,7 @@
 # However, to simplify development, this Makefile is here for
 # convinience and to record the require build commands.
 PYTHON ?= $(shell which python3)
+GDB := $(shell which gdb)
 VENV ?=
 VENV_PYTHON := $(VENV)/bin/python3
 DEBUG_OPTS :=
@@ -45,6 +46,9 @@ venv:
 wheel: venv
 	$(VENV_PYTHON) -m build -w .
 	$(VENV_PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
+
+gdb:
+	$(GDB) $(PYTHON) -ex 'r ./vortex_emulator.py $(GDB_OPTS)'
 
 clean:
 	rm -rf build dist
