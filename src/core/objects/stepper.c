@@ -198,24 +198,17 @@ enum {
 
 static void *pin_monitor_thread(void *args) {
     stepper_t *stepper = (stepper_t *)args;
-    struct timespec sleep = {.tv_sec = 0, .tv_nsec = 100 };
-    uint8_t old_val = 0;
+    struct timespec sleep = { .tv_sec = 0, .tv_nsec = 100 };
 
     while (*(volatile bool *)&stepper->use_pins) {
-	uint8_t val = __atomic_fetch_and(&stepper->pin_word, EN_DIR_MASK,
-					  __ATOMIC_SEQ_CST);
+        uint8_t val = __atomic_fetch_and(&stepper->pin_word, EN_DIR_MASK,
+                                         __ATOMIC_SEQ_CST);
 
-	if (val != old_val) {
-	    int8_t inc;
-
-	    stepper->enabled = val & ENABLE_PIN;
-	    stepper->dir = val & DIR_PIN ? MOVE_DIR_FWD : MOVE_DIR_BACK;
-	    inc = stepper->dir == MOVE_DIR_FWD ? 1 : -1;
-	    stepper->current_step += !!(val & STEP_PIN) * inc;
-	    old_val = val;
-	}
-
-	nanosleep(&sleep, NULL);
+        stepper->enabled = val & ENABLE_PIN;
+        stepper->dir = MOVE_DIR_BACK - !!(val & DIR_PIN);
+        stepper->current_step += ((val & ENABLE_PIN) & !!(val & STEP_PIN)) *
+            (-1 + !!(val & DIR_PIN) * 2);
+        nanosleep(&sleep, NULL);
     }
 
     return NULL;
