@@ -166,26 +166,19 @@ class KlipperFrontend(BaseFrontend):
         self._fd.write(bytearray(packet))
         self._fd.flush()
 
-    def _find_object(self, pin, klass=None):
+    def _find_object(self, pin, *klasses):
         def find(pin, objects):
             object_status = self.query_object(objects)
             for obj_id, status in object_status.items():
-                if klass == ModuleTypes.STEPPER:
-                    pins = [status.get("step_pin", None),
-                            status.get("enable_pin", None),
-                            status.get("dir_pin", None)]
-                else:
-                    pins = [status.get("pin", None)]
+                pins = []
+                for k, v in status.items():
+                    if k == "pin" or "_pin" in k:
+                        pins.append(v)
                 if pin in pins:
                     return obj_id
-        if klass is None:
-            for klass in ModuleTypes:
-                objects = self.get_object_id_set(klass)
-                obj_id = find(pin, objects)
-                if obj_id is not None:
-                    break
-            return obj_id, klass
-        else:
+        if not klasses:
+            klasses = ModuleTypes
+        for klass in klasses:
             objects = self.get_object_id_set(klass)
             obj_id = find(pin, objects)
             if obj_id is not None:
