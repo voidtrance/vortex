@@ -144,7 +144,6 @@ class BaseFrontend:
         return
 
     def _run_command_loop(self):
-        data = bytes()
         while self._run:
             events = self._poll.poll(0.1)
             if not events or self._fd.fileno() not in [e[0] for e in events]:
