@@ -39,6 +39,7 @@ STATIC_STRINGS = [
     "Unsupported command",
     "Command failure",
     "Invalid count parameter",
+    "Stepper initialization failure",
 ]
 
 class KlipperFrontend(BaseFrontend):
@@ -291,8 +292,11 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        self._oid_map[oid] = Stepper(self, oid, obj_id, name,
-                                             invert_step, step_pulse_ticks)
+        try:
+            self._oid_map[oid] = Stepper(self, oid, obj_id, name,
+                                         invert_step, step_pulse_ticks)
+        except ValueError:
+            self.shutdown("Stepper initialization failed")
         return True
 
     def stepper_get_position(self, cmd, oid):
@@ -361,6 +365,7 @@ class KlipperFrontend(BaseFrontend):
     def trsync_trigger(self, cmd, oid, reason):
         trsync = self._oid_map[oid]
         trsync.trigger(reason)
+        trsync.report(0)
         return True
 
     def _process_command(self, data):

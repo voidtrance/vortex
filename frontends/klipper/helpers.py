@@ -222,7 +222,6 @@ class CurrentMove:
         self.next_step_time = 0
 
 class Stepper:
-    POSITION_BIAS = 0x40000000
     def __init__(self, frontend, oid, obj_id, name, invert_step, step_pulse):
         self.frontend = frontend
         self.oid = oid
@@ -239,11 +238,11 @@ class Stepper:
         self.move_queue = []
         self.next_dir = 0
         self.timer = self.frontend.register_timer(self.send_step, 0)
-        # Klipper keeps it's own position value calculated using
-        # the step counts
-        self._position = -self.POSITION_BIAS
-        self.move = None
-        self.clock_reset = 0
+        self._needs_reset = False
+        self.move = CurrentMove(0, 0, 0, 0)
+        self._total_step_count = 0
+        self._total_step_queued = 0
+        self._step_sched = 0
         cmd_id = self.frontend.queue_command(ModuleTypes.STEPPER,
                                              self.name, "use_pins",
                                              {"enable": True})
@@ -259,58 +258,55 @@ class Stepper:
             if pin != obj_pin:
                 continue
             if name == "enable":
-                pin = StepperEnablePin(self.frontend, oid, self.id, self.name, self.pin_word)
+                pin = StepperEnablePin(self.frontend, oid, self.id, self.name,
+                                       self.pin_word)
         setattr(self, f"{name}_pin", pin)
         return pin
     @property
     def position(self):
-        position = self._position
-        if self.move:
-            position -= int(self.move.count / 2)
-        return (position * (-1 if position & 0x80000000 else 1)) - self.POSITION_BIAS
+        status = self.frontend.query([self.id])[self.id]
+        return status.get("steps")
     def set_stop_on_trigger(self, trsync):
         trsync.add_signal(self.stop_moves)
     def set_next_move_dir(self, dir):
         self.next_dir =  dir
-    def next_move(self):
-        if self.move_queue:
-            move = self.move_queue.pop()
-            interval = move.interval + move.increment
-            move_dir = self.move.dir if self.move else self.next_dir
-            if move_dir != move.dir:
-                self._position = -self._position + move.count
-                self.pin_word.contents.value ^= StepperPins.DIR
-            else:
-                self._position += move.count
-            next_step_time = self.move.next_step_time if self.move else 0
-            self.move = CurrentMove(interval, move.count * 2,
-                                    move.increment, move.dir)
-            self.move.next_step_time = next_step_time + move.interval
-            return self.move.next_step_time
-        return 0
     def queue_move(self, interval, count, add):
+        if self._needs_reset:
+            return
         if not count:
             self.frontend.shutdown("Invalid count parameter")
             return
         move = StepperMove(interval, count, add, self.next_dir)
+        self._total_step_queued += count
         self.move_queue.append(move)
-        if not self.move:
-            timeout = self.next_move()
+        if self.move.count == 0:
+            timeout = self._next_move()
+            self._step_sched = timeout
             self.frontend.reschedule_timer(self.timer, timeout)
     def stop_moves(self, reason):
-        self.move_queue.clear()
-        self.move = None
         self.frontend.reschedule_timer(self.timer, 0)
-        self._position -= self.position
-    def calc_step_time(self):
-        if self.clock_reset:
-            wake = self.clock_reset
-            self.clock_reset = 0
-            return wake
-        if not self.move:
-            return 0
-        ticks = self.frontend.get_controller_clock_ticks()
+        self.move.count = 0
+        self.move_queue.clear()
+        self.pin_word.contents.value &= ~StepperPins.DIR
+        self._log.debug(f"total step count for move: {self._total_step_count}, queued: {self._total_step_queued}")
+        self._total_step_count = 0
+        self._total_step_queued = 0
+        self._needs_reset = True
+    def _next_move(self):
+        if self.move_queue:
+            move = self.move_queue.pop(0)
+            interval = move.interval + move.increment
+            if self.move.dir != move.dir:
+                self.pin_word.contents.value ^= StepperPins.DIR ^ self.invert
+            next_step_time = self.move.next_step_time
+            self.move = CurrentMove(interval, move.count,
+                                    move.increment, move.dir)
+            self.move.next_step_time = next_step_time + move.interval
+            return self.move.next_step_time
+        return 0
+    def _calc_step_time(self, ticks):
         self.move.count -= 1
+        self._total_step_count += 1
         min_step = ticks + self.step_pulse
         if self.move.count & 1:
             return min_step
@@ -320,16 +316,17 @@ class Stepper:
             if self.move.next_step_time < min_step:
                 return min_step
             return self.move.next_step_time
-        timeout = self.next_move()
+        timeout = self._next_move()
         if not timeout or timeout > min_step:
             return timeout
         #if timeout - min_step < -(ticks)
         return min_step
     def send_step(self, ticks):
         self.pin_word.contents.value ^= StepperPins.STEP
-        return self.calc_step_time()
+        return self._calc_step_time(ticks)
     def reset_clock(self, clock):
-        self.clock_reset = clock
+        self.move.next_step_time = clock
+        self._needs_reset = False
     def shutdown(self):
         if self.timer:
             self.frontend.unregister_timer(self.timer)
@@ -354,35 +351,44 @@ class EndstopPin:
         self.nextwake = 0
         self.trsync = None
         self.is_homing = False
+        self._log = Logger(name, oid)
+        self.timer = self.frontend.register_timer(self._event, 0)
     def home(self, clock, sample_ticks, sample_count, rest_ticks,
              pin_value, trsync, trigger_reason):
-        if not sample_count:
-            if self.timer:
-                self.frontend.reschedule_timer(self.timer, 0)
-            self.is_homing = False
-            return
+        self.frontend.reschedule_timer(self.timer, 0)
         self.sample_time = sample_ticks
         self.sample_count = sample_count
+        if not sample_count:
+            self.is_homing = False
+            return
         self.rest_time = rest_ticks
         self.trigger_count = self.sample_count
         self.trigger_reason = trigger_reason
         self.trsync = trsync
-        if not self.timer:
-            self.timer = self.frontend.register_timer(self.event, clock)
-        else:
-            self.frontend.reschedule_timer(self.timer, clock)
+        self.is_homing = True
+        self.handler = self._event_sample
+        self.frontend.reschedule_timer(self.timer, clock)
     def _get_status(self):
         status = self.frontend.query_object([self.id])[self.id]
-        return status["triggered"]
-    def event(self, ticks):
+        return int(status["triggered"])
+    def _event(self, ticks):
+        return self.handler(ticks)
+    def _event_sample(self, ticks):
         triggered = self._get_status()
         if not triggered:
-            self.nextwake = ticks + self.rest_time
-            self.trigger_count = self.sample_count
             return ticks + self.rest_time
+        self.nextwake = ticks + self.rest_time
+        self.handler = self._event_oversample
+        return self._event_oversample(ticks)
+    def _event_oversample(self, ticks):
+        triggered = self._get_status()
+        if not triggered:
+            self.handler = self._event_sample
+            self.trigger_count = self.sample_count
+            return self.nextwake
         count = self.trigger_count - 1
         if not count:
-            self.trsync.trigger(self.trigger_reason)
+            self.trsync.do_trigger(self.trigger_reason)
             return 0
         self.trigger_count = count
         return ticks + self.sample_time
@@ -414,7 +420,7 @@ class TRSync:
         self.flags = TRSyncFlags.ZERO
         self._log = Logger("TRSync", oid)
         self.report_timer = self.frontend.register_timer(self.report_handler, 0)
-        self.expire_timer = self.frontend.register_timer(self.trigger_handler, 0)
+        self.expire_timer = self.frontend.register_timer(self.expire_handler, 0)
     def _clear(self):
         self.frontend.reschedule_timer(self.report_timer, 0)
         self.frontend.reschedule_timer(self.expire_timer, 0)
@@ -433,32 +439,32 @@ class TRSync:
                 self.frontend.reschedule_timer(self.expire_timer, timeout)
     def add_signal(self, handler):
         self.signals.append(handler)
-    def do_report(self, ticks, reason=None):
+    def report(self, ticks, reason=None):
         if reason is None:
             reason = self.trigger_reason
         self.frontend.respond(ResponseTypes.RESPONSE,
                               KLIPPER_PROTOCOL.trsync.trsync_state,
                               oid=self.oid,
-                              can_trigger=(TRSyncFlags.CAN_TRIGGER in self.flags),
+                              can_trigger=int(TRSyncFlags.CAN_TRIGGER in self.flags),
                               trigger_reason=reason, clock=ticks)
     def do_trigger(self, reason):
-        if TRSyncFlags.CAN_TRIGGER in self.flags:
-            self.flags &= ~TRSyncFlags.CAN_TRIGGER
-            self.trigger_reason = reason
-            for signal in self.signals:
-                signal(reason)
-            self.signals.clear()
+        if TRSyncFlags.CAN_TRIGGER not in self.flags:
+            return
+        self.flags &= ~TRSyncFlags.CAN_TRIGGER
+        self.trigger_reason = reason
+        for signal in self.signals:
+            signal(reason)
+        self.signals.clear()
+        self.report(self.frontend.get_controller_clock_ticks())
     def trigger(self, reason):
         self.do_trigger(reason)
         self.frontend.reschedule_timer(self.report_timer, 0)
         self.frontend.reschedule_timer(self.expire_timer, 0)
-        self.do_report(0)
     def report_handler(self, ticks):
-        self.do_report(ticks)
+        self.report(ticks)
         return ticks + self.report_ticks
-    def trigger_handler(self, ticks):
+    def expire_handler(self, ticks):
         self.do_trigger(self.expire_reason)
-        self.do_report(ticks, self.expire_reason)
         return 0
     def shutdown(self):
         self.frontend.unregister_timer(self.expire_timer)
