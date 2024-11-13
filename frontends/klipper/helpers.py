@@ -15,12 +15,25 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import enum
 import ctypes
+import logging
 from collections import namedtuple
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
            "Stepper", "TRSync"]
+
+class Logger:
+    def __init__(self, name, oid):
+        self._name, self._oid = name, oid
+    def __getattr__(self, name):
+        if name not in ("debug", "info", "warning", "error",
+                        "error", "critical"):
+            return getattr(self, name)
+        func = getattr(logging, name)
+        prefix = f"{self._name}[{self._oid}] "
+        #return lambda f, *a, **k: func(prefix + f, *a, **k)
+        return lambda f, *a, **k: print(prefix + f.format(*a, **k))
 
 class AnalogPin:
     def __init__(self, frontend, oid, obj_id, klass, name):
@@ -30,6 +43,7 @@ class AnalogPin:
         self.klass = klass
         self.name = name
         self.timer = None
+        self._log = Logger(name, oid)
     def schedule_query(self, cmd, clock, sample_ticks,
                        sample_count, rest_ticks, min_value, max_value,
                        range_check_count):
@@ -96,6 +110,7 @@ class DigitalPin:
         self.handler = self.event
         self.timer = None
         self.cycle_ticks = 0
+        self._log = Logger(name, oid)
     def _set_pin(self, value):
         self.frontend.queue_command(ModuleTypes.DIGITAL_PIN,
                                     self.name, "set", {"state": int(value)})
@@ -213,6 +228,7 @@ class Stepper:
         self.oid = oid
         self.id = obj_id
         self.name = name
+        self._log = Logger(name, oid)
         self.invert = invert_step
         self.step_pulse = step_pulse
         status = self.frontend.query([obj_id])[obj_id]
@@ -396,6 +412,7 @@ class TRSync:
         self.report_ticks = 0
         self.signals = []
         self.flags = TRSyncFlags.ZERO
+        self._log = Logger("TRSync", oid)
         self.report_timer = self.frontend.register_timer(self.report_handler, 0)
         self.expire_timer = self.frontend.register_timer(self.trigger_handler, 0)
     def _clear(self):
