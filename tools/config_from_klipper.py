@@ -37,13 +37,14 @@ def generate_stepper_config(section : str, name: str,
     for pname in ("enable_pin", "dir_pin", "step_pin"):
         pin = parse_pin(kconfig.get(section, pname))
         econfig.set(s, pname, pin)
-    econfig.set(s, "microsteps", kconfig.get(section, "microsteps"))
+    ms = kconfig.getint(section, "microsteps")
+    econfig.set(s, "microsteps", str(ms))
     spr = kconfig.getint(section, "full_steps_per_rotation")
     econfig.set(s, "steps_per_rotation", str(spr))
     rd = kconfig.getfloat(section, "rotation_distance")
     gr = kconfig.get(section, "gear_ratio", fallback="1:1")
     i, o = [int(x) for x in gr.split(':')]
-    spm = (spr * (i / o)) / rd
+    spm = (spr * ms * (i / o)) / rd
     econfig.set(s, "steps_per_mm", str(int(spm)))
     econfig.set(s, "start_speed", "30")
 
