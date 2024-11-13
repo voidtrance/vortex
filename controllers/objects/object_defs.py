@@ -61,7 +61,8 @@ class Stepper(ObjectDef):
                     ("steps_per_mm", ctypes.c_uint),
                     ("enable_pin", ctypes.c_char * 8),
                     ("dir_pin", ctypes.c_char * 8),
-                    ("step_pin", ctypes.c_char * 8)]
+                    ("step_pin", ctypes.c_char * 8),
+                    ("pin_addr", ctypes.c_ulong)]
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
@@ -114,7 +115,8 @@ class Endstop(ObjectDef):
         _fields_ = [("triggered", ctypes.c_bool),
                     ("type", ctypes.c_char * 4),
                     ("axis", ctypes.c_int),
-                    ("pin", ctypes.c_char * 8)]
+                    ("pin", ctypes.c_char * 8),
+                    ("pin_addr", ctypes.c_ulong)]
     class EndstopTriggerEvent(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool)]
     def __init__(self):
@@ -157,7 +159,8 @@ class Probe(ObjectDef):
         _fields_ = [("triggered", ctypes.c_bool),
                     ("offsets", ctypes.c_float * len(AxisType)),
                     ("position", ctypes.c_double * len(AxisType)),
-                    ("pin", ctypes.c_char * 8)]
+                    ("pin", ctypes.c_char * 8),
+                    ("pin_addr", ctypes.c_ulong)]
     class ProbeEventTriggered(ctypes.Structure):
         _fields_ = [("position", ctypes.c_double * len(AxisType))]
     def __init__(self):

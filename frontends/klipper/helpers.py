@@ -248,9 +248,9 @@ class Stepper:
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)[0]
         if result < 0:
-            raise ValueError
-        else:
-            self.pin_word = ctypes.cast(result, ctypes.POINTER(ctypes.c_uint8))
+            raise ValueError(f"Stepper {self.name} pin enable error")
+        status = self.frontend.query_object([self.id])[self.id]
+        self.pin_word = ctypes.cast(status["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
     def owns_pin(self, pin):
         return pin in self.pins.values()
     def configure_pin(self, oid, pin):
@@ -351,6 +351,8 @@ class EndstopPin:
         self.nextwake = 0
         self.trsync = None
         self.is_homing = False
+        status = frontend.query_object([self.id])[self.id]
+        self.pin_word = ctypes.cast(status["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
         self._log = Logger(name, oid)
         self.timer = self.frontend.register_timer(self._event, 0)
     def home(self, clock, sample_ticks, sample_count, rest_ticks,
@@ -369,8 +371,7 @@ class EndstopPin:
         self.handler = self._event_sample
         self.frontend.reschedule_timer(self.timer, clock)
     def _get_status(self):
-        status = self.frontend.query_object([self.id])[self.id]
-        return int(status["triggered"])
+        return self.pin_word.contents.value & 1
     def _event(self, ticks):
         return self.handler(ticks)
     def _event_sample(self, ticks):

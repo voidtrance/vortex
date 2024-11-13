@@ -229,7 +229,7 @@ int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
 
         ret = pthread_create(&stepper->pin_thread, &attrs, pin_monitor_thread,
                              stepper);
-        CORE_CMD_COMPLETE(stepper, id, (unsigned long)&stepper->pin_word);
+        CORE_CMD_COMPLETE(stepper, id, 0);
     out:
         pthread_attr_destroy(&attrs);
         return 0;
@@ -271,6 +271,7 @@ void stepper_status(core_object_t *object, void *status) {
     s->accel = stepper->accel.rate;
     s->decel = stepper->accel.rate;
     s->steps_per_mm = stepper->config.steps_per_mm;
+    s->pin_addr = stepper->use_pins ? (unsigned long)&stepper->pin_word : 0;
     memcpy(s->enable_pin, stepper->config.enable_pin,
            sizeof(s->enable_pin) + sizeof(s->dir_pin) + sizeof(s->step_pin));
 }

@@ -49,6 +49,7 @@ typedef struct {
     float range;
     float fuzz;
     char pin[8];
+    uint8_t pin_word;
     bool triggered;
     pthread_mutex_t lock;
 } probe_t;
@@ -80,6 +81,7 @@ static void probe_get_state(core_object_t *object, void *state) {
     pthread_mutex_lock(&probe->lock);
     memcpy(s->position, probe->position, sizeof(s->position));
     s->triggered = probe->triggered;
+    s->pin_addr = (unsigned long)&probe->pin_word;
     pthread_mutex_unlock(&probe->lock);
 }
 
@@ -98,6 +100,7 @@ static void probe_update(core_object_t *object, uint64_t ticks,
         probe->triggered &= status.position[i] <= probe->fuzz;
     }
 
+    probe->pin_word = !!probe->triggered;
     pthread_mutex_unlock(&probe->lock);
 
     if (probe->triggered && !state) {

@@ -70,6 +70,7 @@ typedef struct {
     char enable_pin[8];
     char dir_pin[8];
     char step_pin[8];
+    unsigned long pin_addr;
 } stepper_status_t;
 
 #endif

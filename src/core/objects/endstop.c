@@ -50,6 +50,7 @@ typedef struct {
     axis_type_t axis_type;
     endstop_type_t type;
     char pin[8];
+    uint8_t pin_word;
     bool triggered;
 } endstop_t;
 
@@ -113,6 +114,8 @@ static void endstop_update(core_object_t *object, uint64_t ticks,
 
     log_debug(endstop, "type: %u, position: %.15f, state: %u, old: %u",
               endstop->type, status.position, endstop->triggered, state);
+    endstop->pin_word = !!endstop->triggered;
+
     /*
      * Only submit trigger events when the emulation is running.
      * Otherwise, the event could be erroneously submitted when
@@ -134,6 +137,7 @@ static void endstop_status(core_object_t *object, void *status) {
 
     s->triggered = endstop->triggered;
     s->axis = endstop->axis_type;
+    s->pin_addr = (unsigned long)&endstop->pin_word;
     strncpy(s->pin, endstop->pin, sizeof(s->pin));
     strncpy((char *)s->type, endstop_type_names[endstop->type], 3);
 }

@@ -25,6 +25,7 @@ typedef struct {
     const char type[4];
     axis_type_t axis;
     char pin[8];
+    unsigned long pin_addr;
 } endstop_status_t;
 
 #endif
