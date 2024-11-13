@@ -56,7 +56,7 @@ typedef struct {
 static object_cache_t *endstop_event_cache;
 
 static void endstop_update(core_object_t *object, uint64_t ticks,
-			   uint64_t runtime);
+                           uint64_t runtime);
 
 static void endstop_reset(core_object_t *object) {
     endstop_update(object, 0, 0);
@@ -70,27 +70,27 @@ static int endstop_init(core_object_t *object) {
 
     axes = CORE_LIST_OBJECTS(endstop, OBJECT_TYPE_AXIS);
     if (!axes) {
-      log_error(endstop, "No axis list");
-      return -ENOENT;
+        log_error(endstop, "No axis list");
+        return -ENOENT;
     }
 
     axis_ptr = axes;
     do {
-      core_object_t *axis = *axis_ptr;
+        core_object_t *axis = *axis_ptr;
 
-      axis->get_state(axis, &status);
-      if (status.type == endstop->axis_type) {
-        endstop->axis = axis;
-        break;
-      }
-      axis_ptr++;
+        axis->get_state(axis, &status);
+        if (status.type == endstop->axis_type) {
+            endstop->axis = axis;
+            break;
+        }
+        axis_ptr++;
     } while (axis_ptr);
 
     free(axes);
 
     if (!endstop->axis) {
-      log_error(endstop, "Could not find axis");
-      return -1;
+        log_error(endstop, "Could not find axis");
+        return -1;
     }
 
     endstop_update(object, 0, 0);
@@ -98,7 +98,7 @@ static int endstop_init(core_object_t *object) {
 }
 
 static void endstop_update(core_object_t *object, uint64_t ticks,
-			   uint64_t runtime) {
+                           uint64_t runtime) {
     endstop_t *endstop = (endstop_t *)object;
     endstop_trigger_event_data_t *event;
     axis_status_t status;
@@ -106,25 +106,25 @@ static void endstop_update(core_object_t *object, uint64_t ticks,
 
     endstop->axis->get_state(endstop->axis, &status);
     if ((endstop->type == ENDSTOP_TYPE_MIN && status.position <= 0) ||
-	(endstop->type == ENDSTOP_TYPE_MAX && status.position >= status.length))
-	endstop->triggered = true;
+        (endstop->type == ENDSTOP_TYPE_MAX && status.position >= status.length))
+        endstop->triggered = true;
     else
         endstop->triggered = false;
 
     log_debug(endstop, "type: %u, position: %.15f, state: %u, old: %u",
-	      endstop->type, status.position, endstop->triggered, state);
+              endstop->type, status.position, endstop->triggered, state);
     /*
      * Only submit trigger events when the emulation is running.
      * Otherwise, the event could be erroneously submitted when
      * the object is initialized.
      */
     if (state != endstop->triggered && runtime) {
-	event = object_cache_alloc(endstop_event_cache);
-	if (!event)
-	    return;
+        event = object_cache_alloc(endstop_event_cache);
+        if (!event)
+            return;
 
-	event->triggered = endstop->triggered;
-	CORE_EVENT_SUBMIT(endstop, OBJECT_EVENT_ENDSTOP_TRIGGER, event);
+        event->triggered = endstop->triggered;
+        CORE_EVENT_SUBMIT(endstop, OBJECT_EVENT_ENDSTOP_TRIGGER, event);
     }
 }
 
@@ -153,12 +153,12 @@ endstop_t *object_create(const char *name, void *config_ptr) {
 
     endstop = calloc(1, sizeof(*endstop));
     if (!endstop)
-	return NULL;
+        return NULL;
 
     if (object_cache_create(&endstop_event_cache,
-			     sizeof(endstop_trigger_event_data_t))) {
-	free(endstop);
-	return NULL;
+                            sizeof(endstop_trigger_event_data_t))) {
+        free(endstop);
+        return NULL;
     }
 
     endstop->object.type = OBJECT_TYPE_ENDSTOP;
@@ -172,11 +172,11 @@ endstop_t *object_create(const char *name, void *config_ptr) {
     strncpy(endstop->pin, config->pin, sizeof(endstop->pin));
 
     for (type = 0; type < ENDSTOP_TYPE_END; type++) {
-	if (!strncmp(config->type, endstop_type_names[type],
-		     strlen(endstop_type_names[type]))) {
-	    endstop->type = type;
-	    break;
-	}
+        if (!strncmp(config->type, endstop_type_names[type],
+                     strlen(endstop_type_names[type]))) {
+            endstop->type = type;
+            break;
+        }
     }
 
     return endstop;

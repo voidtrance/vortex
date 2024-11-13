@@ -29,23 +29,23 @@ typedef enum {
 
 typedef struct {
     union {
-	struct {
-	    uint64_t tick_frequency;
-	    uint64_t update_frequency;
-	} update;
-	struct {
-	    void (*callback)(uint64_t, void *);
-	    void *data;
-	} timer;
-	struct {
-	    core_object_t *object;
-	    const char *name;
-	} object;
-	struct {
-	    uint64_t frequency;
-	    void (*callback)(void *);
-	    void *data;
-	} worker;
+        struct {
+            uint64_t tick_frequency;
+            uint64_t update_frequency;
+        } update;
+        struct {
+            void (*callback)(uint64_t, void *);
+            void *data;
+        } timer;
+        struct {
+            core_object_t *object;
+            const char *name;
+        } object;
+        struct {
+            uint64_t frequency;
+            void (*callback)(void *);
+            void *data;
+        } worker;
     };
 } core_thread_args_t;
 

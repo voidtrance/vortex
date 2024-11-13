@@ -34,18 +34,18 @@ static void random_state_init(void) {
     srandom(t.tv_nsec);
     tries = (uint32_t)(50.0 * long_to_float(random()));
     for (i = 0; i < tries; i++)
-	(void)random();
+        (void)random();
     return;
 }
 
 #undef CREATE_FUNCS
 #define CREATE_FUNCS(name, type)					\
-    type random_##name(void) {						\
+    type random_##name(void) {                              \
         pthread_once(&random_init, random_state_init);			\
-        return (type)random();						\
-    }									\
-    type random_##name##_limit(type min, type max) {			\
-        float factor = random_float();					\
+        return (type)random();                              \
+    }                                                       \
+    type random_##name##_limit(type min, type max) {        \
+        float factor = random_float();                          \
         return (type)(min + (((max - min) * 1.0) / factor));		\
     }
 

@@ -31,11 +31,11 @@ int kinematics_type_set(kinematics_type_t type) {
 
     switch (core_kinematics_type) {
     case KINEMATICS_CARTESIAN:
-	motor_movement_func = cartesian_motor_movement;
-	axis_movement_func = cartesian_axis_movement;
-	break;
+        motor_movement_func = cartesian_motor_movement;
+        axis_movement_func = cartesian_axis_movement;
+        break;
     default:
-	return -EINVAL;
+        return -EINVAL;
     }
 
     return 0;
@@ -51,26 +51,26 @@ axis_type_t kinematics_axis_type_from_char(char type_char) {
     type_char = tolower(type_char);
     switch (type_char) {
     case 'x':
-	type = AXIS_TYPE_X;
-	break;
+        type = AXIS_TYPE_X;
+        break;
     case 'y':
-	type = AXIS_TYPE_Y;
-	break;
+        type = AXIS_TYPE_Y;
+        break;
     case 'z':
-	type = AXIS_TYPE_Z;
-	break;
+        type = AXIS_TYPE_Z;
+        break;
     case 'a':
-	type = AXIS_TYPE_A;
-	break;
+        type = AXIS_TYPE_A;
+        break;
     case 'b':
-	type = AXIS_TYPE_B;
-	break;
+        type = AXIS_TYPE_B;
+        break;
     case 'c':
-	type = AXIS_TYPE_C;
-	break;
+        type = AXIS_TYPE_C;
+        break;
     case 'e':
-	type = AXIS_TYPE_E;
-	break;
+        type = AXIS_TYPE_E;
+        break;
     }
 
     return type;

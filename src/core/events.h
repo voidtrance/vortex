@@ -60,7 +60,7 @@ typedef struct {
  *    - The event data.
  */
 typedef void (*event_handler_t)(core_object_t *, const char *,
-				const core_object_event_type_t, void *);
+                                const core_object_event_type_t, void *);
 
 /*
  * Signature of call to (un)register for an object event.
@@ -72,9 +72,9 @@ typedef void (*event_handler_t)(core_object_t *, const char *,
  *    - the data that needs to be passed.
  */
 typedef int (*event_register_t)(const core_object_type_t,
-				const core_object_event_type_t, const char *,
+                                const core_object_event_type_t, const char *,
                                 core_object_t *, event_handler_t,
-				void *);
+                                void *);
 
 /*
  * Signature of call to issue an event.
@@ -85,7 +85,7 @@ typedef int (*event_register_t)(const core_object_type_t,
  *    - the data that needs to be passed.
  */
 typedef int (*event_submit_t)(const core_object_event_type_t,
-			      const core_object_id_t id, void *, void *);
+                              const core_object_id_t id, void *, void *);
 
 
 #endif

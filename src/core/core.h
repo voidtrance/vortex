@@ -21,6 +21,6 @@
 #include "objects/object_defs.h"
 
 void core_log(core_log_level_t level, core_object_type_t type,
-	      const char *name, const char *fmt, ...);
+              const char *name, const char *fmt, ...);
 
 #endif

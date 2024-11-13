@@ -73,13 +73,13 @@ static void thermistor_destroy(core_object_t *object);
 
 static inline float resistance_calc(float base, float temp) {
     return base * (1 + pt100_A * temp + pt100_B * temp * temp +
-		   (temp - 100) * pt100_C * temp * temp * temp);
+                   (temp - 100) * pt100_C * temp * temp * temp);
 }
 
 static inline uint16_t calc_adc_value(float resistance, uint32_t resistor,
-				      uint16_t max_adc) {
+                                      uint16_t max_adc) {
     return (uint16_t)round((resistance / ((float)resistor + resistance)) *
-			   (max_adc + 1));
+                           (max_adc + 1));
 }
 
 static inline void calc_coefficiants(float temp, float resistance,
@@ -102,11 +102,11 @@ static inline float beta_resistance(float temp, float a, float b, float c) {
 thermistor_t *object_create(const char *name, void *config_ptr) {
     thermistor_t *thermistor;
     thermistor_config_params_t *config =
-	(thermistor_config_params_t *)config_ptr;
+        (thermistor_config_params_t *)config_ptr;
 
     thermistor = calloc(1, sizeof(*thermistor));
     if (!thermistor)
-	return NULL;
+        return NULL;
 
     thermistor->object.type = OBJECT_TYPE_THERMISTOR;
     thermistor->object.init = thermistor_init;
@@ -135,9 +135,9 @@ static int thermistor_init(core_object_t *object) {
     thermistor_t *thermistor = (thermistor_t *)object;
 
     thermistor->heater = CORE_LOOKUP_OBJECT(thermistor, OBJECT_TYPE_HEATER,
-					    thermistor->heater_name);
+                                            thermistor->heater_name);
     if (!thermistor->heater)
-	return -1;
+        return -1;
 
     calc_coefficiants(b3950_nominal_t, b3950_nominal_r, thermistor->beta,
                       &thermistor->a, &thermistor->b, &thermistor->c);
@@ -150,12 +150,12 @@ static void thermistor_status(core_object_t *object, void *status) {
 
     s->resistance = thermistor->resistance;
     s->adc = calc_adc_value(thermistor->resistance, thermistor->resistor,
-			    thermistor->max_adc);
+                            thermistor->max_adc);
     strncpy(s->pin, thermistor->pin, sizeof(s->pin));
 }
 
 static void thermistor_update(core_object_t *object, uint64_t ticks,
-			      uint64_t runtime) {
+                              uint64_t runtime) {
     thermistor_t *thermistor = (thermistor_t *)object;
     heater_status_t heater_status;
 
@@ -163,19 +163,19 @@ static void thermistor_update(core_object_t *object, uint64_t ticks,
 
     switch (thermistor->type) {
     case SENSOR_TYPE_PT100:
-	thermistor->resistance = resistance_calc(pt100_base,
-						 heater_status.temperature);
-	break;
+        thermistor->resistance = resistance_calc(pt100_base,
+                                                 heater_status.temperature);
+        break;
     case SENSOR_TYPE_PT1000:
-	thermistor->resistance = resistance_calc(pt1000_base,
-						 heater_status.temperature);
-	break;
+        thermistor->resistance = resistance_calc(pt1000_base,
+                                                 heater_status.temperature);
+        break;
     case SENSOR_TYPE_B3950:
-	thermistor->resistance =
-	    beta_resistance(heater_status.temperature, thermistor->a,
-			    thermistor->b, thermistor->c);
+        thermistor->resistance =
+            beta_resistance(heater_status.temperature, thermistor->a,
+                            thermistor->b, thermistor->c);
     default:
-	break;
+        break;
     }
 }
 

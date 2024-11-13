@@ -32,16 +32,16 @@ typedef enum {
 } core_log_level_t;
 
 #define CORE_LOG(obj, level, fmt, ...)				\
-    (((core_object_t *)(obj))->call_data.log(			\
-	(level), ((core_object_t *)(obj))->type,		\
-	((core_object_t *)(obj))->name, (fmt), ##__VA_ARGS__))
+    (((core_object_t *)(obj))->call_data.log( \
+        (level), ((core_object_t *)(obj))->type,          \
+        ((core_object_t *)(obj))->name, (fmt), ##__VA_ARGS__))
 
 #define log_fatal(o, fmt, ...) CORE_LOG(o, LOG_LEVEL_FATAL, fmt, ##__VA_ARGS__)
 #define log_error(o, fmt, ...) CORE_LOG(o, LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
-#define log_warning(o, fmt, ...) \
+#define log_warning(o, fmt, ...)                        \
     CORE_LOG(o, LOG_LEVEL_WARNING, fmt, ##__VA_ARGS__)
 #define log_info(o, fmt, ...) CORE_LOG(o, LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
-#define log_verbose(o, fmt, ...) \
+#define log_verbose(o, fmt, ...)                        \
     CORE_LOG(o, LOG_LEVEL_VERBOSE, fmt, ##__VA_ARGS__)
 #define log_debug(o, fmt, ...) CORE_LOG(o, LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
 

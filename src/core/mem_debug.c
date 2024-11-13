@@ -36,7 +36,7 @@ void *__malloc(size_t size, const char *f, unsigned int l) {
     ptr = __malloc_sym(size);
     if (ptr)
         fprintf(stderr, "malloc:%d:%p:%zu:%s:%u\n", getpid(), ptr, size,
-		f, l);
+                f, l);
 
     return ptr;
 }
@@ -47,8 +47,8 @@ void *__calloc(size_t nmemb, size_t size, const char *f, unsigned int l) {
 
     ptr = __calloc_sym(nmemb, size);
     if (ptr)
-	fprintf(stderr, "calloc:%d:%p:%zu:%s:%u\n", getpid(), ptr, nmemb * size,
-		f, l);
+        fprintf(stderr, "calloc:%d:%p:%zu:%s:%u\n", getpid(), ptr, nmemb * size,
+                f, l);
     return ptr;
 }
 
@@ -57,8 +57,8 @@ void *__realloc(void *ptr, size_t size, const char *f, unsigned int l) {
 
     ptr = __realloc_sym(ptr, size);
     if (ptr)
-	fprintf(stderr, "realloc:%d:%p:%zu:%s:%u\n", getpid(), ptr, size,
-		f, l);
+        fprintf(stderr, "realloc:%d:%p:%zu:%s:%u\n", getpid(), ptr, size,
+                f, l);
     return ptr;
 }
 
@@ -66,19 +66,19 @@ void __free(void *ptr, const char *f, unsigned int l) {
     void (*__free_sym)(void *) = dlsym(RTLD_NEXT, "free");
 
     if (ptr)
-	fprintf(stderr, "free:%d:%p:%s:%u\n", getpid(), ptr,
-		f, l);
+        fprintf(stderr, "free:%d:%p:%s:%u\n", getpid(), ptr,
+                f, l);
     __free_sym(ptr);
 }
 
 void *__reallocarray(void *ptr, size_t nmemb, size_t size, const char *f,
-		     unsigned int l) {
+                     unsigned int l) {
     void *(*__reallocarray_sym)(void *, size_t, size_t) = dlsym(RTLD_NEXT,
-								"reallocarray");
+                                                                "reallocarray");
 
     ptr = __reallocarray_sym(ptr, nmemb, size);
     if (ptr)
-	fprintf(stderr, "reallocarray:%d:%p:%zu:%s:%u\n", getpid(), ptr,
-		(nmemb * size), f, l);
+        fprintf(stderr, "reallocarray:%d:%p:%zu:%s:%u\n", getpid(), ptr,
+                (nmemb * size), f, l);
     return ptr;
 }

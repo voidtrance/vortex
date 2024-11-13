@@ -29,7 +29,7 @@
 
 #define OBJECT_CACHE_TAG 0xdeadbeefc0dedead
 
-#define container_of(ptr, member, type) \
+#define container_of(ptr, member, type)                                 \
     ({ void *__ptr = (void *)ptr; ((type *)(__ptr - offsetof(type, member))); })
 
 struct cache_object {
@@ -63,39 +63,39 @@ static bool object_cache_fill(object_cache_t *cache) {
     page_size = sysconf(_SC_PAGESIZE);
     new_memory = calloc(1, page_size);
     if (!new_memory)
-	return false;
+        return false;
 
     if (cache->segment == cache->num_segments) {
-	size_t alloc_size;
-	void **new;
+        size_t alloc_size;
+        void **new;
 
-	if (!cache->num_segments) {
-	    cache->num_segments = 1;
-	    alloc_size = 1;
-	} else {
-	    alloc_size = cache->num_segments * 2;
-	}
+        if (!cache->num_segments) {
+            cache->num_segments = 1;
+            alloc_size = 1;
+        } else {
+            alloc_size = cache->num_segments * 2;
+        }
 
-	new = reallocarray(cache->memory, alloc_size, sizeof(*new));
-	if (new) {
-	    cache->memory = new;
+        new = reallocarray(cache->memory, alloc_size, sizeof(*new));
+        if (new) {
+            cache->memory = new;
             cache->num_segments = alloc_size;
         } else {
-	    free(new_memory);
-	    return false;
-	}
+            free(new_memory);
+            return false;
+        }
     }
 
     limit = page_size - sizeof(struct cache_object) - cache->object_size;
     for (ptr = new_memory; ptr < new_memory + limit; cache->num_objects++) {
-	struct cache_object *object_entry = (struct cache_object *)ptr;
+        struct cache_object *object_entry = (struct cache_object *)ptr;
 
-	ptr += sizeof(struct cache_object);
-	object_entry->tag = OBJECT_CACHE_TAG;
-	object_entry->ptr = ptr;
+        ptr += sizeof(struct cache_object);
+        object_entry->tag = OBJECT_CACHE_TAG;
+        object_entry->ptr = ptr;
         object_entry->cache = cache;
         ptr += cache->object_size;
-	STAILQ_INSERT_TAIL(&cache->objects, object_entry, entry);
+        STAILQ_INSERT_TAIL(&cache->objects, object_entry, entry);
     }
 
     cache->memory[cache->segment++] = new_memory;
@@ -107,31 +107,31 @@ int object_cache_create(object_cache_t **cache_ptr, size_t object_size) {
     object_cache_t *cache;
 
     if (*cache_ptr == NULL) {
-	cache = malloc(sizeof(*cache));
-	if (!cache)
-	    return -ENOMEM;
+        cache = malloc(sizeof(*cache));
+        if (!cache)
+            return -ENOMEM;
 
-	cache->segment = 0;
-	cache->num_segments = 0;
-	cache->object_size = object_size;
-	cache->num_objects = 0;
-	cache->refcount = 1;
-	cache->memory = NULL;
-	STAILQ_INIT(&cache->objects);
-	STAILQ_INIT(&cache->alloced);
-	pthread_mutex_init(&cache->lock, NULL);
+        cache->segment = 0;
+        cache->num_segments = 0;
+        cache->object_size = object_size;
+        cache->num_objects = 0;
+        cache->refcount = 1;
+        cache->memory = NULL;
+        STAILQ_INIT(&cache->objects);
+        STAILQ_INIT(&cache->alloced);
+        pthread_mutex_init(&cache->lock, NULL);
 
-	if (!object_cache_fill(cache)) {
-	    free(cache);
-	    return -ENOMEM;
-	}
+        if (!object_cache_fill(cache)) {
+            free(cache);
+            return -ENOMEM;
+        }
 
-	*cache_ptr = cache;
+        *cache_ptr = cache;
     } else {
-	cache = *cache_ptr;
-	pthread_mutex_lock(&cache->lock);
-	cache->refcount++;
-	pthread_mutex_unlock(&cache->lock);
+        cache = *cache_ptr;
+        pthread_mutex_lock(&cache->lock);
+        cache->refcount++;
+        pthread_mutex_unlock(&cache->lock);
     }
 
     return 0;
@@ -142,10 +142,10 @@ void *object_cache_alloc(object_cache_t *cache) {
 
     pthread_mutex_lock(&cache->lock);
     if (STAILQ_EMPTY(&cache->objects)) {
-	if (!object_cache_fill(cache)) {
-	    pthread_mutex_unlock(&cache->lock);
-	    return NULL;
-	}
+        if (!object_cache_fill(cache)) {
+            pthread_mutex_unlock(&cache->lock);
+            return NULL;
+        }
     }
 
     object = STAILQ_FIRST(&cache->objects);
@@ -164,12 +164,12 @@ void object_cache_free(void *object) {
 #endif
 
     if (!object)
-	return;
+        return;
 
     obj = object - sizeof(struct cache_object);
     if (obj->tag != OBJECT_CACHE_TAG || obj->ptr != object) {
-	free(object);
-	return;
+        free(object);
+        return;
     }
 
     cache = obj->cache;
@@ -177,13 +177,13 @@ void object_cache_free(void *object) {
     pthread_mutex_lock(&cache->lock);
 #ifdef VORTEX_DEBUG
     STAILQ_FOREACH(obj, &cache->alloced, entry) {
-	if (obj->ptr == object) {
-	    found = true;
-	    break;
-	}
+        if (obj->ptr == object) {
+            found = true;
+            break;
+        }
     }
     if (!found)
-	fprintf(stderr, "Cache object not found in alloced list.\n");
+        fprintf(stderr, "Cache object not found in alloced list.\n");
 #endif
     STAILQ_REMOVE(&cache->alloced, obj, cache_object, entry);
     STAILQ_INSERT_TAIL(&cache->objects, obj, entry);
@@ -196,10 +196,10 @@ void object_cache_destroy(object_cache_t *cache) {
 
     pthread_mutex_lock(&cache->lock);
     if (cache->refcount == 0) {
-	for (i = 0; i < cache->segment; i++)
-	    free(cache->memory[i]);
-	free(cache);
-	return;
+        for (i = 0; i < cache->segment; i++)
+            free(cache->memory[i]);
+        free(cache);
+        return;
     }
     pthread_mutex_unlock(&cache->lock);
 }

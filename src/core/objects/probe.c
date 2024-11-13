@@ -59,11 +59,11 @@ static int probe_init(core_object_t *object) {
     probe_t *probe = (probe_t *)object;
 
     probe->toolhead = CORE_LOOKUP_OBJECT(probe, OBJECT_TYPE_TOOLHEAD,
-					 probe->toolhead_name);
+                                         probe->toolhead_name);
     if (!probe->toolhead) {
-	log_error(probe, "Did not find toolhead object '%s'",
-		  probe->toolhead_name);
-	return -ENOENT;
+        log_error(probe, "Did not find toolhead object '%s'",
+                  probe->toolhead_name);
+        return -ENOENT;
     }
 
     probe->fuzz = random_float_limit(0, probe->range);
@@ -84,7 +84,7 @@ static void probe_get_state(core_object_t *object, void *state) {
 }
 
 static void probe_update(core_object_t *object, uint64_t ticks,
-			 uint64_t runtime) {
+                         uint64_t runtime) {
     probe_t *probe = (probe_t *)object;
     toolhead_status_t status;
     bool state = probe->triggered;
@@ -94,21 +94,22 @@ static void probe_update(core_object_t *object, uint64_t ticks,
     pthread_mutex_lock(&probe->lock);
     probe->triggered = true;
     for (i = 0; i < AXIS_TYPE_MAX; i++) {
-	probe->position[i] = status.position[i] + probe->offsets[i];
-	probe->triggered &= status.position[i] <= probe->fuzz;
+        probe->position[i] = status.position[i] + probe->offsets[i];
+        probe->triggered &= status.position[i] <= probe->fuzz;
     }
+
     pthread_mutex_unlock(&probe->lock);
 
     if (probe->triggered && !state) {
         probe_trigger_event_data_t *data;
 
-	data = object_cache_alloc(probe_event_cache);
-	if (data) {
-	    memcpy(data->position, probe->position, sizeof(data->position));
-	    CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED, data);
-	}
+        data = object_cache_alloc(probe_event_cache);
+        if (data) {
+            memcpy(data->position, probe->position, sizeof(data->position));
+            CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED, data);
+        }
     } else if (!probe->triggered && state) {
-	probe->fuzz = random_float_limit(0, probe->range);
+        probe->fuzz = random_float_limit(0, probe->range);
     }
 }
 
@@ -127,7 +128,7 @@ probe_t *object_create(const char *name, void *config_ptr) {
 
     probe = calloc(1, sizeof(*probe));
     if (!probe)
-	return NULL;
+        return NULL;
 
     probe->object.type = OBJECT_TYPE_PROBE;
     probe->object.name = strdup(name);
@@ -142,10 +143,10 @@ probe_t *object_create(const char *name, void *config_ptr) {
     pthread_mutex_init(&probe->lock, NULL);
 
     if (object_cache_create(&probe_event_cache,
-			    sizeof(probe_trigger_event_data_t))) {
-	core_object_destroy(&probe->object);
-	free(probe);
-	return NULL;
+                            sizeof(probe_trigger_event_data_t))) {
+        core_object_destroy(&probe->object);
+        free(probe);
+        return NULL;
     }
 
     return probe;

@@ -19,8 +19,8 @@
 #define __RANDOM_H__
 #include <stdint.h>
 
-#define CREATE_FUNCS(name, type)					\
-    type random_##name(void);						\
+#define CREATE_FUNCS(name, type)                    \
+    type random_##name(void);                       \
     type random_##name##_limit(type min, type max);
 
 CREATE_FUNCS(int, int32_t)

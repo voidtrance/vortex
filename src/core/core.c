@@ -54,8 +54,8 @@ typedef core_object_t *(*object_create_func_t)(const char *, void *);
 
 typedef struct {
     struct __comp_entry {
-	uint64_t id;
-	int64_t result;
+        uint64_t id;
+        int64_t result;
     } *entries;
     size_t size;
     size_t head;
@@ -68,13 +68,13 @@ typedef struct event_subscription {
     core_object_id_t object_id;
     bool is_python;
     union {
-	struct {
-	    core_object_t *object;
-	    event_handler_t handler;
-	} core;
-	struct {
-	    PyObject *handler;
-	} python;
+        struct {
+            core_object_t *object;
+            event_handler_t handler;
+        } core;
+        struct {
+            PyObject *handler;
+        } python;
     };
 } event_subscription_t;
 
@@ -105,13 +105,13 @@ typedef struct {
 
 typedef LIST_HEAD(core_object_list, core_object) core_object_list_t;
 
-#define STAILQ_DEFINE(name, type)		\
-    typedef struct {				\
-	pthread_mutex_t lock;			\
-	struct {				\
-	    struct type *stqh_first;		\
-	    struct type **stqh_last;		\
-	} list;					\
+#define STAILQ_DEFINE(name, type)  \
+    typedef struct {               \
+        pthread_mutex_t lock;      \
+        struct {                   \
+            struct type *stqh_first;            \
+            struct type **stqh_last;            \
+        } list;                                 \
     } name;
 
 STAILQ_DEFINE(core_command_list_t, core_command);
@@ -119,8 +119,7 @@ STAILQ_DEFINE(core_events_t, event);
 STAILQ_DEFINE(core_event_handlers_t, event_subscription);
 
 typedef struct {
-    PyObject_HEAD
-    void *object_libs[OBJECT_TYPE_MAX];
+    PyObject_HEAD void *object_libs[OBJECT_TYPE_MAX];
     object_create_func_t object_create[OBJECT_TYPE_MAX];
     core_object_list_t objects[OBJECT_TYPE_MAX];
     core_command_list_t cmds;
@@ -139,21 +138,21 @@ typedef struct {
 static core_object_t *core_object_find(const core_object_type_t type,
                                        const char *name, void *data);
 static core_object_t **core_object_list(const core_object_type_t type,
-					void *data);
+                                        void *data);
 static void core_process_work(void *user_data);
 
 /* Object callbacks */
 static void core_object_command_complete(uint64_t command_id, int64_t result,
-					 void *data);
+                                         void *data);
 static int core_object_event_register(const core_object_type_t object_type,
-				      const core_object_event_type_t event,
-				      const char *name, core_object_t *object,
-				      event_handler_t handler, void *user_data);
+                                      const core_object_event_type_t event,
+                                      const char *name, core_object_t *object,
+                                      event_handler_t handler, void *user_data);
 static int core_object_event_unregister(const core_object_type_t object_type,
-					const core_object_event_type_t event,
-					const char *name, core_object_t *object,
-					event_handler_t handler,
-					void *user_data);
+                                        const core_object_event_type_t event,
+                                        const char *name, core_object_t *object,
+                                        event_handler_t handler,
+                                        void *user_data);
 static int core_object_event_submit(const core_object_event_type_t event,
                                     const core_object_id_t id, void *event_data,
                                     void *user_data);
@@ -163,7 +162,7 @@ static uint64_t core_object_command_submit(core_object_t *source,
                                            complete_cb_t handler,
                                            void *user_data);
 
-static core_call_data_t core_call_data = {0};
+static core_call_data_t core_call_data = { 0 };
 static core_logging_data_t logging;
 
 static void core_process_work(void *arg) {
@@ -179,253 +178,249 @@ static void core_process_work(void *arg) {
     empty = STAILQ_EMPTY(&core->cmds.list);
     pthread_mutex_unlock(&core->cmds.lock);
     if (empty)
-	goto do_events;
+        goto do_events;
 
     pthread_mutex_lock(&core->cmds.lock);
     cmd = STAILQ_FIRST(&core->cmds.list);
     pthread_mutex_unlock(&core->cmds.lock);
     while (cmd && batch_count++ < MAX_PROCESSING_BATCH) {
-	core_object_t *object;
+        core_object_t *object;
 
-	cmd_next = STAILQ_NEXT(cmd, entry);
+        cmd_next = STAILQ_NEXT(cmd, entry);
         pthread_mutex_lock(&core->cmds.lock);
         STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
         pthread_mutex_unlock(&core->cmds.lock);
 
-	object = core_id_to_object(cmd->target_id);
-	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-		 "issuing command for %s, id: %lu, cmd: %u",
-		 object->name, cmd->command.command_id,
-		 cmd->command.object_cmd_id);
-	(void)object->exec_command(object, &cmd->command);
-	pthread_mutex_lock(&core->submitted.lock);
-	STAILQ_INSERT_TAIL(&core->submitted.list, cmd, entry);
-	pthread_mutex_unlock(&core->submitted.lock);
-	cmd = cmd_next;
+        object = core_id_to_object(cmd->target_id);
+        core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+                 "issuing command for %s, id: %lu, cmd: %u", object->name,
+                 cmd->command.command_id, cmd->command.object_cmd_id);
+        (void)object->exec_command(object, &cmd->command);
+        pthread_mutex_lock(&core->submitted.lock);
+        STAILQ_INSERT_TAIL(&core->submitted.list, cmd, entry);
+        pthread_mutex_unlock(&core->submitted.lock);
+        cmd = cmd_next;
     }
 
     batch_count = 0;
 
-  do_events:
+do_events:
     pthread_mutex_lock(&core->events.lock);
     empty = STAILQ_EMPTY(&core->events.list);
     pthread_mutex_unlock(&core->events.lock);
     if (empty)
-	goto do_completions;
+        goto do_completions;
 
     pthread_mutex_lock(&core->events.lock);
     event = STAILQ_FIRST(&core->events.list);
     pthread_mutex_unlock(&core->events.lock);
     while (event && batch_count++ < MAX_PROCESSING_BATCH) {
-	event_subscription_t *subscription;
+        event_subscription_t *subscription;
 
-	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-		 "processing event = %s %s %lu",
-		 ObjectTypeNames[event->object_type],
-		 OBJECT_EVENT_NAMES[event->type], event->object_id);
-	event_next = STAILQ_NEXT(event, entry);
+        core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+                 "processing event = %s %s %lu",
+                 ObjectTypeNames[event->object_type],
+                 OBJECT_EVENT_NAMES[event->type], event->object_id);
+        event_next = STAILQ_NEXT(event, entry);
         pthread_mutex_lock(&core->events.lock);
         STAILQ_REMOVE(&core->events.list, event, event, entry);
         pthread_mutex_unlock(&core->events.lock);
 
-	pthread_mutex_lock(&core->event_handlers[event->type].lock);
-	STAILQ_FOREACH(subscription, &core->event_handlers[event->type].list,
-		       entry) {
-	    core_object_t *object;
+        pthread_mutex_lock(&core->event_handlers[event->type].lock);
+        STAILQ_FOREACH(subscription, &core->event_handlers[event->type].list,
+                       entry) {
+            core_object_t *object;
 
-	    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-		     "sub type: %s, sub id: %lu, sub python: %u",
-		     ObjectTypeNames[subscription->object_type],
-		     subscription->object_id, subscription->is_python);
-	    if (subscription->object_type != event->object_type)
-		continue;
+            core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+                     "sub type: %s, sub id: %lu, sub python: %u",
+                     ObjectTypeNames[subscription->object_type],
+                     subscription->object_id, subscription->is_python);
+            if (subscription->object_type != event->object_type)
+                continue;
 
             if (subscription->object_id != CORE_OBJECT_ID_INVALID &&
                 subscription->object_id != event->object_id)
-		continue;
+                continue;
 
             object = core_id_to_object(event->object_id);
             if (!subscription->is_python)
-		subscription->core.handler(subscription->core.object,
-					   object->name, event->type,
-					   event->data);
+                subscription->core.handler(subscription->core.object,
+                                           object->name, event->type,
+                                           event->data);
             else {
-		PyGILState_STATE state = PyGILState_Ensure();
-		PyObject *args =
-		    Py_BuildValue("(isik)", object->type, object->name,
-				  event->type, event->data);
-		if (!args) {
-		    PyErr_Print();
-		    continue;
-		}
+                PyGILState_STATE state = PyGILState_Ensure();
+                PyObject *args = Py_BuildValue("(isik)", object->type,
+                                               object->name, event->type,
+                                               event->data);
+                if (!args) {
+                    PyErr_Print();
+                    continue;
+                }
 
-		(void)PyObject_Call(subscription->python.handler, args, NULL);
-		Py_DECREF(args);
-		if (PyErr_Occurred())
-		    PyErr_Print();
-		PyGILState_Release(state);
-	    }
-	}
+                (void)PyObject_Call(subscription->python.handler, args, NULL);
+                Py_DECREF(args);
+                if (PyErr_Occurred())
+                    PyErr_Print();
+                PyGILState_Release(state);
+            }
+        }
         pthread_mutex_unlock(&core->event_handlers[event->type].lock);
 
-	if (event->should_free)
-	    object_cache_free(event->data);
-	else
-	    Py_DECREF(event->data);
-	object_cache_free(event);
-	event = event_next;
+        if (event->should_free)
+            object_cache_free(event->data);
+        else
+            Py_DECREF(event->data);
+        object_cache_free(event);
+        event = event_next;
     }
 
     batch_count = 0;
 
-  do_completions:
+do_completions:
     comps = core->completions;
     while (comps->tail != comps->head && batch_count++ < MAX_PROCESSING_BATCH) {
-	PyGILState_STATE state;
-	PyObject *args;
-	bool handled = false;
+        PyGILState_STATE state;
+        PyObject *args;
+        bool handled = false;
 
-	core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-		 "completing cmd %lu", comps->entries[comps->tail].id);
+        core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+                 "completing cmd %lu", comps->entries[comps->tail].id);
 
-	pthread_mutex_lock(&core->submitted.lock);
-	empty = STAILQ_EMPTY(&core->submitted.list);
-	pthread_mutex_unlock(&core->submitted.lock);
-	if (empty)
-	    goto python;
+        pthread_mutex_lock(&core->submitted.lock);
+        empty = STAILQ_EMPTY(&core->submitted.list);
+        pthread_mutex_unlock(&core->submitted.lock);
+        if (empty)
+            goto python;
 
-	pthread_mutex_lock(&core->submitted.lock);
-	cmd = STAILQ_FIRST(&core->submitted.list);
-	pthread_mutex_unlock(&core->submitted.lock);
-	while (cmd) {
-	    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-		     "submitted command %lu", cmd->command.command_id);
-	    cmd_next = STAILQ_NEXT(cmd, entry);
-	    if (cmd->command.command_id == comps->entries[comps->tail].id) {
-		if (cmd->handler)
-		    cmd->handler(comps->entries[comps->tail].id,
-				 comps->entries[comps->tail].result,
-				 cmd->source);
-		pthread_mutex_lock(&core->submitted.lock);
-		STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
-		pthread_mutex_unlock(&core->submitted.lock);
-		object_cache_free(cmd->command.args);
-		free(cmd);
-		handled = true;
-		break;
-	    }
-	    cmd = cmd_next;
-	}
+        pthread_mutex_lock(&core->submitted.lock);
+        cmd = STAILQ_FIRST(&core->submitted.list);
+        pthread_mutex_unlock(&core->submitted.lock);
+        while (cmd) {
+            core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+                     "submitted command %lu", cmd->command.command_id);
+            cmd_next = STAILQ_NEXT(cmd, entry);
+            if (cmd->command.command_id == comps->entries[comps->tail].id) {
+                if (cmd->handler)
+                    cmd->handler(comps->entries[comps->tail].id,
+                                 comps->entries[comps->tail].result,
+                                 cmd->source);
+                pthread_mutex_lock(&core->submitted.lock);
+                STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
+                pthread_mutex_unlock(&core->submitted.lock);
+                object_cache_free(cmd->command.args);
+                free(cmd);
+                handled = true;
+                break;
+            }
+            cmd = cmd_next;
+        }
 
-	if (handled)
-	    goto next;
+        if (handled)
+            goto next;
 
-      python:
+    python:
         state = PyGILState_Ensure();
         args = Py_BuildValue("(kk)", comps->entries[comps->tail].id,
-			     comps->entries[comps->tail].result);
-	if (!args) {
-	    PyErr_Print();
-	    goto next;
-	}
+                             comps->entries[comps->tail].result);
+        if (!args) {
+            PyErr_Print();
+            goto next;
+        }
 
         (void)PyObject_Call(core->python_complete_cb, args, NULL);
-	Py_DECREF(args);
-	if (PyErr_Occurred())
-	    PyErr_Print();
+        Py_DECREF(args);
+        if (PyErr_Occurred())
+            PyErr_Print();
         PyGILState_Release(state);
 
-      next:
-	comps->tail = (comps->tail + 1) % comps->size;
+    next:
+        comps->tail = (comps->tail + 1) % comps->size;
     }
 }
 
 static void core_object_command_complete(uint64_t cmd_id, int64_t result,
-					 void *data) {
+                                         void *data) {
     core_t *core = (core_t *)data;
     core_object_completion_data_t *comps = core->completions;
 
     if (comps->head != comps->tail - 1 ||
-	(comps->head == comps->size && comps->tail != 0)) {
-	comps->entries[comps->head].id = cmd_id;
-	comps->entries[comps->head].result = result;
-	comps->head = (comps->head + 1) % comps->size;
+        (comps->head == comps->size && comps->tail != 0)) {
+        comps->entries[comps->head].id = cmd_id;
+        comps->entries[comps->head].result = result;
+        comps->head = (comps->head + 1) % comps->size;
     } else {
-	void *ptr  = realloc(comps->entries,
-			     (comps->size * 2) * sizeof(*comps->entries));
-	if (ptr) {
-	    comps->entries = (struct __comp_entry *)ptr;
-	    comps->size *= 2;
-	} else {
-	    core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
-		     "Resizing of completion entries failed! "
-		     "Completions can be missed");
-	}
-
+        void *ptr = realloc(comps->entries,
+                            (comps->size * 2) * sizeof(*comps->entries));
+        if (ptr) {
+            comps->entries = (struct __comp_entry *)ptr;
+            comps->size *= 2;
+        } else {
+            core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+                     "Resizing of completion entries failed! "
+                     "Completions can be missed");
+        }
     }
 }
 
 static core_object_t *core_object_find(const core_object_type_t type,
-				       const char *name, void *data) {
+                                       const char *name, void *data) {
     core_t *core = (core_t *)data;
     core_object_t *object;
 
     LIST_FOREACH(object, &core->objects[type], entry) {
-	if (!strncmp(object->name, name, strlen(object->name)))
-	    return object;
+        if (!strncmp(object->name, name, strlen(object->name)))
+            return object;
     }
 
     return NULL;
 }
 
 static core_object_t **core_object_list(const core_object_type_t type,
-					void *data)
-{
+                                        void *data) {
     core_t *core = (core_t *)data;
     core_object_t *object;
     core_object_t **list;
     size_t n_objects = 0;
 
     LIST_FOREACH(object, &core->objects[type], entry)
-	n_objects++;
+        n_objects++;
 
     list = calloc(n_objects + 1, sizeof(*list));
     if (!list)
-	return NULL;
+        return NULL;
 
     n_objects = 0;
     LIST_FOREACH(object, &core->objects[type], entry)
-	list[n_objects++] = object;
+        list[n_objects++] = object;
 
     return list;
 }
 
-
 static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
-				 PyObject *kwargs) {
+								 PyObject *kwargs) {
     core_t *core;
 
     core = (core_t *)type->tp_alloc(type, 0);
     core->completions = calloc(1, sizeof(*core->completions));
     if (!core->completions) {
-	type->tp_free((PyObject *)core);
-	return NULL;
+        type->tp_free((PyObject *)core);
+        return NULL;
     }
 
     core->completions->size = MAX_COMPLETIONS;
-    core->completions->entries = calloc(core->completions->size,
-					sizeof(*core->completions->entries));
+    core->completions->entries =
+        calloc(core->completions->size, sizeof(*core->completions->entries));
     if (!core->completions->entries) {
-	free(core->completions);
-	type->tp_free((PyObject *)core);
-	return NULL;
+        free(core->completions);
+        type->tp_free((PyObject *)core);
+        return NULL;
     }
 
     if (object_cache_create(&core->event_cache, sizeof(core_event_t))) {
-	free(core->completions->entries);
-	free(core->completions);
-	type->tp_free((PyObject *)core);
-	return NULL;
+        free(core->completions->entries);
+        free(core->completions);
+        type->tp_free((PyObject *)core);
+        return NULL;
     }
 
     core_call_data.object_lookup = core_object_find;
@@ -442,13 +437,13 @@ static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
 }
 
 static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
-    char *kws[] = {"debug",  NULL};
+    char *kws[] = { "debug", NULL };
     core_object_type_t type;
     core_object_event_type_t event;
     uint8_t debug_level = 0;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i", kws, &debug_level))
-	return -1;
+        return -1;
 
     logging.level = debug_level;
 
@@ -456,8 +451,8 @@ static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
         LIST_INIT(&self->objects[type]);
 
     for (event = 0; event < OBJECT_EVENT_MAX; event++) {
-	pthread_mutex_init(&self->event_handlers[event].lock, NULL);
-	STAILQ_INIT(&self->event_handlers[event].list);
+        pthread_mutex_init(&self->event_handlers[event].lock, NULL);
+        STAILQ_INIT(&self->event_handlers[event].list);
     }
 
     pthread_mutex_init(&self->events.lock, NULL);
@@ -481,24 +476,24 @@ static void vortex_core_dealloc(core_t *self) {
     core_timers_free();
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-	core_object_t *object;
-	core_object_t *object_next;
+        core_object_t *object;
+        core_object_t *object_next;
 
-	if (LIST_EMPTY(&self->objects[type]))
-	    continue;
+        if (LIST_EMPTY(&self->objects[type]))
+            continue;
 
-	object = LIST_FIRST(&self->objects[type]);
-	while (object) {
-	    object_next = LIST_NEXT(object, entry);
-	    if (object->destroy)
-		object->destroy(object);
-	    else
-		core_object_destroy(object);
-	    object = object_next;
-	}
+        object = LIST_FIRST(&self->objects[type]);
+        while (object) {
+            object_next = LIST_NEXT(object, entry);
+            if (object->destroy)
+                object->destroy(object);
+            else
+                core_object_destroy(object);
+            object = object_next;
+        }
 
-	if (self->object_libs[type])
-	    dlclose(self->object_libs[type]);
+        if (self->object_libs[type])
+            dlclose(self->object_libs[type]);
     }
 
     free(self->completions->entries);
@@ -513,15 +508,15 @@ static PyObject *vortex_core_initialize_object(PyObject *self, PyObject *args) {
     core_object_type_t type;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-	core_object_t *object;
+        core_object_t *object;
 
-	LIST_FOREACH(object, &core->objects[type], entry) {
-	    if (!object->init)
-		continue;
+        LIST_FOREACH(object, &core->objects[type], entry) {
+            if (!object->init)
+                continue;
 
-	    if (object->init(object))
-		Py_RETURN_FALSE;
-	}
+            if (object->init(object))
+                Py_RETURN_FALSE;
+        }
     }
 
     Py_RETURN_TRUE;
@@ -536,17 +531,17 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     int ret;
 
     if (PyArg_ParseTuple(args, "KKO", &frequency, &update_frequency,
-			 &core->python_complete_cb) == -1)
-	return NULL;
+                         &core->python_complete_cb) == -1)
+        return NULL;
 
     if (!PyCallable_Check(core->python_complete_cb)) {
-	PyErr_Format(VortexCoreError, "Completion callback is not callable");
-	return NULL;
+        PyErr_Format(VortexCoreError, "Completion callback is not callable");
+        return NULL;
     }
 
     if (core_timers_init()) {
-	PyErr_Format(VortexCoreError, "Failed to initialize core timers");
-	return NULL;
+        PyErr_Format(VortexCoreError, "Failed to initialize core timers");
+        return NULL;
     }
 
     Py_INCREF(core->python_complete_cb);
@@ -554,48 +549,48 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     thread_args.update.tick_frequency = frequency;
     thread_args.update.update_frequency = update_frequency;
     if (core_thread_create(CORE_THREAD_TYPE_UPDATE, &thread_args)) {
-	PyErr_Format(VortexCoreError, "Failed to create timer thread");
-	return NULL;
+        PyErr_Format(VortexCoreError, "Failed to create timer thread");
+        return NULL;
     }
 
-    thread_args.worker.frequency = KHZ_TO_HZ(500);
+    thread_args.worker.frequency = frequency;
     thread_args.worker.callback = core_process_work;
     thread_args.worker.data = self;
     if (core_thread_create(CORE_THREAD_TYPE_WORKER, &thread_args)) {
-	core_threads_destroy();
-	PyErr_Format(VortexCoreError, "Failed to create processing thread");
-	return NULL;
+        core_threads_destroy();
+        PyErr_Format(VortexCoreError, "Failed to create processing thread");
+        return NULL;
     }
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-	core_object_t *object;
+        core_object_t *object;
 
-	if (LIST_EMPTY(&core->objects[type]))
-	    continue;
+        if (LIST_EMPTY(&core->objects[type]))
+            continue;
 
-	LIST_FOREACH(object, &core->objects[type], entry) {
-	    char name[256];
+        LIST_FOREACH(object, &core->objects[type], entry) {
+            char name[256];
 
-	    if (!object->update)
-		continue;
+            if (!object->update)
+                continue;
 
-	    snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
-		     object->name);
-	    thread_args.object.name = strdup(name);
-	    thread_args.object.object = object;
-	    if (core_thread_create(CORE_THREAD_TYPE_OBJECT, &thread_args)) {
-		core_threads_destroy();
-		return NULL;
-	    }
-	}
+            snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
+                     object->name);
+            thread_args.object.name = strdup(name);
+            thread_args.object.object = object;
+            if (core_thread_create(CORE_THREAD_TYPE_OBJECT, &thread_args)) {
+                core_threads_destroy();
+                return NULL;
+            }
+        }
     }
 
     ret = core_threads_start();
     if (ret) {
-	core_threads_destroy();
-	PyErr_Format(VortexCoreError, "Failed to start core threads: %s",
-		     strerror(ret));
-	return NULL;
+        core_threads_destroy();
+        PyErr_Format(VortexCoreError, "Failed to start core threads: %s",
+                     strerror(ret));
+        return NULL;
     }
 
     Py_INCREF(self);
@@ -619,12 +614,12 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
 
         cmd = STAILQ_FIRST(&core->cmds.list);
         while (cmd) {
-	    cmd_next = STAILQ_NEXT(cmd, entry);
-	    STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
-	    object_cache_free(cmd->command.args);
-	    free(cmd);
-	    cmd = cmd_next;
-	}
+            cmd_next = STAILQ_NEXT(cmd, entry);
+            STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
+            object_cache_free(cmd->command.args);
+            free(cmd);
+            cmd = cmd_next;
+        }
     }
     pthread_mutex_unlock(&core->cmds.lock);
 
@@ -634,12 +629,12 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
 
         cmd = STAILQ_FIRST(&core->submitted.list);
         while (cmd) {
-	    cmd_next = STAILQ_NEXT(cmd, entry);
-	    STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
-	    object_cache_free(cmd->command.args);
-	    free(cmd);
-	    cmd = cmd_next;
-	}
+            cmd_next = STAILQ_NEXT(cmd, entry);
+            STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
+            object_cache_free(cmd->command.args);
+            free(cmd);
+            cmd = cmd_next;
+        }
     }
     pthread_mutex_unlock(&core->submitted.lock);
 
@@ -648,31 +643,31 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
         core_event_t *event, *event_next;
 
         event = STAILQ_FIRST(&core->events.list);
-	while (event) {
-	    event_next = STAILQ_NEXT(event, entry);
-	    STAILQ_REMOVE(&core->events.list, event, event, entry);
-	    object_cache_free(event->data);
-	    object_cache_free(event);
-	    event = event_next;
-	}
+        while (event) {
+            event_next = STAILQ_NEXT(event, entry);
+            STAILQ_REMOVE(&core->events.list, event, event, entry);
+            object_cache_free(event->data);
+            object_cache_free(event);
+            event = event_next;
+        }
     }
     pthread_mutex_unlock(&core->events.lock);
 
     for (type = 0; type < OBJECT_EVENT_MAX; type++) {
-	pthread_mutex_lock(&core->event_handlers[type].lock);
-	if (!STAILQ_EMPTY(&core->event_handlers[type].list)) {
-	    event_subscription_t *subscription, *next;
+        pthread_mutex_lock(&core->event_handlers[type].lock);
+        if (!STAILQ_EMPTY(&core->event_handlers[type].list)) {
+            event_subscription_t *subscription, *next;
 
-	    subscription = STAILQ_FIRST(&core->event_handlers[type].list);
-	    while (subscription) {
-		next = STAILQ_NEXT(subscription, entry);
-		STAILQ_REMOVE(&core->event_handlers[type].list, subscription,
-			      event_subscription, entry);
-		free(subscription);
+            subscription = STAILQ_FIRST(&core->event_handlers[type].list);
+            while (subscription) {
+                next = STAILQ_NEXT(subscription, entry);
+                STAILQ_REMOVE(&core->event_handlers[type].list, subscription,
+                              event_subscription, entry);
+                free(subscription);
                 subscription = next;
             }
         }
-	pthread_mutex_unlock(&core->event_handlers[type].lock);
+        pthread_mutex_unlock(&core->event_handlers[type].lock);
     }
 
     Py_DECREF(core->python_complete_cb);
@@ -682,36 +677,36 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
 }
 
 static core_object_id_t load_object(core_t *core, core_object_type_t klass,
-				    const char *name, void *config) {
+                                    const char *name, void *config) {
     core_object_t *obj;
     char object_path[PATH_MAX];
 
     if (klass == OBJECT_TYPE_NONE || klass >= OBJECT_TYPE_MAX) {
-	core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
-		 "Invalid object klass %u", klass);
-	return CORE_OBJECT_ID_INVALID;
+        core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+                 "Invalid object klass %u", klass);
+        return CORE_OBJECT_ID_INVALID;
     }
 
     if (!core->object_libs[klass]) {
-	char *path, *dir;
+        char *path, *dir;
 
-	path = strdup(module_path);
-	dir = dirname(path);
-	snprintf(object_path, sizeof(object_path), "%s/objects/%s.so", dir,
-		 ObjectTypeNames[klass]);
-	free(path);
+        path = strdup(module_path);
+        dir = dirname(path);
+        snprintf(object_path, sizeof(object_path), "%s/objects/%s.so", dir,
+                 ObjectTypeNames[klass]);
+        free(path);
         core->object_libs[klass] = dlopen(object_path, RTLD_LAZY);
         if (!core->object_libs[klass]) {
             char *err = dlerror();
             core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core", "dlopen: %s",
-		     err);
+                     err);
             return CORE_OBJECT_ID_INVALID;
         }
     }
 
     if (!core->object_create[klass]) {
-        core->object_create[klass] = dlsym(core->object_libs[klass],
-                                           "object_create");
+        core->object_create[klass] =
+            dlsym(core->object_libs[klass], "object_create");
         if (!core->object_create[klass])
             return CORE_OBJECT_ID_INVALID;
     }
@@ -721,19 +716,19 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
      * same klass.
      */
     LIST_FOREACH(obj, &core->objects[klass], entry) {
-	if (!strncmp(obj->name, name, strlen(obj->name))) {
-	    core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
-		     "object of klass %s and name %s already exists", klass,
-		     name);
-	    return CORE_OBJECT_ID_INVALID;
-	}
+        if (!strncmp(obj->name, name, max(strlen(name), strlen(obj->name)))) {
+            core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+                     "object of klass '%s' and name '%s' already exists",
+                     OBJECT_EVENT_NAMES[klass], name);
+            return CORE_OBJECT_ID_INVALID;
+        }
     }
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
              "creating object klass %s, name %s", ObjectTypeNames[klass], name);
     obj = core->object_create[klass](name, config);
     if (!obj)
-	return CORE_OBJECT_ID_INVALID;
+        return CORE_OBJECT_ID_INVALID;
 
     obj->call_data = core_call_data;
     LIST_INSERT_HEAD(&core->objects[klass], obj, entry);
@@ -741,8 +736,8 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
 }
 
 static PyObject *vortex_core_create_object(PyObject *self, PyObject *args,
-					   PyObject *kwargs) {
-    char *kw[] = {"klass", "name", "options", NULL};
+                                           PyObject *kwargs) {
+    char *kw[] = { "klass", "name", "options", NULL };
     int klass;
     const char *name;
     void *options = NULL;
@@ -756,7 +751,7 @@ static PyObject *vortex_core_create_object(PyObject *self, PyObject *args,
     object_id = load_object((core_t *)self, klass, name, options);
     if (object_id == CORE_OBJECT_ID_INVALID) {
         PyErr_Format(VortexCoreError, "Failed to create object %s of klass %s",
-		     name, ObjectTypeNames[klass]);
+                     name, ObjectTypeNames[klass]);
         return NULL;
     }
 
@@ -772,25 +767,26 @@ static PyObject *vortex_core_register_virtual_object(PyObject *self,
     char *name = NULL;
 
     if (!PyArg_ParseTuple(args, "Is", &klass, &name))
-	return NULL;
+        return NULL;
 
     /*
      * Check if an object with the same name exists in the
      * same klass.
      */
     LIST_FOREACH(obj, &core->objects[klass], entry) {
-      if (!strncmp(obj->name, name, strlen(obj->name))) {
-        core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
-                 "object of klass %s and name %s already exists", klass, name);
-        return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
-      }
+        if (!strncmp(obj->name, name, strlen(obj->name))) {
+            core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+                     "object of klass %s and name %s already exists", klass,
+                     name);
+            return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
+        }
     }
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
              "creating object klass %s, name %s", ObjectTypeNames[klass], name);
     obj = calloc(1, sizeof(core_object_t));
     if (!obj)
-	return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
+        return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
 
     obj->type = klass;
     obj->name = strdup(name);
@@ -799,8 +795,8 @@ static PyObject *vortex_core_register_virtual_object(PyObject *self,
 }
 
 static PyObject *vortex_core_exec_command(PyObject *self, PyObject *args,
-					  PyObject *kwargs) {
-    char *kw[] = {"command_id", "object_id", "subcommand_id", "args", NULL};
+                                          PyObject *kwargs) {
+    char *kw[] = { "command_id", "object_id", "subcommand_id", "args", NULL };
     uint64_t cmd_id = -1UL;
     uint16_t obj_cmd_id = 0;
     void *cmd_args = NULL;
@@ -821,22 +817,22 @@ static PyObject *vortex_core_exec_command(PyObject *self, PyObject *args,
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
              "Submitting %u for %s %s", obj_cmd_id,
-	     ObjectTypeNames[object->type], object->name);
+             ObjectTypeNames[object->type], object->name);
     if (object->exec_command) {
-	cmd->command_id = cmd_id;
-	cmd->object_cmd_id = obj_cmd_id;
-	cmd->args = cmd_args;
+        cmd->command_id = cmd_id;
+        cmd->object_cmd_id = obj_cmd_id;
+        cmd->args = cmd_args;
 
-	/*
-	 * Object commands are supposed to be non-blocking -
-	 * they should accept/reject the command and handle
-	 * it in the object's update() handlers.
-	 * However, to avoid deadlocks with logging, release
-	 * the Python GIL around the command execution.
-	 */
-	Py_BEGIN_ALLOW_THREADS;
-	ret = object->exec_command(object, cmd);
-	Py_END_ALLOW_THREADS;
+        /*
+         * Object commands are supposed to be non-blocking -
+         * they should accept/reject the command and handle
+         * it in the object's update() handlers.
+         * However, to avoid deadlocks with logging, release
+         * the Python GIL around the command execution.
+         */
+        Py_BEGIN_ALLOW_THREADS;
+        ret = object->exec_command(object, cmd);
+        Py_END_ALLOW_THREADS;
     }
 
     rc = Py_BuildValue("i", ret);
@@ -863,109 +859,109 @@ static PyObject *vortex_core_get_status(PyObject *self, PyObject *args) {
     Py_ssize_t result_idx = 0;
 
     if (!PyArg_ParseTuple(args, "O", &object_list))
-	return NULL;
+        return NULL;
 
     if (!PyList_Check(object_list)) {
-	PyErr_SetString(VortexCoreError, "Argument should be a list of IDs");
-	return NULL;
+        PyErr_SetString(VortexCoreError, "Argument should be a list of IDs");
+        return NULL;
     }
 
     size = PyList_Size(object_list);
     result_list = PyList_New(size);
     if (!result_list)
-	return NULL;
+        return NULL;
 
     for (i = 0; i < size; i++) {
-	PyObject *item;
-	PyObject *status = NULL;
-	core_object_id_t id;
-	core_object_t *object;
-	void *state;
+        PyObject *item;
+        PyObject *status = NULL;
+        core_object_id_t id;
+        core_object_t *object;
+        void *state;
 
-	item = PyList_GetItem(object_list, i);
-	if (!PyLong_Check(item)) {
-	    PyErr_SetString(VortexCoreError, "Expected object id");
-	    goto fail;
-	}
+        item = PyList_GetItem(object_list, i);
+        if (!PyLong_Check(item)) {
+            PyErr_SetString(VortexCoreError, "Expected object id");
+            goto fail;
+        }
 
-	state = NULL;
-	id = PyLong_AsUnsignedLong(item);
-	object = core_id_to_object(id);
-	if (!object->get_state)
-	    continue;
+        state = NULL;
+        id = PyLong_AsUnsignedLong(item);
+        object = core_id_to_object(id);
+        if (!object->get_state)
+            continue;
 
-	switch (object->type) {
-	case OBJECT_TYPE_AXIS:
-	    state = calloc(1, sizeof(axis_status_t));
-	    break;
+        switch (object->type) {
+        case OBJECT_TYPE_AXIS:
+            state = calloc(1, sizeof(axis_status_t));
+            break;
         case OBJECT_TYPE_ENDSTOP:
             state = calloc(1, sizeof(endstop_status_t));
             break;
-	case OBJECT_TYPE_HEATER:
-	    state = calloc(1, sizeof(heater_status_t));
-	    break;
-	case OBJECT_TYPE_PROBE:
-	    state = calloc(1, sizeof(probe_status_t));
-	    break;
+        case OBJECT_TYPE_HEATER:
+            state = calloc(1, sizeof(heater_status_t));
+            break;
+        case OBJECT_TYPE_PROBE:
+            state = calloc(1, sizeof(probe_status_t));
+            break;
         case OBJECT_TYPE_STEPPER:
             state = calloc(1, sizeof(stepper_status_t));
             break;
         case OBJECT_TYPE_THERMISTOR:
             state = calloc(1, sizeof(thermistor_status_t));
-	    break;
-	case OBJECT_TYPE_TOOLHEAD:
-	    state = calloc(1, sizeof(toolhead_status_t));
-	    break;
-	default:
-	    break;
-	}
+            break;
+        case OBJECT_TYPE_TOOLHEAD:
+            state = calloc(1, sizeof(toolhead_status_t));
+            break;
+        default:
+            break;
+        }
 
-	if (!state) {
-	    Py_INCREF(Py_None);
-	    status = Py_None;
-	} else {
-	    object->get_state(object, state);
-	    status = Py_BuildValue("k", state);
-	}
+        if (!state) {
+            Py_INCREF(Py_None);
+            status = Py_None;
+        } else {
+            object->get_state(object, state);
+            status = Py_BuildValue("k", state);
+        }
 
-	if (PyList_SetItem(result_list, result_idx, status)) {
+        if (PyList_SetItem(result_list, result_idx, status)) {
             Py_XDECREF(status);
             goto fail;
-	}
+        }
 
-	result_idx++;
+        result_idx++;
     }
 
     return result_list;
 
-  fail:
+fail:
     Py_DECREF(result_list);
     return NULL;
 }
 
 static int core_object_event_register(const core_object_type_t object_type,
-				      const core_object_event_type_t event,
-				      const char *name, core_object_t *object,
-				      event_handler_t handler, void *data) {
+                                      const core_object_event_type_t event,
+                                      const char *name, core_object_t *object,
+                                      event_handler_t handler, void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
 
     subscription = calloc(1, sizeof(*subscription));
-    if(!subscription)
-	return -1;
+    if (!subscription)
+        return -1;
 
     subscription->object_type = object_type;
     if (name) {
-	core_object_t *object = core_object_find(object_type, name, core);
+        core_object_t *object = core_object_find(object_type, name, core);
 
-	if (!object) {
-	    free(subscription);
-	    return -1;
-	}
+        if (!object) {
+            free(subscription);
+            return -1;
+        }
 
-	subscription->object_id = core_object_to_id(object);
+        subscription->object_id = core_object_to_id(object);
     } else {
-	subscription->object_id = CORE_OBJECT_ID_INVALID;
+        subscription->object_id = CORE_OBJECT_ID_INVALID;
     }
 
     subscription->is_python = false;
@@ -978,9 +974,9 @@ static int core_object_event_register(const core_object_type_t object_type,
 }
 
 static int core_object_event_unregister(const core_object_type_t object_type,
-					const core_object_event_type_t event,
-					const char *name, core_object_t *object,
-					event_handler_t handler, void *data) {
+                                        const core_object_event_type_t event,
+                                        const char *name, core_object_t *object,
+                                        event_handler_t handler, void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
     event_subscription_t *next;
@@ -990,40 +986,39 @@ static int core_object_event_unregister(const core_object_type_t object_type,
     subscription = STAILQ_FIRST(&core->event_handlers[event].list);
     pthread_mutex_unlock(&core->event_handlers[event].lock);
     while (subscription != NULL) {
-	next = STAILQ_NEXT(subscription, entry);
-	if (subscription->object_type == object_type &&
-	    (subscription->object_id == CORE_OBJECT_ID_INVALID ||
-	     (object && subscription->object_id ==
-	      core_object_to_id(obj)))) {
+        next = STAILQ_NEXT(subscription, entry);
+        if (subscription->object_type == object_type &&
+            (subscription->object_id == CORE_OBJECT_ID_INVALID ||
+             (object && subscription->object_id == core_object_to_id(obj)))) {
             pthread_mutex_lock(&core->event_handlers[event].lock);
             STAILQ_REMOVE(&core->event_handlers[event].list, subscription,
                           event_subscription, entry);
-	    pthread_mutex_unlock(&core->event_handlers[event].lock);
+            pthread_mutex_unlock(&core->event_handlers[event].lock);
             free(subscription);
-	    return 0;
-	}
+            return 0;
+        }
 
-	subscription = next;
+        subscription = next;
     }
 
     return -1;
 }
 
 static int __core_object_event_submit(const core_object_event_type_t event_type,
-				      const core_object_id_t id,
-				      void *event_data, bool should_free,
-				      void *user_data) {
+                                      const core_object_id_t id,
+                                      void *event_data, bool should_free,
+                                      void *user_data) {
     core_t *core = (core_t *)user_data;
     core_event_t *event;
     core_object_t *object = (core_object_t *)id;
 
     event = object_cache_alloc(core->event_cache);
     if (!event)
-	return -1;
+        return -1;
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-	     "submitting event = %s %s, %s, %lu", ObjectTypeNames[object->type],
-	     object->name, OBJECT_EVENT_NAMES[event_type], id);
+             "submitting event = %s %s, %s, %lu", ObjectTypeNames[object->type],
+             object->name, OBJECT_EVENT_NAMES[event_type], id);
     event->type = event_type;
     event->object_type = object->type;
     event->object_id = id;
@@ -1034,24 +1029,24 @@ static int __core_object_event_submit(const core_object_event_type_t event_type,
     pthread_mutex_unlock(&core->events.lock);
     return 0;
 }
+
 static int core_object_event_submit(const core_object_event_type_t event_type,
-				    const core_object_id_t id,
-				    void *event_data, void *user_data) {
+                                    const core_object_id_t id, void *event_data,
+                                    void *user_data) {
     return __core_object_event_submit(event_type, id, event_data, true,
-				      user_data);
+                                      user_data);
 }
 
 static uint64_t core_object_command_submit(core_object_t *source,
-					   core_object_id_t target_id,
-					   uint16_t obj_cmd_id, void *args,
-					   complete_cb_t cb,
-					   void *user_data) {
+                                           core_object_id_t target_id,
+                                           uint16_t obj_cmd_id, void *args,
+                                           complete_cb_t cb, void *user_data) {
     core_t *core = (core_t *)user_data;
     core_command_t *cmd;
 
     cmd = malloc(sizeof(*cmd));
     if (!cmd)
-	return CMD_ID_MAKE_ERROR(-1);
+        return CMD_ID_MAKE_ERROR(-1);
 
     cmd->source = source;
     cmd->target_id = target_id;
@@ -1060,8 +1055,8 @@ static uint64_t core_object_command_submit(core_object_t *source,
     cmd->command.args = args;
     cmd->handler = cb;
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-	     "submitting command for %u, id: %lu, cmd: %u", target_id,
-	     cmd->command.command_id, obj_cmd_id);
+             "submitting command for %u, id: %lu, cmd: %u", target_id,
+             cmd->command.command_id, obj_cmd_id);
     pthread_mutex_lock(&core->cmds.lock);
     STAILQ_INSERT_TAIL(&core->cmds.list, cmd, entry);
     pthread_mutex_unlock(&core->cmds.lock);
@@ -1069,7 +1064,7 @@ static uint64_t core_object_command_submit(core_object_t *source,
 }
 
 static PyObject *vortex_core_python_event_register(PyObject *self,
-						   PyObject *args) {
+                                                   PyObject *args) {
     core_t *core = (core_t *)self;
     event_subscription_t *subscription;
     core_object_type_t object_type;
@@ -1078,25 +1073,25 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
     char *name = NULL;
 
     if (!PyArg_ParseTuple(args, "iisO", &object_type, &type, &name, &callback))
-	return NULL;
+        return NULL;
 
     Py_INCREF(callback);
 
     subscription = calloc(1, sizeof(*subscription));
     if (!subscription)
-	Py_RETURN_FALSE;
+        Py_RETURN_FALSE;
 
     if (name) {
         core_object_t *object = core_object_find(object_type, name, core);
 
-	if (!object) {
-	    free(subscription);
-	    Py_RETURN_FALSE;
-	}
+        if (!object) {
+            free(subscription);
+            Py_RETURN_FALSE;
+        }
 
-	subscription->object_id = core_object_to_id(object);
+        subscription->object_id = core_object_to_id(object);
     } else {
-	subscription->object_id = CORE_OBJECT_ID_INVALID;
+        subscription->object_id = CORE_OBJECT_ID_INVALID;
     }
 
     subscription->object_type = object_type;
@@ -1109,7 +1104,7 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
 }
 
 static PyObject *vortex_core_python_event_unregister(PyObject *self,
-						     PyObject *args) {
+                                                     PyObject *args) {
     core_t *core = (core_t *)self;
     event_subscription_t *subscription;
     event_subscription_t *next;
@@ -1119,13 +1114,13 @@ static PyObject *vortex_core_python_event_unregister(PyObject *self,
     char *name;
 
     if (PyArg_ParseTuple(args, "iis", &object_type, &type, &name))
-	return NULL;
+        return NULL;
 
     if (name) {
-	core_object_t *object = core_object_find(object_type, name, core);
+        core_object_t *object = core_object_find(object_type, name, core);
 
-	if (object)
-	    object_id = core_object_to_id(object);
+        if (object)
+            object_id = core_object_to_id(object);
     }
 
     pthread_mutex_lock(&core->event_handlers[type].lock);
@@ -1133,40 +1128,40 @@ static PyObject *vortex_core_python_event_unregister(PyObject *self,
     pthread_mutex_unlock(&core->event_handlers[type].lock);
 
     while (subscription != NULL) {
-	next = STAILQ_NEXT(subscription, entry);
-	if (subscription->object_type == object_type &&
-	    (subscription->object_id == CORE_OBJECT_ID_INVALID ||
-	     subscription->object_id == object_id)) {
-	    pthread_mutex_lock(&core->event_handlers[type].lock);
-	    STAILQ_REMOVE(&core->event_handlers[type].list, subscription,
-			  event_subscription, entry);
-	    pthread_mutex_unlock(&core->event_handlers[type].lock);
-	    if (subscription->is_python)
-		Py_DECREF(subscription->python.handler);
-	    free(subscription);
-	    Py_RETURN_TRUE;
-	}
+        next = STAILQ_NEXT(subscription, entry);
+        if (subscription->object_type == object_type &&
+            (subscription->object_id == CORE_OBJECT_ID_INVALID ||
+             subscription->object_id == object_id)) {
+            pthread_mutex_lock(&core->event_handlers[type].lock);
+            STAILQ_REMOVE(&core->event_handlers[type].list, subscription,
+                          event_subscription, entry);
+            pthread_mutex_unlock(&core->event_handlers[type].lock);
+            if (subscription->is_python)
+                Py_DECREF(subscription->python.handler);
+            free(subscription);
+            Py_RETURN_TRUE;
+        }
 
-	subscription = next;
+        subscription = next;
     }
 
     Py_RETURN_FALSE;
 }
 
 static PyObject *vortex_core_python_event_submit(PyObject *self,
-						 PyObject *args) {
+                                                 PyObject *args) {
     core_t *core = (core_t *)self;
     core_object_type_t object_type;
     core_object_id_t object_id;
     PyObject *data;
 
     if (!PyArg_ParseTuple(args, "ikO", &object_type, &object_id, &data))
-	return NULL;
+        return NULL;
 
     Py_INCREF(data);
     if (__core_object_event_submit(object_type, object_id, (void *)data, false,
-				   core))
-	Py_RETURN_FALSE;
+                                   core))
+        Py_RETURN_FALSE;
 
     Py_RETURN_TRUE;
 }
@@ -1191,45 +1186,45 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
     PyObject *object_list = NULL;
 
     if (!PyArg_ParseTuple(args, "|O", &object_list))
-	return NULL;
+        return NULL;
 
     if (object_list && !Py_IsNone(object_list) && !PyList_Check(object_list)) {
-	PyErr_Format(VortexCoreError, "Argument must be a list or None");
-	return NULL;
+        PyErr_Format(VortexCoreError, "Argument must be a list or None");
+        return NULL;
     }
 
     core_threads_pause();
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core", "resetting objects");
     if (object_list && PyList_Check(object_list)) {
-	Py_ssize_t size = PyList_Size(object_list);
-	Py_ssize_t i;
+        Py_ssize_t size = PyList_Size(object_list);
+        Py_ssize_t i;
 
-	for (i = 0; i < size; i++) {
-	    PyObject *item = PyList_GetItem(object_list, i);
-	    core_object_id_t id;
-	    core_object_t *object;
+        for (i = 0; i < size; i++) {
+            PyObject *item = PyList_GetItem(object_list, i);
+            core_object_id_t id;
+            core_object_t *object;
 
-	    if (!PyLong_Check(item)) {
-		PyErr_Format(VortexCoreError, "List items must be object IDs");
-		return NULL;
-	    }
+            if (!PyLong_Check(item)) {
+                PyErr_Format(VortexCoreError, "List items must be object IDs");
+                return NULL;
+            }
 
-	    id = PyLong_AsUnsignedLong(item);
-	    object = core_id_to_object(id);
-	    if (object->reset)
-		object->reset(object);
-	}
+            id = PyLong_AsUnsignedLong(item);
+            object = core_id_to_object(id);
+            if (object->reset)
+                object->reset(object);
+        }
     } else {
-	core_object_type_t type;
+        core_object_type_t type;
 
-	for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
-	    core_object_t *object;
+        for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+            core_object_t *object;
 
-	    LIST_FOREACH(object, &core->objects[type], entry) {
-		if (object->reset)
-		    object->reset(object);
-	    }
-	}
+            LIST_FOREACH(object, &core->objects[type], entry) {
+                if (object->reset)
+                    object->reset(object);
+            }
+        }
     }
 
     core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core", "reset done");
@@ -1246,9 +1241,9 @@ static uint64_t core_timer_handler(uint64_t ticks, void *data) {
     state = PyGILState_Ensure();
     py_reschedule = PyObject_CallFunction((PyObject *)data, "k", ticks);
     if (py_reschedule)
-	reschedule = PyLong_AsUnsignedLong(py_reschedule);
+        reschedule = PyLong_AsUnsignedLong(py_reschedule);
     else
-	PyErr_Print();
+        PyErr_Print();
     PyGILState_Release(state);
     return reschedule;
 }
@@ -1261,19 +1256,19 @@ static PyObject *vortex_core_register_timer(PyObject *self, PyObject *args) {
     core_timer_handle_t handle;
 
     if (!PyArg_ParseTuple(args, "Ok", &callback, &timeout))
-	return NULL;
+        return NULL;
 
     if (!PyCallable_Check(callback)) {
-	PyErr_Format(VortexCoreError,
-		     "Callback argument should be a callable object");
-	return NULL;
-    }
+        PyErr_Format(VortexCoreError,
+                     "Callback argument should be a callable object");
+        return NULL;
+	}
 
     Py_INCREF(callback);
     timer.callback = core_timer_handler;
     timer.data = (void *)callback;
     handle = core_timer_register(timer, timeout);
-    py_handle = _Py_BuildValue_SizeT("k", handle);
+    py_handle = Py_BuildValue("k", handle);
     return py_handle;
 }
 
@@ -1282,7 +1277,7 @@ static PyObject *vortex_core_reschedule_timer(PyObject *self, PyObject *args) {
     uint64_t timeout;
 
     if (!PyArg_ParseTuple(args, "kk", &handle, &timeout))
-	return NULL;
+        return NULL;
 
     core_timer_reschedule(handle, timeout);
     Py_RETURN_NONE;
@@ -1292,28 +1287,26 @@ static PyObject *vortex_core_unregister_timer(PyObject *self, PyObject *args) {
     core_timer_handle_t handle;
 
     if (!PyArg_ParseTuple(args, "k", &handle))
-	return NULL;
+        return NULL;
 
     core_timer_unregister(handle);
     Py_RETURN_NONE;
 }
 
-void core_log(core_log_level_t level, core_object_type_t type,
-	      const char *name, const char *fmt, ...) {
+void core_log(core_log_level_t level, core_object_type_t type, const char *name,
+              const char *fmt, ...) {
     va_list args;
     PyGILState_STATE state;
     char msg_str[4096];
     int size;
     const char *methods[] = {
-	[LOG_LEVEL_CRITICAL] = "critical",
-	[LOG_LEVEL_ERROR] = "error",
-	[LOG_LEVEL_WARNING] = "warning",
-	[LOG_LEVEL_INFO] = "info",
-	[LOG_LEVEL_DEBUG] = "debug",
+        [LOG_LEVEL_CRITICAL] = "critical", [LOG_LEVEL_ERROR] = "error",
+        [LOG_LEVEL_WARNING] = "warning",   [LOG_LEVEL_INFO] = "info",
+        [LOG_LEVEL_DEBUG] = "debug",
     };
 
     if (level < logging.level)
-	return;
+        return;
 
     if (type != OBJECT_TYPE_NONE)
         size = snprintf(msg_str, sizeof(msg_str), "[%s:%s] ",
@@ -1327,48 +1320,49 @@ void core_log(core_log_level_t level, core_object_type_t type,
 
     state = PyGILState_Ensure();
     if (!PyObject_CallMethod(logging.module, methods[level], "(s)", msg_str))
-	PyErr_Print();
+        PyErr_Print();
 
     PyGILState_Release(state);
 }
 
 static PyMethodDef VortexCoreMethods[] = {
-    {"init_objects", vortex_core_initialize_object, METH_NOARGS,
-     "Initialize objects"},
-    {"start", vortex_core_start, METH_VARARGS, "Run the emulator core thread"},
-    {"stop", vortex_core_stop, METH_NOARGS, "Stop the emulator core thread"},
-    {"create_object", (PyCFunction)vortex_core_create_object,
-     METH_VARARGS | METH_KEYWORDS, "Create core object"},
-    {"register_virtual_object", vortex_core_register_virtual_object,
-     METH_VARARGS, "Register a virtual object_with the core."},
-    {"exec_command", (PyCFunction)vortex_core_exec_command,
-     METH_VARARGS | METH_KEYWORDS, "Execute command"},
-    {"get_clock_ticks", vortex_core_get_ticks, METH_NOARGS,
-     "Get current tick count"},
-    {"get_runtime", vortex_core_get_runtime, METH_NOARGS,
-     "Get controller runtime"},
-    {"get_status", vortex_core_get_status, METH_VARARGS,
-     "Get object(s) status"},
-    {"event_register", vortex_core_python_event_register, METH_VARARGS,
-     "Register to core object events"},
-    {"event_unregister", vortex_core_python_event_unregister, METH_VARARGS,
-     "Unregister from core object events"},
-    {"event_submit", vortex_core_python_event_submit, METH_VARARGS,
-     "Submit virtual object event"},
-    {"pause", vortex_core_pause, METH_VARARGS, "Pause emulation"},
-    {"reset", vortex_core_reset, METH_VARARGS, "Reset controller object state"},
-    {"register_timer", vortex_core_register_timer, METH_VARARGS,
-     "Register periodic timer"},
-    {"reschedule_timer", vortex_core_reschedule_timer, METH_VARARGS,
-     "Reschedule registered timer"},
-    {"unregister_timer", vortex_core_unregister_timer, METH_VARARGS,
-     "Unregister a periodic timer"},
-    {NULL, NULL, 0, NULL}
+    { "init_objects", vortex_core_initialize_object, METH_NOARGS,
+      "Initialize objects" },
+    { "start", vortex_core_start, METH_VARARGS,
+      "Run the emulator core thread" },
+    { "stop", vortex_core_stop, METH_NOARGS, "Stop the emulator core thread" },
+    { "create_object", (PyCFunction)vortex_core_create_object,
+      METH_VARARGS | METH_KEYWORDS, "Create core object" },
+    { "register_virtual_object", vortex_core_register_virtual_object,
+      METH_VARARGS, "Register a virtual object_with the core." },
+    { "exec_command", (PyCFunction)vortex_core_exec_command,
+      METH_VARARGS | METH_KEYWORDS, "Execute command" },
+    { "get_clock_ticks", vortex_core_get_ticks, METH_NOARGS,
+      "Get current tick count" },
+    { "get_runtime", vortex_core_get_runtime, METH_NOARGS,
+      "Get controller runtime" },
+    { "get_status", vortex_core_get_status, METH_VARARGS,
+      "Get object(s) status" },
+    { "event_register", vortex_core_python_event_register, METH_VARARGS,
+      "Register to core object events" },
+    { "event_unregister", vortex_core_python_event_unregister, METH_VARARGS,
+      "Unregister from core object events" },
+    { "event_submit", vortex_core_python_event_submit, METH_VARARGS,
+      "Submit virtual object event" },
+    { "pause", vortex_core_pause, METH_VARARGS, "Pause emulation" },
+    { "reset", vortex_core_reset, METH_VARARGS,
+      "Reset controller object state" },
+    { "register_timer", vortex_core_register_timer, METH_VARARGS,
+      "Register periodic timer" },
+    { "reschedule_timer", vortex_core_reschedule_timer, METH_VARARGS,
+      "Reschedule registered timer" },
+    { "unregister_timer", vortex_core_unregister_timer, METH_VARARGS,
+      "Unregister a periodic timer" },
+    { NULL, NULL, 0, NULL }
 };
 
 static PyTypeObject Vortex_Core_Type = {
-    .ob_base = PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "Core",
+    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "Core",
     .tp_doc = PyDoc_STR("HW Core"),
     .tp_basicsize = sizeof(core_t),
     .tp_itemsize = 0,
@@ -1378,7 +1372,6 @@ static PyTypeObject Vortex_Core_Type = {
     .tp_dealloc = (destructor)vortex_core_dealloc,
     .tp_methods = VortexCoreMethods,
 };
-
 
 static int vortex_core_module_exec(PyObject *module) {
     core_object_type_t type;
@@ -1395,13 +1388,13 @@ static int vortex_core_module_exec(PyObject *module) {
     }
 
     if (PyModule_AddObject(module, "VortexCore",
-			   (PyObject *)&Vortex_Core_Type) == -1) {
+                           (PyObject *)&Vortex_Core_Type) == -1) {
         Py_XDECREF(module);
         return -1;
     }
 
-    VortexCoreError = PyErr_NewException("votex_core.VortexCoreError", NULL,
-					 NULL);
+    VortexCoreError =
+        PyErr_NewException("votex_core.VortexCoreError", NULL, NULL);
     Py_XINCREF(VortexCoreError);
     if (PyModule_AddObject(module, "VortexCoreError", VortexCoreError) < 0)
         goto fail;
@@ -1416,7 +1409,7 @@ static int vortex_core_module_exec(PyObject *module) {
         int ret;
 
         if (PyModule_AddIntConstant(module, ObjectTypeExportNames[type],
-				    type) == -1)
+                                    type) == -1)
             goto fail;
 
         key = PyLong_FromLong((long)type);
@@ -1443,28 +1436,28 @@ static int vortex_core_module_exec(PyObject *module) {
 
     value_dict = PyDict_New();
     if (!value_dict)
-	goto fail;
+        goto fail;
 
     for (event = 0; event < OBJECT_EVENT_MAX; event++) {
-	PyObject *key;
-	PyObject *value;
-	int ret;
+        PyObject *key;
+        PyObject *value;
+        int ret;
 
-	if (PyModule_AddIntConstant(module, OBJECT_EVENT_NAMES[event],
-				    event) == -1)
-	    goto fail;
+        if (PyModule_AddIntConstant(module, OBJECT_EVENT_NAMES[event], event) ==
+            -1)
+            goto fail;
 
-	key = PyLong_FromLong((long)event);
-	if (!key)
-	    goto fail;
+        key = PyLong_FromLong((long)event);
+        if (!key)
+            goto fail;
 
-	value = PyUnicode_FromString(OBJECT_EVENT_NAMES[event]);
-	if (!value) {
-	    Py_XDECREF(key);
-	    goto fail;
-	}
+        value = PyUnicode_FromString(OBJECT_EVENT_NAMES[event]);
+        if (!value) {
+            Py_XDECREF(key);
+            goto fail;
+        }
 
-	ret = PyDict_SetItem(value_dict, key, value);
+        ret = PyDict_SetItem(value_dict, key, value);
         Py_XDECREF(key);
         Py_XDECREF(value);
         if (ret == -1)
@@ -1472,17 +1465,17 @@ static int vortex_core_module_exec(PyObject *module) {
     }
 
     if (PyModule_AddObject(module, "OBJECT_EVENT_NAMES", value_dict) == -1) {
-	Py_XDECREF(value_dict);
-	goto fail;
+        Py_XDECREF(value_dict);
+        goto fail;
     }
 
     logging.module = PyImport_ImportModule("logging");
     if (!logging.module)
-	goto fail;
+        goto fail;
 
     return 0;
 
-  fail:
+fail:
     Py_XDECREF(VortexCoreError);
     Py_CLEAR(VortexCoreError);
     Py_XDECREF(module);
@@ -1490,8 +1483,8 @@ static int vortex_core_module_exec(PyObject *module) {
 }
 
 static PyModuleDef_Slot Vortex_Core_Slots[] = {
-    {Py_mod_exec, vortex_core_module_exec},
-    {0, NULL},
+    { Py_mod_exec, vortex_core_module_exec },
+    { 0, NULL },
 };
 
 static struct PyModuleDef Vortex_Core_module = {
