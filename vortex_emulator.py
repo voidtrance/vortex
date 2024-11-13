@@ -38,7 +38,7 @@ def create_arg_parser():
     controller.add_argument("-c", "--controller", default=None,
                             help="""The HW controller to be used for the
                             emulation. This argument is required.""")
-    controller.add_argument("-F", "--frequency", default="200Hz",
+    controller.add_argument("-F", "--frequency", default="100kHZ",
                             help="""This is the frequency with which the
                             object update loop will run. Controllers still
                             clock ticks are still updated based on their
