@@ -153,6 +153,7 @@ class Probe(ObjectDef):
     class ProbeConfig(ctypes.Structure):
         _fields_ = [("toolhead", ctypes.c_char * 64),
                     ("offsets", ctypes.c_float * len(AxisType)),
+                    ("axes", ctypes.POINTER(ctypes.c_char_p)),
                     ("range", ctypes.c_float),
                     ("pin", ctypes.c_char * 8)]
     class ProbeStatus(ctypes.Structure):

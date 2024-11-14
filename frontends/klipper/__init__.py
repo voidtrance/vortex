@@ -326,7 +326,8 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_endstop(self, cmd, oid, pin, pull_up):
-        obj_id, klass = self._find_object(pin, ModuleTypes.ENDSTOP)
+        obj_id, klass = self._find_object(pin, ModuleTypes.ENDSTOP,
+                                          ModuleTypes.PROBE)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)

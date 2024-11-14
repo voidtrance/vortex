@@ -35,10 +35,10 @@
 typedef struct {
     const char toolhead[64];
     float offset[AXIS_TYPE_MAX];
+    const char **axes;
     float range;
     char pin[8];
 } probe_config_params_t;
-
 
 typedef struct {
     core_object_t object;
@@ -46,6 +46,7 @@ typedef struct {
     const char *toolhead_name;
     float offsets[AXIS_TYPE_MAX];
     double position[AXIS_TYPE_MAX];
+    bool axis_valid[AXIS_TYPE_MAX];
     float range;
     float fuzz;
     char pin[8];
@@ -96,6 +97,9 @@ static void probe_update(core_object_t *object, uint64_t ticks,
     pthread_mutex_lock(&probe->lock);
     probe->triggered = true;
     for (i = 0; i < AXIS_TYPE_MAX; i++) {
+        if (!probe->axis_valid[i])
+            continue;
+
         probe->position[i] = status.position[i] + probe->offsets[i];
         probe->triggered &= status.position[i] <= probe->fuzz;
     }
@@ -128,6 +132,7 @@ static void probe_destroy(core_object_t *object) {
 probe_t *object_create(const char *name, void *config_ptr) {
     probe_t *probe;
     probe_config_params_t *config = (probe_config_params_t *)config_ptr;
+    const char **axis;
 
     probe = calloc(1, sizeof(*probe));
     if (!probe)
@@ -150,6 +155,14 @@ probe_t *object_create(const char *name, void *config_ptr) {
         core_object_destroy(&probe->object);
         free(probe);
         return NULL;
+    }
+
+    axis = config->axes;
+    while (*axis) {
+        axis_type_t type = kinematics_axis_type_from_char(*axis[0]);
+
+        probe->axis_valid[type] = true;
+        axis++;
     }
 
     return probe;

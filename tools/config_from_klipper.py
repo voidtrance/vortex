@@ -150,6 +150,8 @@ def generate_probe_config(section : str, kconfig : Type[configparser.ConfigParse
     econfig.set(s, "offsets", ",".join(offsets))
     econfig.set(s, "pin", kconfig.get(section, "pin"))
     econfig.set(s, "range", "0.005")
+    # Klipper probes are only relative to the Z axis
+    econfig.set(s, "axes", "z")
     return
 
 def generate_thermistor_config(section : str, kconfig : Type[configparser.ConfigParser],
