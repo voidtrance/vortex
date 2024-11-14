@@ -214,6 +214,12 @@ class KlipperFrontend(BaseFrontend):
                      proto.KLIPPER_PROTOCOL.shutdown.is_shutdown,
                      static_string_id=self._shutdown_reason)
 
+    def emergency_stop(self, cmd):
+        for oid, obj in self._oid_map.items():
+            obj.shutdown()
+        self.reset()
+        return True
+
     def get_uptime(self, cmd):
         runtime = self.get_controller_clock_ticks() - self.start_tick
         self.respond(proto.ResponseTypes.RESPONSE, cmd,
