@@ -108,12 +108,15 @@ static long timer_update_wake(int32_t *flag) {
                    TIMER_TRIGGER_WAKE, NULL, NULL, NULL);
 }
 
+#define get_value(x) (*(volatile typeof((x)) *)&(x))
+#define set_value(x, y) (*(volatile typeof((x)) *)&(x) = (y))
+
 static void *core_time_control_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
     float tick = (1000.0 / ((float)args->update.tick_frequency / 1000000));
     float update = (1000.0 / ((float)args->update.update_frequency / 1000000));
-    struct timespec sleep = { .tv_sec = update / SEC_TO_NSEC(1),
+    struct timespec sleep = { .tv_sec = (uint64_t)update / SEC_TO_NSEC(1),
             .tv_nsec = (uint64_t)update % SEC_TO_NSEC(1) };
     struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000 };
     struct timespec start;
@@ -125,24 +128,24 @@ static void *core_time_control_thread(void *arg) {
              "step duration: %f, tick: %f", update, tick);
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    while (*(volatile int *)data->control == 1) {
-        uint64_t delta;
+    while (get_value(*data->control) == 1) {
+        uint64_t runtime;
 
         /* Pause after threads have been signaled. */
-        if (*(volatile bool *)data->pause) {
-            global_time_data.paused = true;
+        if (get_value(*data->pause)) {
+            set_value(global_time_data.paused, true);
             clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &pause, NULL);
             continue;
         } else if (global_time_data.paused) {
-            global_time_data.paused = false;
+            set_value(global_time_data.paused, false);
         }
 
-        nanosleep(&sleep, NULL);
+        clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &sleep, NULL);
         clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-        delta = timespec_delta(start, now);
-        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        global_time_data.controller_runtime += delta;
-        global_time_data.controller_ticks += (uint64_t)((float)delta / tick);
+        runtime = timespec_delta(start, now);
+        set_value(global_time_data.controller_runtime, runtime);
+        set_value(global_time_data.controller_ticks,
+                  (uint64_t)((float)runtime / tick));
         timer_update_wake(&global_time_data.trigger);
     }
 
@@ -154,9 +157,9 @@ static void *core_timer_thread(void *arg) {
     core_thread_args_t *args = &data->args;
 
     data->ret = 0;
-    while (*(volatile int *)data->control == 1) {
+    while (get_value(*data->control) == 1) {
         timer_update_wait(&global_time_data.trigger);
-        args->timer.callback(global_time_data.controller_ticks,
+        args->timer.callback(get_value(global_time_data.controller_ticks),
                              args->timer.data);
     }
 
@@ -169,10 +172,11 @@ static void *core_update_thread(void *arg) {
     core_object_t *object = args->object.object;
 
     data->ret = 0;
-    while (*(volatile int *)data->control == 1) {
+    while (get_value(*data->control) == 1) {
         timer_update_wait(&global_time_data.trigger);
-        object->update(object, global_time_data.controller_ticks,
-                       global_time_data.controller_runtime);
+        object->update(object,
+                       get_value(global_time_data.controller_ticks),
+                       get_value(global_time_data.controller_runtime));
     }
 
     pthread_exit(&data->ret);
@@ -193,7 +197,7 @@ static void *core_generic_thread(void *arg) {
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = step_duration;
 
-    while (*(volatile int *)data->control == 1) {
+    while (get_value(*data->control) == 1) {
         args->worker.callback(args->worker.data);
         nanosleep(&sleep_time, NULL);
     }
@@ -298,7 +302,7 @@ void core_threads_stop(void) {
 
     STAILQ_FOREACH(data, &core_threads, entry) {
         if (data->control.do_run)
-            data->control.do_run = 0;
+            set_value(data->control.do_run, 0);
     }
 
     /* Trigger waiters in case the control thread has
@@ -310,11 +314,11 @@ void core_threads_stop(void) {
 }
 
 uint64_t core_get_clock_ticks(void) {
-    return global_time_data.controller_ticks;
+    return get_value(global_time_data.controller_ticks);
 }
 
 uint64_t core_get_runtime(void) {
-    return global_time_data.controller_runtime;
+    return get_value(global_time_data.controller_runtime);
 }
 
 void core_threads_pause(void) {
@@ -322,9 +326,9 @@ void core_threads_pause(void) {
     struct timespec ts = {.tv_sec = 0, .tv_nsec = 50000};
 
     STAILQ_FOREACH(data, &core_threads, entry)
-        data->control.pause = true;
+        set_value(data->control.pause, true);
 
-    while (!global_time_data.paused)
+    while (get_value(global_time_data.paused))
         nanosleep(&ts, NULL);
 }
 
@@ -333,9 +337,9 @@ void core_threads_resume(void) {
     struct timespec ts = {.tv_sec = 0, .tv_nsec = 50000};
 
     STAILQ_FOREACH(data, &core_threads, entry)
-        data->control.pause = false;
+        set_value(data->control.pause, false);
 
-    while (global_time_data.paused)
+    while (get_value(global_time_data.paused))
         nanosleep(&ts, NULL);
 }
 
