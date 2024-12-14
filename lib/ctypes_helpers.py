@@ -45,7 +45,11 @@ def attempt_value_conversion(ctype, value):
                 return value
         return bool(value)
     if ctype in (ctypes.c_float, ctypes.c_double):
+        if value is None:
+            value = 0.0
         return float(value)
+    if value is None:
+        value = 0
     return int(value)
 
 def fill_ctypes_struct(instance, data):
@@ -55,9 +59,6 @@ def fill_ctypes_struct(instance, data):
             raise TypeError("'data' should be a dictionary")
         for key, expected_type in t._fields_:
             if is_simple(expected_type):
-                #if is_simple_char_array(expected_type):
-                #    setattr(instance, key, bytes(data[key], "ascii"))
-                #else:
                 try:
                     value = attempt_value_conversion(expected_type, data.get(key, None))
                 except TypeError as e:
@@ -70,11 +71,8 @@ def fill_ctypes_struct(instance, data):
             raise TypeError("'data' should be a list")
         for i, val in enumerate(data):
             if is_simple(t._type_):
-                #if is_simple_char_array(t):
-                #    instance[i] = bytes(data[i], "ascii")
-                #else:
                 try:
-                    instance[i] = attempt_value_conversion(t, val)
+                    instance[i] = attempt_value_conversion(t._type_, val)
                 except Exception as e:
                     raise TypeError(f"{str(instance)}: {str(e)}")
             else:

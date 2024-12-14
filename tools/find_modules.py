@@ -18,10 +18,10 @@ import re
 import sys
 import os
 
-def find_hw_objects():
+def find_hw_objects(source_path):
     object_reg = re.compile(r'^class (?P<klass>[^\(]+)\(ObjectDef\):$', re.MULTILINE)
     objects = []
-    with open(os.path.join(sys.argv[1], "controllers/objects/object_defs.py")) as fd:
+    with open(os.path.join(source_path, "controllers/objects/object_defs.py")) as fd:
         for line in fd:
             match = object_reg.match(line)
             if not match:
@@ -29,5 +29,12 @@ def find_hw_objects():
             objects.append(match.group("klass").strip().lower())
     return objects
 
-for object in find_hw_objects():
-    print(object)
+if len(sys.argv) == 2:
+    for object in find_hw_objects(sys.argv[1]):
+        print(object)
+elif len(sys.argv) > 2:
+    files = os.listdir(sys.argv[1])
+    for object in sys.argv[2:]:
+        for filename in files:
+            if filename.startswith(object) and filename.endswith(".c"):
+                print(filename)

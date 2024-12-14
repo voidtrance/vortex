@@ -88,11 +88,22 @@ class Thermistor(ObjectDef):
                     ("pin", ctypes.c_char * 8)]
     def __init__(self):
         super().__init__(ModuleTypes.THERMISTOR)
+
+class HeaterLayer(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_int),
+                ("density", ctypes.c_double),
+                ("capacity", ctypes.c_double),
+                ("conductivity", ctypes.c_double),
+                ("emissivity", ctypes.c_double),
+                ("convection", ctypes.c_float * 2),
+                ("size", ctypes.c_double * 3)]
+
 class Heater(ObjectDef):
     class HeaterConfig(ctypes.Structure):
         _fields_ = [("power", ctypes.c_uint16),
                     ("pin", ctypes.c_char * 8),
-                    ("max_temp", ctypes.c_float)]
+                    ("max_temp", ctypes.c_float),
+                    ("layers", HeaterLayer * 8)]
     class HeaterSetTempCommandOpts(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float)]
     class HeaterStatus(ctypes.Structure):

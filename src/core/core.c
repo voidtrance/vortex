@@ -719,7 +719,7 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
         if (!strncmp(obj->name, name, max(strlen(name), strlen(obj->name)))) {
             core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
                      "object of klass '%s' and name '%s' already exists",
-                     OBJECT_EVENT_NAMES[klass], name);
+                     ObjectTypeNames[klass], name);
             return CORE_OBJECT_ID_INVALID;
         }
     }

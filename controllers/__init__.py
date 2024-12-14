@@ -24,6 +24,7 @@ from vortex.controllers.types import ModuleTypes
 import vortex.core
 import vortex.lib.ctypes_helpers
 from vortex.lib.utils import Counter
+from copy import deepcopy
 
 class PinError(Exception): pass
 class Pins:
@@ -161,6 +162,29 @@ class Controller(core.VortexCore):
                 if issubclass(member, base_class) and member is not base_class:
                     vobjs.append(member)
         return vobjs
+    def _process_substruct(self, options, obj_conf):
+        def init_substruct(struct_type, len):
+            substruct = {}
+            for n, t in struct_type._fields_:
+                if issubclass(t, ctypes.Array):
+                    substruct[n] = [0] * t._length_
+                elif t in (ctypes.c_char, ctypes.c_char_p):
+                    substruct[n] = ""
+                else:
+                    substruct[n] = 0
+            return [deepcopy(substruct) for x in range(len)]
+        for fname, ftype in obj_conf._fields_:
+            if issubclass(ftype, ctypes.Array) and \
+                issubclass(ftype._type_, ctypes.Structure):
+                opt_list = init_substruct(ftype._type_, ftype._length_)
+                opt_dict = vars(options).copy()
+                for option, value in opt_dict.items():
+                    if option.startswith(f"{fname}"):
+                        _, idx, opt = option.split("_")
+                        opt_list[int(idx) - 1][opt] = value
+                        delattr(options, option)
+                setattr(options, fname, opt_list)
+        return options
     def _load_objects(self, config):
         module = importlib.import_module("vortex.controllers.objects.object_defs")
         base = getattr(module, "ObjectDef")
@@ -193,6 +217,7 @@ class Controller(core.VortexCore):
                 obj_conf = self.object_defs[klass].config()
                 if klass == ModuleTypes.THERMISTOR:
                     options.adc_max = self.ADC_MAX
+                options = self._process_substruct(options, obj_conf)
                 try:
                     vortex.lib.ctypes_helpers.fill_ctypes_struct(obj_conf, vars(options))
                 except TypeError as e:

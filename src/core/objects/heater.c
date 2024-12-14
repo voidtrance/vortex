@@ -23,29 +23,26 @@
 #include "object_defs.h"
 #include "../common_defs.h"
 #include "thermistor.h"
+#include "heater_compute.h"
 #include <utils.h>
 #include "heater.h"
 #include <cache.h>
-
-#define AMBIENT_TEMP 25.0
-#define MAX_RAMP_UP_DURATION 120
-#define MAX_RAMP_DOWN_DURATION 240
 
 typedef struct {
     uint16_t power;
     char pin[8];
     float max_temp;
+    heater_layer_t layers[MAX_LAYER_COUNT];
 } heater_config_params_t;
 
 typedef struct {
-    float current;
-    float base;
-    float set;
-    float target;
-    float max;
-    uint64_t position;
-    uint64_t duration;
-    uint64_t max_ramp_duration;
+    uint64_t compute_start; /* nanoseconds */
+    double power; /* watts */
+    double max_temp;
+    double current; /* celsius */
+    double ambient; /* celsius */
+    double target; /* celsius */
+    heater_data_t *compute;
 } temp_data_t;
 
 typedef struct {
@@ -80,14 +77,21 @@ heater_t *object_create(const char *name, void *config_ptr) {
     heater->object.exec_command = heater_set_temp;
     heater->object.get_state = heater_status;
     heater->object.name = strdup(name);
-    heater->temp_data.position = 0;
-    heater->temp_data.max_ramp_duration =
-        SEC_TO_NSEC(MAX_RAMP_UP_DURATION * 100 / config->power);
-    heater->temp_data.max = config->max_temp;
+    heater->temp_data.compute_start = 0;
+    heater->temp_data.power = config->power;
+    heater->temp_data.max_temp = config->max_temp;
     strncpy(heater->pin, config->pin, sizeof(heater->pin));
 
     if (object_cache_create(&heater_event_cache,
                             sizeof(heater_temp_reached_event_data_t))) {
+        core_object_destroy(&heater->object);
+        free(heater);
+        return NULL;
+    }
+
+
+    heater->temp_data.compute = heater_compute_init(config->layers);
+    if (!heater->temp_data.compute) {
         core_object_destroy(&heater->object);
         free(heater);
         return NULL;
@@ -101,21 +105,19 @@ static void heater_reset(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
 
     heater->temp_data.current = AMBIENT_TEMP;
-    heater->temp_data.base = heater->temp_data.current;
-    heater->temp_data.target = AMBIENT_TEMP;
-    heater->temp_data.position = 0;
+    heater->temp_data.compute_start = 0;
+    heater_compute_clear(heater->temp_data.compute);
 }
 
 static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
     heater_t *heater = (heater_t *)object;
     struct heater_set_temperature_args *args;
-    float ratio;
 
     if (cmd->object_cmd_id != HEATER_COMMAND_SET_TEMP)
         return -1;
 
     args = (struct heater_set_temperature_args *)cmd->args;
-    if (args->temperature < 0 || args->temperature > heater->temp_data.max)
+    if (args->temperature < 0 || args->temperature > heater->temp_data.max_temp)
         return -1;
 
     // If a command is still running, immediately complete it.
@@ -123,36 +125,19 @@ static int heater_set_temp(core_object_t *object, core_object_command_t *cmd) {
         CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
 
     heater->command = *cmd;
-    heater->temp_data.position = 0;
-    heater->temp_data.base = heater->temp_data.current;
-    heater->temp_data.target = max(args->temperature, AMBIENT_TEMP);
+    heater->temp_data.target = args->temperature;
 
-    if (heater->temp_data.target == heater->temp_data.current) {
+    if (heater->temp_data.current == heater->temp_data.target) {
         CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
         return 0;
     }
 
-    /* Ramping up duration is a percentage of the max ramp up
-     * duration (which is a function of the heater's power).
-     *
-     * Ramping down is based on a static duration. This should
-     * better emulate real-world temperature drops.
-     *
-     * Both ramp up and down final durations depend on the ratio
-     * of the target temp to the max heater temp.
-     */
-    if (heater->temp_data.target < heater->temp_data.base)
-        heater->temp_data.duration = SEC_TO_NSEC(MAX_RAMP_DOWN_DURATION);
+    if (heater->temp_data.target >= heater->temp_data.current)
+        heater_compute_set_power(heater->temp_data.compute,
+                                 heater->temp_data.power);
     else
-        heater->temp_data.duration = heater->temp_data.max_ramp_duration;
-
-    ratio = (heater->temp_data.max - heater->temp_data.current) /
-        heater->temp_data.max;
-    heater->temp_data.duration *= ratio;
-
-    log_debug(heater, "base: %.15f, target: %.15f, temp: %.15f",
-              heater->temp_data.base, heater->temp_data.target,
-              heater->temp_data.current);
+        heater_compute_set_power(heater->temp_data.compute, 0);
+    heater->temp_data.compute_start = 0;
     return 0;
 }
 
@@ -161,31 +146,8 @@ static void heater_status(core_object_t *object, void *status) {
     heater_t *heater = (heater_t *)object;
 
     s->temperature = heater->temp_data.current;
-    s->max_temp = heater->temp_data.max;
+    s->max_temp = heater->temp_data.max_temp;
     strncpy(s->pin, heater->pin, sizeof(s->pin));
-}
-
-static float sinusoidal_inout(float value) {
-    return -0.5 * (cosf(M_PI * value) - 1);
-}
-
-static void interpolate(temp_data_t *data, uint64_t time_delta) {
-    float step_val;
-
-    if (data->position + time_delta < data->duration)
-        data->position += time_delta;
-    else
-        data->position = data->duration;
-    step_val = (float)data->position / data->duration;
-    if (data->base <= data->target) {
-        data->current = (data->base + (data->target - data->base) *
-                         sinusoidal_inout(step_val));
-    } else {
-        data->current = (data->base - (data->base - data->target) *
-                         sinusoidal_inout(step_val));
-    }
-
-    data->current = roundf(data->current * 1000) / 1000;
 }
 
 static void heater_update(core_object_t *object, uint64_t ticks,
@@ -193,6 +155,9 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     heater_t *heater = (heater_t *)object;
     uint64_t time_delta = timestep - heater->timestep;
     heater_temp_reached_event_data_t *data;
+
+    if (heater->temp_data.compute_start == 0)
+        heater->temp_data.compute_start = timestep;
 
     heater->timestep = timestep;
     if (heater->temp_data.current == heater->temp_data.target)
@@ -202,7 +167,10 @@ static void heater_update(core_object_t *object, uint64_t ticks,
      * Use interpolation function to approximate temperature
      * ramp.
      */
-    interpolate(&heater->temp_data, time_delta);
+    heater_compute_iterate(heater->temp_data.compute, time_delta,
+        timestep - heater->temp_data.compute_start);
+    heater->temp_data.current =
+        heater_compute_get_temperature(heater->temp_data.compute);
 
     log_debug(heater, "heater %s temp: %f", heater->object.name,
               heater->temp_data.current);
@@ -223,6 +191,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
 static void heater_destroy(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
 
+    heater_compute_free(heater->temp_data.compute);
     core_object_destroy(object);
     object_cache_destroy(heater_event_cache);
     free(heater);

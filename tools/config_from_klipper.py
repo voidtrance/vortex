@@ -103,6 +103,77 @@ def generate_thermistor(section : str, name : str,
 
     return
 
+def generate_extruder_layers(section : str, esection : str,
+                             name : str,
+                             kconfig : Type[configparser.ConfigParser],
+                             econfig : Type[configparser.ConfigParser]) -> None:
+    # Klipper config does not have a setting for the wattage of the heaters.
+    # Make one up.
+    econfig.set(esection, "power", "60")
+    # Generate extruder thermal layers
+    econfig.set(esection, "layers_1_type", "1")
+    econfig.set(esection, "layers_1_density", "1100000")
+    econfig.set(esection, "layers_1_capacity", "0.9")
+    econfig.set(esection, "layers_1_conductivity", "0.3")
+    econfig.set(esection, "layers_1_emissivity", "0.9")
+    econfig.set(esection, "layers_1_convection", "0,0")
+    econfig.set(esection, "layers_1_size", "10,10,2")
+    econfig.set(esection, "layers_2_type", "2")
+    econfig.set(esection, "layers_2_density", "2650000")
+    econfig.set(esection, "layers_2_capacity", "0.9")
+    econfig.set(esection, "layers_2_conductivity", "120")
+    econfig.set(esection, "layers_2_emissivity", "0.2")
+    econfig.set(esection, "layers_2_convection", "8,4")
+    econfig.set(esection, "layers_2_size", "20.0,20.0,10.0")
+
+def generate_bed_layers(section : str, esection : str, name : str,
+                        kconfig : Type[configparser.ConfigParser],
+                        econfig : Type[configparser.ConfigParser]) -> None:
+    # Klipper config does not have a setting for the wattage of the heaters.
+    # Make one up.
+    econfig.set(esection, "power", "400")
+    # Get axis sizes so we can infer bed size
+    steppers = [x for x in kconfig.sections() if x.startswith("stepper")]
+    bed_size = {b: 0 for a in steppers for b in a.split("_")[1]}
+    for sec in steppers:
+        size = kconfig.getfloat(sec, "position_max")
+        _, axis = sec.split("_")
+        bed_size[axis] = size
+    # Generate bed thermal layers
+    econfig.set(esection, "layers_1_type", "1")
+    econfig.set(esection, "layers_1_density", "1100000")
+    econfig.set(esection, "layers_1_capacity", "0.9")
+    econfig.set(esection, "layers_1_conductivity", "0.3")
+    econfig.set(esection, "layers_1_emissivity", "0.9")
+    econfig.set(esection, "layers_1_convection", "0,0")
+    layer_size = ",".join([str(bed_size["x"] - 50),
+                           str(bed_size["y"] - 50), "1.5"])
+    econfig.set(esection, "layers_1_size", layer_size)
+    econfig.set(esection, "layers_2_type", "2")
+    econfig.set(esection, "layers_2_density", "2650000")
+    econfig.set(esection, "layers_2_capacity", "0.9")
+    econfig.set(esection, "layers_2_conductivity", "120")
+    econfig.set(esection, "layers_2_emissivity", "0.2")
+    econfig.set(esection, "layers_2_convection", "8,4")
+    layer_size = ",".join([str(bed_size["x"]), str(bed_size["y"]), "8"])
+    econfig.set(esection, "layers_2_size", layer_size)
+    econfig.set(esection, "layers_3_type", "3")
+    econfig.set(esection, "layers_3_density", "3700000")
+    econfig.set(esection, "layers_3_capacity", "0.9")
+    econfig.set(esection, "layers_3_conductivity", "0.25")
+    econfig.set(esection, "layers_3_emissivity", "0.9")
+    econfig.set(esection, "layers_3_convection", "0,0")
+    layer_size = ",".join([str(bed_size["x"]), str(bed_size["y"]), "1.2"])
+    econfig.set(esection, "layers_3_size", layer_size)
+    econfig.set(esection, "layers_4_type", "3")
+    econfig.set(esection, "layers_4_density", "5500000")
+    econfig.set(esection, "layers_4_capacity", "0.6")
+    econfig.set(esection, "layers_4_conductivity", "0.6")
+    econfig.set(esection, "layers_4_emissivity", "0.9")
+    econfig.set(esection, "layers_4_convection", "0,0")
+    layer_size = ",".join([str(bed_size["x"]), str(bed_size["y"]), "0.75"])
+    econfig.set(esection, "layers_4_size", layer_size)
+
 def generate_heater_config(section : str, kconfig : Type[configparser.ConfigParser],
                            econfig : Type[configparser.ConfigParser]) -> None:
     print(f"Generating config for section '{section}'...")
@@ -115,9 +186,12 @@ def generate_heater_config(section : str, kconfig : Type[configparser.ConfigPars
     econfig.add_section(s)
     econfig.set(s, "pin", kconfig.get(section, "heater_pin"))
     econfig.set(s, "max_temp", kconfig.get(section, "max_temp"))
-    # Klipper config does not have a setting for the wattage of the heaters.
-    # Make one up.
-    econfig.set(s, "power", "60")
+    # Add thermal layers to the config. This assumes a certain
+    # configuration of layers
+    if name == "extruder":
+        generate_extruder_layers(section, s, name, kconfig, econfig)
+    elif name == "heater_bed":
+        generate_bed_layers(section, s, name, kconfig, econfig)
     generate_thermistor(section, name, kconfig, econfig)
     return
 
