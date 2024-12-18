@@ -22,8 +22,12 @@
 
 static pthread_once_t random_init = PTHREAD_ONCE_INIT;
 
+static double long_to_double(long v) {
+    return ((double)(v * 1.0));
+}
+
 static float long_to_float(long v) {
-    return ((v * 1.0) / ((1U << 31) - 1));
+    return (long_to_double(v) / ((1U << 31) - 1));
 }
 
 static void random_state_init(void) {
@@ -60,5 +64,15 @@ float random_float(void) {
 
 float random_float_limit(float min, float max) {
     float factor = random_float();
+    return min + ((max - min) * factor);
+}
+
+double random_double(void) {
+    pthread_once(&random_init, random_state_init);
+    return long_to_double(random());
+}
+
+double random_double_limit(double min, double max) {
+    double factor = random_double();
     return min + ((max - min) * factor);
 }

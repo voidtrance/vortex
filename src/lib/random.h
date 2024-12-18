@@ -27,5 +27,6 @@ CREATE_FUNCS(int, int32_t)
 CREATE_FUNCS(uint, unsigned int)
 CREATE_FUNCS(uint64, uint64_t)
 CREATE_FUNCS(float, float)
+CREATE_FUNCS(double, double)
 
 #endif

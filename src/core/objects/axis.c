@@ -84,8 +84,33 @@ static void axis_reset(core_object_t *object) {
         axis->homed = true;
         axis->start_position = 0.0;
     } else {
-        axis->start_position = random_float_limit(0, axis->length);
+        kinematics_type_t kin = kinematics_type_get();
+        double start = random_double_limit(0, axis->length);
+        double r;
+        uint32_t spmm;
+
+        switch (kin) {
+        case KINEMATICS_COREXY:
+            if (axis->type != AXIS_TYPE_Y)
+                spmm = axis->motors[0].steps_per_mm;
+            else
+                spmm = axis->motors[1].steps_per_mm;
+            break;
+        case KINEMATICS_COREXZ:
+            if (axis->type != AXIS_TYPE_Z)
+                spmm = axis->motors[0].steps_per_mm;
+            else
+                spmm = axis->motors[1].steps_per_mm;
+            break;
+        default:
+            spmm = axis->motors[0].steps_per_mm;
+        }
+
+        /* Axis position has to be a multiple of the single step distance. */
+        r = remainder(start, (double)(1.0 / spmm));
+        axis->start_position = start - r;
     }
+
     axis->position = axis->start_position;
 }
 
