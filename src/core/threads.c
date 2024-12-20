@@ -299,18 +299,30 @@ int core_threads_start(void) {
 
 void core_threads_stop(void) {
     core_control_data_t *data;
+    core_control_data_t *control;
 
+    /* Stop all threads except the time control one.
+     * This should ensure that any other threads waiting
+     * on the futex will be woken up and will be able to
+     * exit cleanly.
+     */
     STAILQ_FOREACH(data, &core_threads, entry) {
-        if (data->control.do_run)
+        if (data->type != CORE_THREAD_TYPE_UPDATE)
             set_value(data->control.do_run, 0);
+        else
+            control = data;
     }
 
-    /* Trigger waiters in case the control thread has
-     * already exited. */
-    timer_update_wake(&global_time_data.trigger);
+    STAILQ_FOREACH(data, &core_threads, entry) {
+        if (data->type != CORE_THREAD_TYPE_UPDATE)
+            pthread_join(data->control.thread_id, NULL);
+    }
 
-    STAILQ_FOREACH(data, &core_threads, entry)
-        pthread_join(data->control.thread_id, NULL);
+    /* Now that all other threads have exited, stop the
+     * time control thread.
+     */
+    set_value(control->control.do_run, 0);
+    pthread_join(control->control.thread_id, NULL);
 }
 
 uint64_t core_get_clock_ticks(void) {
