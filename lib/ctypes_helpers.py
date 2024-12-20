@@ -14,10 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import ctypes
+import logging
 from _ctypes import _Pointer
 # This is only to get access to ConfigParser.BOOLEAN_STATES
 from configparser import ConfigParser
-
+from argparse import Namespace
 
 def is_simple_char_array(ctype):
     return issubclass(ctype, ctypes.Array) and \
@@ -34,6 +35,8 @@ def is_simple(ctype):
 def attempt_value_conversion(ctype, value):
     if ctype in (ctypes.c_char, ctypes.c_char_p) or \
         is_simple_char_array(ctype):
+        if isinstance(value, bytes):
+            return value
         if value is None:
             value = ""
         return bytes(value, "ascii")
@@ -55,8 +58,10 @@ def attempt_value_conversion(ctype, value):
 def fill_ctypes_struct(instance, data):
     t = type(instance)
     if issubclass(t, ctypes.Structure):
-        if not isinstance(data, dict):
-            raise TypeError("'data' should be a dictionary")
+        if not isinstance(data, (dict, Namespace)):
+            raise TypeError("'data' should be a dictionary or a Namespace")
+        if isinstance(data, Namespace):
+            data = vars(data)
         for key, expected_type in t._fields_:
             if is_simple(expected_type):
                 try:
@@ -66,6 +71,8 @@ def fill_ctypes_struct(instance, data):
                 setattr(instance, key, value)
             else:
                 fill_ctypes_struct(getattr(instance, key), data.get(key, None))
+    elif issubclass(t, ctypes.Union):
+        logging.error("Unions are not supported in object configuration")
     elif issubclass(t, ctypes.Array):
         if not isinstance(data, list):
             raise TypeError("'data' should be a list")
@@ -108,3 +115,75 @@ def parse_ctypes_struct(instance):
         return instance.contents
     return data
 
+
+def expand_substruct_config(options, obj_conf):
+    def create_namespace_from_conf(conf):
+        namespace = Namespace()
+        anon = []
+        for fname, ftype in conf._fields_:
+            if issubclass(ftype, ctypes.Structure):
+                anon += [f[0] for f in getattr(ftype, "_anonymous_", [])]
+                n, a = create_namespace_from_conf(ftype)
+                anon += a
+                setattr(namespace, fname, n)
+            elif issubclass(ftype, ctypes.Union):
+                logging.error("Unions are not supported in object configurations")
+            elif issubclass(ftype, ctypes.Array) and \
+                issubclass(ftype._type_, (ctypes.Structure, ctypes.Union)):
+                l = []
+                for _ in range(ftype._length_):
+                    n, a = create_namespace_from_conf(ftype._type_)
+                    anon += a
+                    l.append(n)
+                setattr(namespace, fname, l)
+            elif issubclass(ftype, ctypes.Array) and \
+                ftype._type_ is not ctypes.c_char:
+                setattr(namespace, fname, [ftype._type_(0).value] * ftype._length_)
+            else:
+                if isinstance(ftype, type(_Pointer)):
+                    setattr(namespace, fname, None)
+                else:
+                    setattr(namespace, fname, ftype(0).value)
+        return namespace, anon
+
+    def fill_namespace_from_opts(namespace, options, anonymous, prefix=None):
+        for name in vars(namespace):
+            member = getattr(namespace, name)
+            member_prefix = f"{prefix}_{name}" if prefix else name
+            if isinstance(member, Namespace):
+                if name in anonymous:
+                    member_prefix = prefix
+                fill_namespace_from_opts(member, options, anonymous, member_prefix)
+            elif isinstance(member, list):
+                if name in anonymous:
+                    member_prefix = prefix
+                if isinstance(member[0], Namespace):
+                    for idx in range(len(member)):
+                        fill_namespace_from_opts(member[idx], options, anonymous,
+                                                 f"{member_prefix}_{idx + 1}")
+                else:
+                    if hasattr(options, member_prefix):
+                        setattr(namespace, name, getattr(options, member_prefix))
+            else:
+                opt_dict = vars(options)
+                if member_prefix in opt_dict:
+                    setattr(namespace, name, opt_dict[member_prefix])
+
+    opt_space, anonymous = create_namespace_from_conf(obj_conf)
+    fill_namespace_from_opts(opt_space, options, anonymous)
+    return opt_space
+
+def show_struct(struct, indent=0):
+    print(" " * indent, struct)
+    indent += 2
+    for fname, ftype in struct._fields_:
+        if issubclass(ftype, ctypes.Structure):
+            show_struct(getattr(struct, fname), indent)
+        elif issubclass(ftype, ctypes.Array):
+            if issubclass(ftype._type_, ctypes.Structure):
+                for idx in range(ftype._length_):
+                    show_struct(getattr(struct, fname)[idx], indent + 2)
+            elif is_simple_char_array(ftype):
+                print(" " * indent, f"{fname}:", getattr(struct, fname))
+        else:
+            print(" " * indent, f"{fname}:", getattr(struct, fname))
