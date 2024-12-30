@@ -20,7 +20,7 @@
 #include <stdint.h>
 
 typedef struct {
-    double resistance;
+    float resistance;
     uint16_t adc;
     char pin[8];
 } thermistor_status_t;

@@ -94,10 +94,17 @@ def generate_thermistor(section : str, name : str,
     econfig.add_section(s)
     econfig.set(s, "heater", f"heater{name.upper()}")
     econfig.set(s, "pin", kconfig.get(section, "sensor_pin"))
-    econfig.set(s, "resistor", kconfig.get(section, "pullup_resistor", fallback="4700"))
+    econfig.set(s, "config_type", "2")
+    econfig.set(s, "config_resistor", kconfig.get(section, "pullup_resistor", fallback="4700"))
     if t_type.lower() == "generic 3950":
         econfig.set(s, "sensor_type", "beta3950")
-        econfig.set(s, "beta", "3950")
+        # Set resistance/temp values for coefficient calculation
+        econfig.set(s, "config_coeff_1_temp", "25.0")
+        econfig.set(s, "config_coeff_1_resistance", "100000")
+        econfig.set(s, "config_coeff_2_temp", "150")
+        econfig.set(s, "config_coeff_2_resistance", "1770")
+        econfig.set(s, "config_coeff_3_temp", "250")
+        econfig.set(s, "config_coeff_3_resistance", "230")
     else:
         econfig.set(s, "sensor_type", t_type.lower())
 

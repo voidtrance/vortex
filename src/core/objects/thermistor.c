@@ -23,7 +23,7 @@
 #include "heater.h"
 #include "thermistor.h"
 
-#define KELVIN (-273.15)
+#define TO_KELVIN(x) ((x) + 273.15)
 
 typedef enum {
     SENSOR_TYPE_PT100,
@@ -41,28 +41,46 @@ static float pt1000_base = 1000.0;
 #define b3950_nominal_r (100000.0) // in Ohms.
 #define b3950_nominal_t (25.0)  // in C
 
+typedef enum {
+    CONFIG_TYPE_NONE,
+    CONFIG_TYPE_BETA,
+    CONFIG_TYPE_COEFF,
+} thermistor_config_type_t;
+
+typedef struct {
+    uint16_t temp;
+    uint32_t resistance;
+} config_temp_t;
+
+typedef struct {
+    thermistor_config_type_t type;
+    uint16_t resistor;
+    struct {
+        uint16_t beta;
+    } beta;
+    config_temp_t coeff[3];
+} thermistor_config_t;
+
 typedef struct {
     char sensor_type[64];
     char heater[64];
-    uint32_t beta_value;
     char pin[8];
-    uint32_t resistor;
     uint16_t max_adc;
+    thermistor_config_t config;
 } thermistor_config_params_t;
 
 typedef struct {
     core_object_t object;
     thermistor_type_t type;
-    uint16_t beta;
     uint16_t max_adc;
     uint32_t resistor;
     char pin[8];
     const char *heater_name;
     core_object_t *heater;
     float resistance;
-    float a;
-    float b;
-    float c;
+    double a;
+    double b;
+    double c;
 } thermistor_t;
 
 static int thermistor_init(core_object_t *object);
@@ -82,19 +100,53 @@ static inline uint16_t calc_adc_value(float resistance, uint32_t resistor,
                            (max_adc + 1));
 }
 
-static inline void calc_coefficiants(float temp, float resistance,
-                                     uint32_t beta, float *a, float *b,
-                                     float *c) {
-    float inv = 1.0 / (temp - KELVIN);
-    float l = log(resistance);
+static inline void calc_coefficiants_beta(float temp, float resistance,
+                                          uint32_t beta, double *a, double *b,
+                                          double *c) {
+    double inv = 1.0 / TO_KELVIN(temp);
+    double l = log(resistance);
     *c = 0.0;
     *b = 1.0 / beta;
     *a = inv - *b * l;
 }
 
-static inline float beta_resistance(float temp, float a, float b, float c) {
-    float inv = 1.0 / (temp - KELVIN);
-    float l = (inv - a) / b;
+/* Find Steinhart–Hart semiconductor resistance coefficients. */
+static inline void calc_coefficiants_temp(config_temp_t *config, double *a,
+										  double *b, double *c)
+{
+    double Y1 = 1.0 / TO_KELVIN(config[0].temp);
+    double Y2 = 1.0 / TO_KELVIN(config[1].temp);
+    double Y3 = 1.0 / TO_KELVIN(config[2].temp);
+    double L1 = log((double)config[0].resistance);
+    double L2 = log((double)config[1].resistance);
+    double L3 = log((double)config[2].resistance);
+    double g2 = (Y2 - Y1) / (L2 - L1);
+    double g3 = (Y3 - Y1) / (L3 - L1);
+
+    *c = ((g3 - g2) / (L3 - L2)) / (L1 + L2 + L3);
+    *b = g2 - *c * (pow(L1, 2) + L1 * L2 + pow(L2, 2));
+    *a = Y1 - (*b + pow(L1, 2) * *c) * L1;
+}
+
+/*
+ * Use Steinhart–Hart inverse equation to compute the thermistor resistance
+ * based on heater temperature.
+ */
+static inline float beta_resistance(double temp, double a, double b, double c)
+{
+	double l;
+
+    if (c == 0.0) {
+        double inv = 1.0 / TO_KELVIN(temp);
+
+        l = (inv - a) / b;
+    } else {
+        double x = (1.0 / c) * (a - 1.0 / TO_KELVIN(temp));
+        double y = sqrt(pow(b / (3 * c), 3) + (pow(x, 2) / 4));
+
+        l = cbrt(y - x / 2) - cbrt(y + x / 2);
+    }
+
     float r = exp(l);
     return r;
 }
@@ -115,8 +167,8 @@ thermistor_t *object_create(const char *name, void *config_ptr) {
     thermistor->object.get_state = thermistor_status;
     thermistor->object.name = strdup(name);
     thermistor->heater_name = strdup(config->heater);
-    thermistor->resistor = config->resistor;
     thermistor->max_adc = config->max_adc;
+    thermistor->resistor = config->config.resistor;
     strncpy(thermistor->pin, config->pin, sizeof(thermistor->pin));
 
     if (!strncasecmp(config->sensor_type, "pt1000", 6))
@@ -125,7 +177,22 @@ thermistor_t *object_create(const char *name, void *config_ptr) {
         thermistor->type = SENSOR_TYPE_PT1000;
     else {
         thermistor->type = SENSOR_TYPE_B3950;
-        thermistor->beta = config->beta_value;
+        switch (config->config.type) {
+        case CONFIG_TYPE_BETA:
+            calc_coefficiants_beta(b3950_nominal_t, b3950_nominal_r,
+                                   config->config.beta.beta,
+                                   &thermistor->a, &thermistor->b,
+                                   &thermistor->c);
+            break;
+        case CONFIG_TYPE_COEFF:
+            calc_coefficiants_temp(config->config.coeff, &thermistor->a,
+                                   &thermistor->b, &thermistor->c);
+            break;
+        default:
+            core_object_destroy(&thermistor->object);
+            free(thermistor);
+            return NULL;
+        }
     }
 
     return thermistor;
@@ -139,8 +206,6 @@ static int thermistor_init(core_object_t *object) {
     if (!thermistor->heater)
         return -1;
 
-    calc_coefficiants(b3950_nominal_t, b3950_nominal_r, thermistor->beta,
-                      &thermistor->a, &thermistor->b, &thermistor->c);
     return 0;
 }
 

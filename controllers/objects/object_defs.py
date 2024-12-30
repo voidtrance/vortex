@@ -73,17 +73,29 @@ class Stepper(ObjectDef):
                          (3, "move", self.StepperMoveCommandOpts, (0, 0)),
                          (4, "use_pins", self.StepperUsePinsCommandOpts, (False,))]
         self.events = {ModuleEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
-        
+
+class ThermistorValueBeta(ctypes.Structure):
+    _fields_ = [("beta", ctypes.c_uint16)]
+
+class ThermistorValueCoeff(ctypes.Structure):
+    _fields_ = [("temp", ctypes.c_uint16),
+                ("resistance", ctypes.c_uint32)]
+
+class ThermistorValueConfig(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_int),
+                ("resistor", ctypes.c_uint16),
+                ("beta", ThermistorValueBeta),
+                ("coeff", ThermistorValueCoeff * 3)]
+
 class Thermistor(ObjectDef):
     class ThermistorConfig(ctypes.Structure):
         _fields_ = [("sensor_type", ctypes.c_char * 64),
                     ("heater", ctypes.c_char * 64),
-                    ("beta", ctypes.c_uint32),
                     ("pin", ctypes.c_char * 8),
-                    ("resistor", ctypes.c_uint32),
-                    ("adc_max", ctypes.c_uint16)]
+                    ("adc_max", ctypes.c_uint16),
+                    ("config", ThermistorValueConfig)]
     class ThermistorStatus(ctypes.Structure):
-        _fields_ = [("resistance", ctypes.c_double),
+        _fields_ = [("resistance", ctypes.c_float),
                     ("adc", ctypes.c_uint16),
                     ("pin", ctypes.c_char * 8)]
     def __init__(self):
