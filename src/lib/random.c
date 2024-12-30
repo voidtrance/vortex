@@ -17,62 +17,40 @@
  */
 #include <pthread.h>
 #include <stdlib.h>
-#include <errno.h>
+#include <values.h>
 #include "random.h"
 
 static pthread_once_t random_init = PTHREAD_ONCE_INIT;
 
-static double long_to_double(long v) {
-    return ((double)(v * 1.0));
-}
-
-static float long_to_float(long v) {
-    return (long_to_double(v) / ((1U << 31) - 1));
-}
+#define MAX_RANDOM ((1 << 31) - 1)
 
 static void random_state_init(void) {
     struct timespec t;
-    int32_t i, tries;
+    int16_t i, tries;
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &t);
     srandom(t.tv_nsec);
-    tries = (uint32_t)(50.0 * long_to_float(random()));
+    tries = (uint16_t)random() % 50;
     for (i = 0; i < tries; i++)
         (void)random();
     return;
 }
 
 #undef CREATE_FUNCS
-#define CREATE_FUNCS(name, type)					\
-    type random_##name(void) {                              \
-        pthread_once(&random_init, random_state_init);			\
-        return (type)random();                              \
-    }                                                       \
-    type random_##name##_limit(type min, type max) {        \
-        float factor = random_float();                          \
-        return (type)(min + (((max - min) * 1.0) / factor));		\
+#define CREATE_FUNCS(name, type)                                        \
+    type random_##name(void) {                                          \
+        pthread_once(&random_init, random_state_init);                  \
+        return (type)random();                                          \
+    }                                                                   \
+    type random_##name##_limit(type min, type max) {                    \
+        float factor;                                                   \
+        pthread_once(&random_init, random_state_init);                  \
+        factor = (float)random() / (float)MAX_RANDOM;                   \
+        return (type)((float)min + ((float)(max - min) * factor));      \
     }
 
 CREATE_FUNCS(int, int32_t)
 CREATE_FUNCS(uint, uint32_t)
 CREATE_FUNCS(uint64, uint64_t)
-
-float random_float(void) {
-    pthread_once(&random_init, random_state_init);
-    return long_to_float(random());
-}
-
-float random_float_limit(float min, float max) {
-    float factor = random_float();
-    return min + ((max - min) * factor);
-}
-
-double random_double(void) {
-    pthread_once(&random_init, random_state_init);
-    return long_to_double(random());
-}
-
-double random_double_limit(double min, double max) {
-    double factor = random_double();
-    return min + ((max - min) * factor);
-}
+CREATE_FUNCS(float, float)
+CREATE_FUNCS(double, double)
