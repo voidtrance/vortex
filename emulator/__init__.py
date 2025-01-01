@@ -13,14 +13,11 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import logging
 import inspect
 import importlib
-import time
 from os import strerror
-from re import search
 from argparse import Namespace
-from vortex.lib.constants import *
+import vortex.lib.logging as logging
 from vortex.core import VortexCoreError
 import vortex.emulator.monitor as monitor
 import vortex.emulator.kinematics as kinematics

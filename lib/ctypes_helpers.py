@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import ctypes
-import logging
+import vortex.lib.logging as logging
 from _ctypes import _Pointer
 # This is only to get access to ConfigParser.BOOLEAN_STATES
 from configparser import ConfigParser

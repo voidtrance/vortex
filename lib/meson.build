@@ -14,4 +14,4 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 py.install_sources(['constants.py', 'ctypes_helpers.py',
-                    'ext_enum.py', 'utils.py'], subdir: 'vortex/lib')
+                    'ext_enum.py', 'utils.py', 'logging.py'], subdir: 'vortex/lib')

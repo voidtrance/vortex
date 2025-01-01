@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import enum
 import ctypes
-import logging
+import vortex.lib.logging as logging
 from collections import namedtuple
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL

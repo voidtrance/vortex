@@ -52,3 +52,5 @@ gdb:
 
 clean:
 	rm -rf build dist
+	rm -f src/core/auto-events.h src/core/objects/auto-types.h \
+		src/core/debug.h

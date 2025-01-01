@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import inspect
+import vortex.lib.logging as logging
 
 class Counter():
     def __init__(self, start=0):

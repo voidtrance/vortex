@@ -15,7 +15,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import importlib
 import pathlib
-import logging
 import ctypes
 import vortex.core as core
 import inspect
@@ -24,6 +23,7 @@ from vortex.controllers.types import ModuleTypes
 import vortex.core
 import vortex.lib.ctypes_helpers
 from vortex.lib.utils import Counter
+import vortex.lib.logging as logging
 
 class PinError(Exception): pass
 class Pins:
@@ -131,8 +131,7 @@ class Controller(core.VortexCore):
     _libc = ctypes.CDLL("libc.so.6")
     _Command = namedtuple("Command", ['id', 'name', 'opts', 'defaults'])
     def __init__(self, config):
-        root = logging.getLogger()
-        debug_level = root.getEffectiveLevel()
+        debug_level = logging.logger.getEffectiveLevel()
         if debug_level <= logging.DEBUG:
             logging.warning("With DEBUG and higher logging levels")
             logging.warning("controller timing will be imprecise!")
@@ -201,7 +200,11 @@ class Controller(core.VortexCore):
                     logging.error("Could not create object configuration!")
                     logging.error(f"   klass={klass}, name={name}: {str(e)}")
                     continue
+                if logging.getLogger().getEffectiveLevel == logging.DEBUG:
+                    vortex.lib.ctypes_helpers.show_struct(obj_conf)
+                logging.verbose(f"Creating object {klass}:{name}")
                 object_id = self.create_object(klass, name, ctypes.addressof(obj_conf))
+                logging.debug(f"Object {klass}:{name} created: {object_id}")
             self._objects.add_object(klass, name, object_id)
     def _verify_pins(self, config):
         for name, value in vars(config).items():

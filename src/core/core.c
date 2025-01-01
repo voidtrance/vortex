@@ -97,7 +97,7 @@ typedef struct core_command {
 } core_command_t;
 
 typedef struct {
-    PyObject *module;
+    PyObject *logger;
     uint8_t level;
 } core_logging_data_t;
 
@@ -1299,11 +1299,6 @@ void core_log(core_log_level_t level, core_object_type_t type, const char *name,
     PyGILState_STATE state;
     char msg_str[4096];
     int size;
-    const char *methods[] = {
-        [LOG_LEVEL_CRITICAL] = "critical", [LOG_LEVEL_ERROR] = "error",
-        [LOG_LEVEL_WARNING] = "warning",   [LOG_LEVEL_INFO] = "info",
-        [LOG_LEVEL_DEBUG] = "debug",
-    };
 
     if (level < logging.level)
         return;
@@ -1319,7 +1314,7 @@ void core_log(core_log_level_t level, core_object_type_t type, const char *name,
     va_end(args);
 
     state = PyGILState_Ensure();
-    if (!PyObject_CallMethod(logging.module, methods[level], "(s)", msg_str))
+    if (!PyObject_CallMethod(logging.logger, log_methods[level], "(s)", msg_str))
         PyErr_Print();
 
     PyGILState_Release(state);
@@ -1406,6 +1401,7 @@ static int vortex_core_module_exec(PyObject *module) {
     for (type = 0; type < OBJECT_TYPE_MAX; type++) {
         PyObject *key;
         PyObject *value;
+        PyObject *logging_module;
         int ret;
 
         if (PyModule_AddIntConstant(module, ObjectTypeExportNames[type],
@@ -1469,13 +1465,18 @@ static int vortex_core_module_exec(PyObject *module) {
         goto fail;
     }
 
-    logging.module = PyImport_ImportModule("logging");
-    if (!logging.module)
+    logging_module = PyImport_ImportModule("vortex.lib.logging");
+    if (!logging_module)
+        goto fail;
+
+    logging.logger = PyObject_CallMethod(logging_module, "getLogger", NULL);
+    if (!logging.logger)
         goto fail;
 
     return 0;
 
 fail:
+    Py_XDECREF(logging_module);
     Py_XDECREF(VortexCoreError);
     Py_CLEAR(VortexCoreError);
     Py_XDECREF(module);

@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import zlib
 import json
-import logging
+import vortex.lib.logging as logging
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends import BaseFrontend
 from vortex.frontends.klipper.helpers import *

@@ -15,12 +15,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import threading
 import importlib
-import logging
 import select
 import os
 import time
 import pickle
 import threading
+import vortex.lib.logging as logging
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends.lib import create_pty
 from vortex.frontends.queues import CommandQueue

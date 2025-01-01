@@ -21,6 +21,7 @@ import errno
 import vortex.emulator
 import vortex.emulator.config
 import vortex.frontends
+import vortex.lib.logging as logging
 
 def create_arg_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -44,7 +45,8 @@ def create_arg_parser():
                             clock ticks are still updated based on their
                             defined frequency.""")
     debug = parser.add_argument_group("Debug Options")
-    debug.add_argument("-d", "--debug", choices=logging._nameToLevel.keys(),
+    debug_levels = [logging._levelToName[x] for x in sorted(logging._levelToName.keys())]
+    debug.add_argument("-d", "--debug", choices=debug_levels,
                         default="INFO",
                         help="""Set logging level. Higher logging levels will
                         provide more information but will also affect
@@ -52,6 +54,10 @@ def create_arg_parser():
     debug.add_argument("-l", "--logfile", type=str, default=None,
                        help="""Log messages are sent to the file specified
                        by this option.""")
+    debug.add_argument("--extended-logging", action="store_true",
+                       help="""Enable extended debugging. When enabled, log
+                       messages will also contain the source of the message
+                       (filename and line number). """)
     debug.add_argument("-M", "--monitor", action="store_true",
                        help="""Start monitoring server thread. This thread
                        processes requests from the monitoring application.""")
@@ -65,8 +71,7 @@ def main():
     parser = create_arg_parser()
     opts = parser.parse_args()
 
-    logging.basicConfig(filename=opts.logfile, level=opts.debug,
-                        format="%(created)f %(levelname)s: %(message)s")
+    logging.setup_vortex_logging(opts.debug, opts.logfile, opts.extended_logging)
 
     config = vortex.emulator.config.Configuration()
     try:
