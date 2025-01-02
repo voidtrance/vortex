@@ -51,12 +51,56 @@ Random number generators define the following API:
 * `uint64_t random_uint64_limit(uint64_t min, uint64_t max)`
 * `float random_float(void)`
 * `float random_float_limit(float min, float max)`
+* `double random_double(void)`
+* `double random_double_limit(double min, double max)`
 
 The `random_<type>()` variants will return a random number of type
 `<type>` that is between `0` and the maximum value of the type.
 
 The `random_<type>_limit()` variants will return a random number of
 type `<type>` that is between the values of `min` and `max`.
+
+### Timers
+Timers are a facility that allows users to schedule callback that get
+called at or after a specific time. The time is measured in controller
+clock ticks.
+
+Timers are implemented as part of the emulator core and provide APIs
+for both the core objects and Python users.
+
+#### Core Object API
+The Core Object API uses the `core_timer_t` type to specify timers. Users
+have to fill out an instance of the scruture and call the APIs passing it
+as an argument. The structure is defined as such:
+
+```c
+typedef struct {
+    uint64_t (*callback)(uint64_t ticks, void *data);
+    void *data;
+} core_timer_t;
+```
+
+where `callback` is the callback function to be called when the timer expires
+and `data` is a pointer to private data that will be passed to the callback.
+
+* `core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout)`
+will register a timer callback to be called on or after `timeout`. The API will
+return an opaque handle that will be pass to other timer APIs.
+* `int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout)` will
+rescheule a timer callback to be called on or after `timeout`. The API will
+return `0` on success or `-1` on failure.
+* `void core_timer_unregister(core_timer_handle_t handle)` will unregister a
+registered timer.
+
+#### Python API
+The Python timer API is defined as:
+
+* `vortex.core.register_timer(callback, timeout)` - register the callback `callback`
+to be called on or after `timeout`. The API will return a timer handle.
+* `vortex.core.reschedule_timer(timer)` - rescheuled the timer `timer`. `timer` is a
+timer handle returned by `vortex.core.register_timer()`.
+* `vortex.core.unregister_timer(timer)` - unregister the timer `timer`, which is a
+timer handle returned by `vortex.core.register_timer()`.
 
 ## Adding New HW Objects
 HW objects are implemented as C shared libraries which
@@ -281,11 +325,13 @@ To add a new virtual objects a new Python file should be created in
 
 ### Defining The Virtual Object
 
+All virtual objects should follow the template below:
+
 ```python
 import vortex.controllers.objects.vobj_base as vobj
 from vortex.controllers.types import ModuleTypes
 
-class Toolhead(vobj.VirtualObjectBase):
+class MyVirtualObject(vobj.VirtualObjectBase):
     type = ModuleTypes.NEW_TYPE
     commands = [(id, args, defaults)]
     events = [event_type]
@@ -304,19 +350,25 @@ is a tuple containing default values for each of the args_struct members.
 Just like the `type` value, the virtual object's events will automatically
 be added to all appropriate places.
 
-The following is an example of a virtual class:
+The following is an example of a virtual object that implements a :
 
 ```python
 import vortex.controllers.objects.vobj_base as vobj
 from vortex.controllers.types import ModuleTypes
 
-class Toolhead(vobj.VirtualObjectBase):
+class MyVirtualObject(vobj.VirtualObjectBase):
     type = ModuleTypes.NEW_TYPE
     commands = [(0, {'opt1': }, defaults)]
     events = [ModuleEvents.COMMAND_COMPLETE]
+    def __init__(self):
+        super().__init__(self)
+        self.run_command[0] = self.my_virtual_obj_command
     def exec_command(self, cmd_id, cmd, args):
         super().exec_command(cmd_id, cmd, args)
-        status = run_command[cmd](args)
+        status = self.run_command[cmd](args)
         self.event_submit(ModuleEvents.COMMAND_COMPLETE,
                         {"status": status})
+        self.complete_command(cmd_id, status)
+    def my_virtual_obj_command(self, args):
+        return 0
 ```

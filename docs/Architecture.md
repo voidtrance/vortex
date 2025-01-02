@@ -1,12 +1,12 @@
 # Vortex Architecture
 
 ## Overview
-Vortex is architecture is comprised of three major parts - emulation contoller,
+Vortex's architecture is comprised of three major parts - emulation contoller,
 HW controller, and frontend.
 
 The emulation controller is the main control object. It's purpose is to start
-and stop the HW controller and frontend, provide event registration facilities,
-and process the command queue.
+and stop the HW controller and frontend, and plumb the controller objects to
+the frontend objects.
 
 The HW controller emulates the actual hardware in the machine. It creates HW
 object based on the content of the configuration file.
@@ -25,8 +25,8 @@ not pure Python will be explain later down.
 
 HW controllers use the configuration file to create and maintain a set of
 HW objects. Each HW object type is suppose to emulate a specific type of HW
-makeing up the emulated machine. For example, there are stepper motor,
-endstop, probe, and heater objects among others.
+making up the emulated machine. For example, there are stepper motor,endstop,
+probe, and heater objects among others.
 
 Each HW object defines its own set of commands, events, and status. Commands
 are used to tell the HW object what action to perform, events are used to
@@ -37,43 +37,38 @@ and report status.
 Vortex defines two different types of objects - HW objects and virtual objects.
 
 HW objects emulate the behavior of real HW entities. As such, they require
-periodic update of their intenal states. For performance reasons, all HW
-objects are implemented as C code and are part of the HW controller core.
+periodic updates of their intenal states. For performance reasons, all HW
+objects are implemented in C and are part of the HW controller core.
 
-Virtual objects are objects which don't keep internal state. More precisely,
-their internal state does not require periodic updates. The internal state is
-compiled and maintained from states of other objects. Just as normal objects,
-virtual objects can define their own commands and/or events. They can also
-wait for command completions and register for event notifications.
+Virtual objects don't need to keep internal state. More precisely, their
+internal state does not require periodic updates. The internal state is
+updated based on submitted commands or is compiled and maintained from states
+of other objects. Just as normal objects, virtual objects can define their
+own commands and/or events. They can also wait for command completions and
+register for event notifications.
 
 ### Controller Core
-The HW controller core is a CPython module that provides meachinsms for
+The HW controller core is a CPython module that provides meachnisms for
 creating and managing core HW objects. It is written in C to provide better
 performance for the update cycle. The main reason for using C is that it
 is not subject to the Python GIL, which is debilitating when trying to
-reach certain small update frequencies.
+reach certain high update frequencies.
 
 The controller core handles HW object management, command processing,
-event and command completiong handling.
+event and command completions.
 
-The controller core starts two separate threads - the update thread and
-the processor thread. The update thread's purpose is to continously
-update the HW object state. The processor thread handles command
-submission between HW objects, command completions, and events.
+The controller core starts a set of threads to perform the various core
+actions - update threads, a timer thread, and a processor thread. The
+update threads purpose is to continously update the HW object state.
+There is one thread per HW object. This way there is no serialization in
+the updates of all objects. The processor thread handles command
+submission between HW objects, command completions, and events. The timer
+thread maintains all of the timers the emulator has registered for and
+triggers timer handlers.
 
 There is a separate processor thread in order to allow the update
-thread to run as fast as possible in order to be able to achieve high
-update frequencies.
-
-A goal of the controller core is to simulate the clock frequencies of
-the emulated controller board. As such, the update thread attempts
-to update all HW objects within the time of a single controll board
-clock tick.
-
-A potential improvement which can allow high controller frequencies is
-to start a separate thread per HW object. This should result in better
-performance as HW object update won't have to wait for the update of
-all other HW objects.
+threads to run as fast as possible in order achieve high update
+frequencies.
 
 ### Core HW Objects
 
@@ -84,15 +79,15 @@ input data for conversion. For example, the `direct` frontend accepts
 direct object commands and the `gcode` frontend accepts GCode commands.
 
 The frontends will parse the input data and after converion, queue the
-object commands on the emulator's command queue. After the command is
-queue, they can continue processing input data, wait for the command
-completion or eait for an object event before proceeding.
+object commands on the frontend's command queue. After the command is
+queued, they can continue processing input data, wait for the command
+completion or wait for an object event before proceeding.
 
 If needed, frontends are also responsible for sending result data back to
 the client.
 
 The base frontend class provides a lot of the boilerplate support like
-creating the Vortex serial pipe, creating interal objects hodling emulation
+creating the Vortex serial pipe, creating interal objects holding emulation
 and object data that is used for object and command lookup, handling the
 pipe read loop, etc.
 

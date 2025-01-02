@@ -1,11 +1,4 @@
-# Vortex GCode Emulator
-## Overview
-Vortex is a software-define CNC machine emulator. It provides a set
-of emulated objects that can be instanciated to make up any HW
-configuration. The object then emulate the appropriate HW behavior.
-
-Initially, Vortex was meant to be a 3D printer emulator. However, the
-ultimate goal is for it to be able to emulate any CNC machine.
+# Quick Start Guide
 
 ## General Operation
 Vortex is comprised of three major parts - the emulated machine
@@ -35,14 +28,6 @@ to the frontend.
 
 HW objects also provide their own set of events, which various parts of
 the emulator (including other HW objects) can subscribe to.
-
-## Installation
-See the [Installation Guide](/docs/Install.md) for installation
-instructions.
-
-## Configuration
-See the [Configuration Guide](/docs/Configuration.md) for detailed
-configuration information.
 
 ## Starting The Emulator
 The Vortex emulator executable supports the following command line options:
@@ -98,10 +83,3 @@ onject commands, or any data that the instantiated frontend can process.
 
 For detailed information on the emulator's operation, see the 
 [architecture description](/docs/Architecture.md) document.
-
-## Development
-The [developer guide](/docs/Development.md) contains details on how to add new
-HW and virtual emulation objects.
-
-When working with the Vortex source code, it's also recommended that you go
-through the [coding standard](/docs/CodingStandard.md) guide.
