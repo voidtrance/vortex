@@ -228,7 +228,8 @@ class Controller(core.VortexCore):
                         "endstops": self.ENDSTOP_COUNT, "probe": self.PROBE_COUNT,
                         "heaters": self.HEATER_COUNT, "pwm": self.PWM_PIN_COUNT,
                         "digital": self.DIGITAL_PIN_COUNT,
-                        "adc_max": self.ADC_MAX}
+                        "adc_max": self.ADC_MAX,
+                        "frequency": self.FREQUENCY}
         cmds = {x: [] for x in ModuleTypes}
         for klass in ModuleTypes:
             if self.object_defs[klass] is not None:

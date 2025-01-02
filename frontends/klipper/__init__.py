@@ -19,7 +19,7 @@ import vortex.lib.logging as logging
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends import BaseFrontend
 from vortex.frontends.klipper.helpers import *
-from vortex.lib.utils import Counter
+from vortex.lib.utils import Counter, parse_frequency
 import vortex.frontends.klipper.msgproto as msgproto
 import vortex.frontends.klipper.klipper_proto as proto
 
@@ -91,7 +91,8 @@ class KlipperFrontend(BaseFrontend):
         self.identity["enumerations"]["static_string_id"] = self._string_map
 
         # Setup basic config variables
-        self.identity["config"]["CLOCK_FREQ"] = self.emulation_frequency
+        self.identity["config"]["CLOCK_FREQ"] = \
+            self._raw_controller_params["hw"]["frequency"]
         self.identity["config"]["STATS_SUMSQ_BASE"] = self.STATS_SUMSQ_BASE
 
         # Setup basic Klipper commands
@@ -144,6 +145,9 @@ class KlipperFrontend(BaseFrontend):
     #    self.stats_sum += diff
 
     def run(self):
+        if self.emulation_frequency < parse_frequency("600KHz"):
+            logging.warning("Using frequency of less than 600KHz may result")
+            logging.warning("in Klipper failures due to timing granularity.")
         self.create_identity()
         self.start_tick = self.get_controller_clock_ticks()
         super().run()

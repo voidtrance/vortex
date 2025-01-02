@@ -15,6 +15,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import inspect
 import vortex.lib.logging as logging
+from re import search
+from vortex.lib.constants import *
 
 class Counter():
     def __init__(self, start=0):
@@ -33,3 +35,15 @@ class Counter():
         if function not in (self.__init__, self.next, self.reset):
             raise KeyError('Class attributes cannot be set')
         super().__setattr__(name, value)
+
+def parse_frequency(frequency):
+    if isinstance(frequency, str):
+        i = search(r'\d*', frequency).end()
+        frequency, order = int(frequency[:i]), frequency[i:].upper()
+        if order != "HZ":
+            logging.debug(f"{frequency} {order}, {order}2HZ, {eval(f"{order}2HZ")}")
+            frequency = frequency * eval(f"{order}2HZ")
+    elif not isinstance(frequency, (int, float)):
+        logging.error("Invalid frequency format")
+        raise ValueError("Invalid frequency format")
+    return frequency

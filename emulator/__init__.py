@@ -18,6 +18,7 @@ import importlib
 from os import strerror
 from argparse import Namespace
 import vortex.lib.logging as logging
+from vortex.lib.utils import parse_frequency
 from vortex.core import VortexCoreError
 import vortex.emulator.monitor as monitor
 import vortex.emulator.kinematics as kinematics
@@ -72,15 +73,7 @@ class Emulator:
         self._monitor = None
 
     def set_frequency(self, frequency=0):
-        if isinstance(frequency, str):
-            i = search(r'\d*', frequency).end()
-            frequency, order = int(frequency[:i]), frequency[i:].upper()
-            if order != "HZ":
-                logging.debug(f"{frequency} {order}, {order}2HZ, {eval(f"{order}2HZ")}")
-                frequency = frequency * eval(f"{order}2HZ")
-        if (frequency / MHZ2HZ) > 10:
-            logging.warning("Frequency greater than 10MHz may result in inaccurate timing")
-        self._frequency = frequency
+        self._frequency = parse_frequency(frequency)
 
     def start_monitor(self):
         self._monitor = monitor.MonitorServer(self._controller, self._command_queue)
@@ -100,7 +93,7 @@ class Emulator:
             print(str(e))
             self._controller.stop()
             return
-        self._frontend.set_emulation_frequency(self._controller.get_frequency())
+        self._frontend.set_emulation_frequency(self._frequency)
         self._frontend.run()
         while self._run_emulation:
             command = self._command_queue.get()
