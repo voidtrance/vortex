@@ -335,6 +335,7 @@ class Stepper:
     def shutdown(self):
         if self.timer:
             self.frontend.unregister_timer(self.timer)
+            self.timer = None
     def __del__(self):
         self.shutdown()
 
@@ -417,8 +418,6 @@ class TRSync:
         self.frontend = frontend
         self.id = -1
         self.oid = oid
-        self.report_timer = None
-        self.expire_timer = None
         self.triger_reason = 0
         self.expire_reason = 0
         self.report_ticks = 0
@@ -473,8 +472,11 @@ class TRSync:
         self.do_trigger(self.expire_reason)
         return 0
     def shutdown(self):
-        self.frontend.unregister_timer(self.expire_timer)
-        self.frontend.unregister_timer(self.report_timer)
-        self.report_timer = self.expire_timer = None
+        if self.expire_timer:
+            self.frontend.unregister_timer(self.expire_timer)
+            self.expire_timer = None
+        if self.report_timer:
+            self.frontend.unregister_timer(self.report_timer)
+            self.report_timer = None
     def __del__(self):
         self.shutdown()
