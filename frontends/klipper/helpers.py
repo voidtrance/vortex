@@ -186,11 +186,16 @@ class HeaterPin(DigitalPin):
         super().__init__(frontend, oid, obj_id, name)
         status = frontend.query([obj_id])[obj_id]
         self.heater_max_temp = status["max_temp"]
+        cmd_id = self.frontend.queue_command(ModuleTypes.HEATER,
+                                             self.name, "use_pins",
+                                             {"enable": True})
+        result = self.frontend.wait_for_command(cmd_id)[0]
+        if result < 0:
+            raise ValueError(f"Heater {self.name} pin enable error")
+        status = self.frontend.query_object([self.id])[self.id]
+        self.pin_word = ctypes.cast(status["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
     def _set_pin(self, value):
-        temp = self.heater_max_temp if Flags.ON in value else 0
-        self.frontend.queue_command(ModuleTypes.HEATER, self.name,
-                                    "set_temperature",
-                                    {"temperature" : temp})
+        self.pin_word.contents.value = Flags.ON in value
 
 class StepperPinShift(enum.IntFlag):
     ENABLE = 0

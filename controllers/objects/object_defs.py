@@ -118,15 +118,19 @@ class Heater(ObjectDef):
                     ("layers", HeaterLayer * 8)]
     class HeaterSetTempCommandOpts(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float)]
+    class HeaterUsePinsCommandOpts(ctypes.Structure):
+        _fields_ = [("enable", ctypes.c_bool)]
     class HeaterStatus(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float),
                     ("max_temp", ctypes.c_float),
-                    ("pin", ctypes.c_char * 8)]
+                    ("pin", ctypes.c_char * 8),
+                    ("pin_addr", ctypes.c_ulong)]
     class HeaterEventTempReached(ctypes.Structure):
         _fields_ = [("temp", ctypes.c_float)]
     def __init__(self):
         super().__init__(ModuleTypes.HEATER)
-        self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,))]
+        self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,)),
+                         (1, "use_pins", self.HeaterUsePinsCommandOpts, (False,))]
         self.events = {ModuleEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
 
 class Endstop(ObjectDef):
