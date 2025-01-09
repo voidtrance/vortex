@@ -140,7 +140,7 @@ static int axis_init(core_object_t *object) {
 
         axis->endstop->get_state(axis->endstop, &status);
         if (!strncmp(status.type, "max", 3))
-        axis->endstop_is_max = true;
+            axis->endstop_is_max = true;
         else
             axis->endstop_is_max = false;
     }

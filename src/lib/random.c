@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#define _GNU_SOURCE
 #include <pthread.h>
 #include <stdlib.h>
 #include <values.h>
@@ -22,7 +23,7 @@
 
 static pthread_once_t random_init = PTHREAD_ONCE_INIT;
 
-#define MAX_RANDOM ((1 << 31) - 1)
+#define MAX_RANDOM ((1U << 31) - 1)
 
 static void random_state_init(void) {
     struct timespec t;

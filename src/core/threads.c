@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#define _GNU_SOURCE
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
@@ -299,9 +300,9 @@ int core_threads_start(void) {
 
 void core_threads_stop(void) {
     core_control_data_t *data;
-    core_control_data_t *control;
 
-    /* Stop all threads except the time control one.
+    /*
+     * Stop all threads except the time control one.
      * This should ensure that any other threads waiting
      * on the futex will be woken up and will be able to
      * exit cleanly.
@@ -309,8 +310,6 @@ void core_threads_stop(void) {
     STAILQ_FOREACH(data, &core_threads, entry) {
         if (data->type != CORE_THREAD_TYPE_UPDATE)
             set_value(data->control.do_run, 0);
-        else
-            control = data;
     }
 
     STAILQ_FOREACH(data, &core_threads, entry) {
@@ -318,11 +317,16 @@ void core_threads_stop(void) {
             pthread_join(data->control.thread_id, NULL);
     }
 
-    /* Now that all other threads have exited, stop the
+    /*
+     * Now that all other threads have exited, stop the
      * time control thread.
      */
-    set_value(control->control.do_run, 0);
-    pthread_join(control->control.thread_id, NULL);
+    STAILQ_FOREACH(data, &core_threads, entry) {
+        if (data->type == CORE_THREAD_TYPE_UPDATE) {
+            set_value(data->control.do_run, 0);
+            pthread_join(data->control.thread_id, NULL);
+        }
+    }
 }
 
 uint64_t core_get_clock_ticks(void) {

@@ -1373,6 +1373,7 @@ static int vortex_core_module_exec(PyObject *module) {
     core_object_event_type_t event;
     PyObject *value_dict;
     PyObject *path;
+    PyObject *logging_module = NULL;
 
     path = PyModule_GetFilenameObject(module);
     module_path = PyUnicode_AsUTF8(path);
@@ -1401,7 +1402,6 @@ static int vortex_core_module_exec(PyObject *module) {
     for (type = 0; type < OBJECT_TYPE_MAX; type++) {
         PyObject *key;
         PyObject *value;
-        PyObject *logging_module;
         int ret;
 
         if (PyModule_AddIntConstant(module, ObjectTypeExportNames[type],

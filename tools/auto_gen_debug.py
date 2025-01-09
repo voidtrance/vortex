@@ -61,7 +61,7 @@ with open(OUTPUT, 'w') as fd:
     fd.write("    LOG_LEVEL_MAX,\n")
     fd.write("} core_log_level_t;\n\n")
 
-    fd.write("static const char *log_methods[] = {\n")
+    fd.write("static const char *log_methods[]  __attribute__((unused)) = {\n")
     for value in levels:
         if value:
             fd.write(f'    [LOG_LEVEL_{level_dict[value].upper()}] = "{level_dict[value].lower()}",\n')

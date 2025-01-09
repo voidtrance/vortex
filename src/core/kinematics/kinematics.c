@@ -71,6 +71,8 @@ axis_type_t kinematics_axis_type_from_char(char type_char) {
     case 'e':
         type = AXIS_TYPE_E;
         break;
+    default:
+        type = AXIS_TYPE_MAX;
     }
 
     return type;
