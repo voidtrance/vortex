@@ -23,6 +23,9 @@ VENV ?=
 VENV_PYTHON := $(VENV)/bin/python3
 DEBUG_OPTS :=
 
+PYTHON_VERSION=$(shell $(PYTHON) -c "import platform; print(platform.python_version())")
+PYTHON_VERSION_NUMS = $(subst ., ,$(PYTHON_VERSION))
+
 ifeq ($(DEBUG),1)
 	DEBUG_OPTS=--config-settings=setup-args=-Dbuildtype=debug
 endif
@@ -30,6 +33,8 @@ endif
 all:
 	$(PYTHON) -m pip install --no-build-isolation \
 		--editable . $(DEBUG_OPTS)
+	ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
+		compile_commands.json
 
 venv:
 	@if [ -z "$(VENV)" ]; then \
@@ -53,4 +58,4 @@ gdb:
 clean:
 	rm -rf build dist
 	rm -f src/core/auto-events.h src/core/objects/auto-types.h \
-		src/core/debug.h
+		src/core/debug.h compile_commands.json
