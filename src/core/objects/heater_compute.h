@@ -69,7 +69,8 @@ typedef struct heater_data heater_data_t;
 
 heater_data_t *heater_compute_init(heater_layer_t *layers);
 void heater_compute_set_power(heater_data_t *data, double wattage);
-void heater_compute_iterate(heater_data_t *data, uint64_t delta, uint64_t runtime);
+void heater_compute_iterate(heater_data_t *data, uint64_t delta,
+                            uint64_t runtime);
 double heater_compute_get_temperature(heater_data_t *data);
 void heater_compute_clear(heater_data_t *data);
 void heater_compute_free(heater_data_t *data);

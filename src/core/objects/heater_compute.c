@@ -87,11 +87,11 @@ static size_t elemIndex(layer_t *layer, size_t x, size_t y, size_t z) {
 
 static void compute_elems(layer_t *layer, heater_object_size_t *size) {
     layer->size.x = MM_TO_M(size->x);
-    layer->elems.x = layer->size.x / RESOLUTION;
+    layer->elems.x = max(layer->size.x / RESOLUTION, 1);
     layer->size.y = MM_TO_M(size->y);
-    layer->elems.y = layer->size.y / RESOLUTION;
+    layer->elems.y = max(layer->size.y / RESOLUTION, 1);
     layer->size.z = MM_TO_M(size->z);
-    layer->elems.z = layer->size.z / RESOLUTION;
+    layer->elems.z = max(layer->size.z / RESOLUTION, 1);
 }
 
 heater_data_t *heater_compute_init(heater_layer_t *layers) {
@@ -173,18 +173,6 @@ heater_data_t *heater_compute_init(heater_layer_t *layers) {
      return NULL;
 }
 
-#include <stdio.h>
-void breakpoint(void) {
-    char *ptr = NULL;
-    *ptr += 1;
-}
-
-#define check_val(x)                  \
-	do {                              \
-		if (isnan((x)) || isinf((x))) \
-			breakpoint();             \
-	} while (0)
-
 void heater_compute_set_power(heater_data_t *data, double wattage) {
     data->power = wattage;
 }
@@ -198,9 +186,7 @@ static void compute_conduction(heater_data_t *data, layer_t *layer, size_t elem,
     double dQ = kH * A * dT * dt / dx;
 
     data->dQs[elem] -= dQ;
-    check_val(data->dQs[elem]);
     data->dQs[next] += dQ;
-    check_val(data->dQs[next]);
 }
 
 static void compute_convection(heater_data_t *data, double z_size, size_t elem,
@@ -208,16 +194,23 @@ static void compute_convection(heater_data_t *data, double z_size, size_t elem,
                                double dt) {
     double A = z_size * RESOLUTION;
     double temp = data->temperature[elem];
+    double k_temp = C_TO_KELVIN(temp);
     double dTa = temp - AMBIENT_TEMP;
+    double p_temp = 1;
+    size_t i = 0;
 
     data->dQs[elem] -= convection * A * dt * dTa;
-    check_val(data->dQs[elem]);
-    data->dQs[elem] -= emissivity * kSB * A * (pow(C_TO_KELVIN(temp), 4) - Ta4) *
-        dt * ECF;
-    check_val(data->dQs[elem]);
+
+    // Open-coding pow(k_temp, 4) is significantly faster than
+    // using the pow() function.
+    while (i++ < 4)
+        p_temp *= k_temp;
+
+    data->dQs[elem] -= emissivity * kSB * A * (p_temp - Ta4) * dt * ECF;
 }
 
-void heater_compute_iterate(heater_data_t *data, uint64_t delta, uint64_t runtime) {
+void heater_compute_iterate(heater_data_t *data, uint64_t delta,
+                            uint64_t runtime) {
     double dt = (double)delta / SEC_TO_NSEC(1);
     layer_t *heater = &data->layers[data->heater];
     layer_t *body = &data->layers[data->body];
@@ -270,9 +263,7 @@ void heater_compute_iterate(heater_data_t *data, uint64_t delta, uint64_t runtim
                     double dQ = kH_dx * A * dT * dt;
 
                     data->dQs[elem] -= dQ;
-                    check_val(data->dQs[elem]);
                     data->dQs[next] += dQ;
-                    check_val(data->dQs[next]);
                 }
             }
         }
