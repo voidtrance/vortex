@@ -1,9 +1,19 @@
+#define _GNU_SOURCE 1
 #include <stdint.h>
 #include <stddef.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <stdio.h>
+#include <unistd.h> // for ssize_t
+#include <stdbool.h>
+
+#ifdef VAR_TYPE_FLOAT
+#define var_type float
+#else
+#define var_type double
+#endif
 
 /* Stefan-Boltzmann constant */
 #define kSB 0.0000000567
@@ -26,6 +36,7 @@
 #define C_TO_KELVIN(x) ((x) + 273)
 
 #define MAX_LAYER_COUNT 8
+#define max(a, b) ((a < b ? b : a))
 
 typedef enum {
 	HEATER_LAYER_TYPE_NONE,
@@ -38,16 +49,16 @@ typedef enum {
 typedef enum { CONV_TOP, CONV_BOTTOM, CONV_MAX } convection_type_t;
 
 typedef struct {
-	double x;
-	double y;
-	double z;
+	var_type x;
+	var_type y;
+	var_type z;
 } heater_object_size_t;
 
 typedef struct {
-	double density;
-	double capacity;
-	double conductivity;
-	double emissivity;
+	var_type density;
+	var_type capacity;
+	var_type conductivity;
+	var_type emissivity;
 	float convection[CONV_MAX];
 } heater_material_t;
 
@@ -61,7 +72,7 @@ typedef struct {
 
 typedef struct heater_data heater_data_t;
 
-static double Ta4;
+static var_type Ta4;
 
 typedef struct {
 	size_t x;
@@ -81,19 +92,19 @@ typedef struct {
 	size_t heater_start_y;
 	size_t heater_end_x;
 	size_t heater_end_y;
-	double heater_size;
+	var_type heater_size;
 } iteration_values_t;
 
 struct heater_data {
-	double *dQs;
-	double *temperature;
+	var_type *dQs;
+	var_type *temperature;
 	size_t size;
 	layer_t *layers;
 	size_t n_layers;
 	ssize_t body;
 	ssize_t heater;
 	elem_t sensor;
-	double power;
+	var_type power;
 	iteration_values_t values;
 };
 
@@ -109,14 +120,14 @@ static heater_layer_t all_layers[] = {
 	{ HEATER_LAYER_TYPE_OTHER,
 	  3700000,
 	  0.9,
-	  0.2,
+	  0.25,
 	  0.9,
 	  { 0, 0 },
 	  { 300, 300, 1.2 } },
 	{ HEATER_LAYER_TYPE_OTHER,
 	  5500000,
 	  0.6,
-	  0.2,
+	  0.6,
 	  0.9,
 	  { 0, 0 },
 	  { 300, 300, 0.75 } },
@@ -132,18 +143,18 @@ static size_t elemIndex(layer_t *layer, size_t x, size_t y, size_t z)
 static void compute_elems(layer_t *layer, heater_object_size_t *size)
 {
 	layer->size.x = MM_TO_M(size->x);
-	layer->elems.x = layer->size.x / RESOLUTION;
+	layer->elems.x = max(layer->size.x / RESOLUTION, 1);
 	layer->size.y = MM_TO_M(size->y);
-	layer->elems.y = layer->size.y / RESOLUTION;
+	layer->elems.y = max(layer->size.y / RESOLUTION, 1);
 	layer->size.z = MM_TO_M(size->z);
-	layer->elems.z = layer->size.z / RESOLUTION;
+	layer->elems.z = max(layer->size.z / RESOLUTION, 1);
 }
 
 heater_data_t *heater_compute_init(heater_layer_t *layers)
 {
 	heater_data_t *data;
-	double layers_height = 0.0;
-	double current_height = 0.0;
+	var_type layers_height = 0.0;
+	var_type current_height = 0.0;
 	size_t i;
 
 	data = calloc(1, sizeof(*data));
@@ -197,19 +208,17 @@ heater_data_t *heater_compute_init(heater_layer_t *layers)
 	heater_compute_clear(data);
 
 	data->values.heater_start_x =
-		(size_t)floor((double)(data->layers[data->body].elems.x -
-							   data->layers[data->heater].elems.x) /
+		(size_t)floor((var_type)(data->layers[data->body].elems.x -
+								 data->layers[data->heater].elems.x) /
 					  2);
 	data->values.heater_start_y =
-		(size_t)floor((double)(data->layers[data->body].elems.y -
-							   data->layers[data->heater].elems.y) /
+		(size_t)floor((var_type)(data->layers[data->body].elems.y -
+								 data->layers[data->heater].elems.y) /
 					  2);
 	data->values.heater_end_x =
 		data->values.heater_start_x + data->layers[data->heater].elems.x;
 	data->values.heater_end_y =
 		data->values.heater_start_y + data->layers[data->heater].elems.y;
-	data->values.heater_size = M_TO_CM(data->layers[data->heater].size.x) *
-							   M_TO_CM(data->layers[data->heater].size.y);
 
 	Ta4 = pow(C_TO_KELVIN(AMBIENT_TEMP), 4);
 	return data;
@@ -223,75 +232,64 @@ bail:
 	return NULL;
 }
 
-#include <stdio.h>
-void breakpoint(void)
+void heater_compute_set_power(heater_data_t *data, var_type wattage)
 {
-	char *ptr = NULL;
-	*ptr += 1;
-}
-
-#define check_val(x)                  \
-	do {                              \
-		if (isnan((x)) || isinf((x))) \
-			breakpoint();             \
-	} while (0)
-
-void heater_compute_set_power(heater_data_t *data, double wattage)
-{
-	data->power = wattage / (M_TO_CM(data->layers[data->heater].size.x) *
-							 M_TO_CM(data->layers[data->heater].size.y));
+	data->power = wattage;
 }
 
 static void compute_conduction(heater_data_t *data, layer_t *layer, size_t elem,
-							   size_t next, double dt)
+							   size_t next, var_type dt)
 {
-	double dT = data->temperature[elem] - data->temperature[next];
-	double kH = layer->material.conductivity;
-	double A = layer->size.z * RESOLUTION;
-	double dx = RESOLUTION;
-	double dQ = kH * A * dT * dt / dx;
+	var_type dT = data->temperature[elem] - data->temperature[next];
+	var_type kH = layer->material.conductivity;
+	var_type A = layer->size.z * RESOLUTION;
+	var_type dx = RESOLUTION;
+	var_type dQ = kH * A * dT * dt / dx;
 
 	data->dQs[elem] -= dQ;
-	check_val(data->dQs[elem]);
 	data->dQs[next] += dQ;
-	check_val(data->dQs[next]);
 }
 
-static void compute_convection(heater_data_t *data, double z_size, size_t elem,
-							   double emissivity, double convection, double dt)
+static void compute_convection(heater_data_t *data, var_type z_size,
+							   size_t elem, var_type emissivity,
+							   var_type convection, var_type dt)
 {
-	double A = z_size * RESOLUTION;
-	double temp = data->temperature[elem];
-	double dTa = temp - AMBIENT_TEMP;
+	var_type A = z_size * RESOLUTION;
+	var_type temp = data->temperature[elem];
+	var_type k_temp = C_TO_KELVIN(temp);
+	var_type dTa = temp - AMBIENT_TEMP;
+	var_type p_temp = 1;
+	size_t i = 0;
 
 	data->dQs[elem] -= convection * A * dt * dTa;
-	check_val(data->dQs[elem]);
-	data->dQs[elem] -=
-		emissivity * kSB * A * (pow(C_TO_KELVIN(temp), 4) - Ta4) * dt * ECF;
-	check_val(data->dQs[elem]);
+	while (i++ < 4)
+		p_temp *= k_temp;
+	data->dQs[elem] -= emissivity * kSB * A * (p_temp - Ta4) * dt * ECF;
 }
 
 void heater_compute_iterate(heater_data_t *data, uint64_t delta)
 {
-	double dt = (double)delta / SEC_TO_NSEC(1);
+	var_type dt = (var_type)delta / SEC_TO_NSEC(1);
 	layer_t *heater = &data->layers[data->heater];
 	layer_t *body = &data->layers[data->body];
-	double h_power = data->power * data->values.heater_size;
-	double JpI = h_power * dt;
-	double JpE = JpI / (heater->elems.x * heater->elems.y);
+	var_type JpI = data->power * dt;
+	var_type JpE = JpI / (heater->elems.x * heater->elems.y);
 	size_t x;
 	size_t y;
 	size_t l;
+	size_t e;
 
 	memset(data->dQs, 0, sizeof(*data->dQs) * data->size);
-	for (y = 0; y < body->elems.y; y++) {
-		for (x = 0; x < body->elems.x; x++) {
-			if ((x >= data->values.heater_start_x &&
-				 x < data->values.heater_end_x) &&
-				(y >= data->values.heater_start_y &&
-				 y < data->values.heater_end_y))
-				data->dQs[elemIndex(body, x, y, 0)] = JpE;
-		}
+
+	for (e = elemIndex(body, data->values.heater_start_y,
+					   data->values.heater_start_x, 0);
+		 e < elemIndex(body, data->values.heater_end_y * body->elems.x, 0, 0) -
+				 data->values.heater_start_x;) {
+		data->dQs[e] = JpE;
+		if (e % body->elems.x == data->values.heater_end_x - 1)
+			e += (body->elems.x - data->values.heater_end_x) +
+				 data->values.heater_start_x;
+		e++;
 	}
 
 	/* Compute heat conduction between elements */
@@ -314,20 +312,18 @@ void heater_compute_iterate(heater_data_t *data, uint64_t delta)
 				if (l < data->n_layers - 1) {
 					size_t next = elemIndex(body, x, y, l + 1);
 					layer_t *next_layer = &data->layers[l + 1];
-					double dT =
+					var_type dT =
 						data->temperature[elem] - data->temperature[next];
-					double k1Inv =
+					var_type k1Inv =
 						0.5 * layer->size.z / layer->material.conductivity;
-					double k2Inv = 0.5 * next_layer->size.z /
-								   next_layer->material.conductivity;
-					double kH_dx = 1 / (k1Inv + k2Inv);
-					double A = RESOLUTION * RESOLUTION;
-					double dQ = kH_dx * A * dT * dt;
+					var_type k2Inv = 0.5 * next_layer->size.z /
+									 next_layer->material.conductivity;
+					var_type kH_dx = 1 / (k1Inv + k2Inv);
+					var_type A = RESOLUTION * RESOLUTION;
+					var_type dQ = kH_dx * A * dT * dt;
 
 					data->dQs[elem] -= dQ;
-					check_val(data->dQs[elem]);
 					data->dQs[next] += dQ;
-					check_val(data->dQs[next]);
 				}
 			}
 		}
@@ -399,8 +395,8 @@ void heater_compute_iterate(heater_data_t *data, uint64_t delta)
 	/* Compute element temperatures */
 	for (l = 0; l < data->n_layers; l++) {
 		layer_t *layer = &data->layers[l];
-		double c = layer->material.capacity * layer->material.density *
-				   RESOLUTION * RESOLUTION * layer->size.z;
+		var_type c = layer->material.capacity * layer->material.density *
+					 RESOLUTION * RESOLUTION * layer->size.z;
 
 		for (y = 0; y < body->elems.y; y++) {
 			for (x = 0; x < body->elems.x; x++) {
@@ -412,7 +408,7 @@ void heater_compute_iterate(heater_data_t *data, uint64_t delta)
 	}
 }
 
-double heater_compute_get_temperature(heater_data_t *data)
+var_type heater_compute_get_temperature(heater_data_t *data)
 {
 	size_t elem = elemIndex(&data->layers[data->body], data->sensor.x,
 							data->sensor.y, data->sensor.z);
@@ -440,22 +436,56 @@ void heater_compute_free(heater_data_t *data)
 #define timespec_delta(s, e) \
 	((SEC_TO_NSEC((e).tv_sec - (s).tv_sec)) + ((e).tv_nsec - (s).tv_nsec))
 
-void main(void)
+void main(int argc, char **argv)
 {
 	heater_data_t *data;
 	struct timespec begin, start, end;
 	struct timespec sleep = { .tv_sec = 0, .tv_nsec = 4 * 1000000 };
+	size_t timer = 0, iters_per_step = 25;
+	float time_delta = 1.0 / iters_per_step;
+	unsigned long long runtime = 0;
+	bool realtime = false;
+
+	if (argc < 2) {
+		printf("Runtime argument required!\n");
+		printf("%s <runtime:sec> [<realtime:[0|1]>]\n", argv[0]);
+		exit(1);
+	}
+
+	runtime = strtoull(argv[1], NULL, 0);
+
+	if (argc == 3)
+		realtime = (bool)strtoul(argv[2], NULL, 0);
 
 	data = heater_compute_init(all_layers);
 	heater_compute_set_power(data, 400);
-	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-	begin = start;
-	while (1) {
-		clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-		heater_compute_iterate(data, timespec_delta(start, end));
-		printf("%lu: %f\n", timespec_delta(begin, end),
-			   heater_compute_get_temperature(data));
-		start = end;
-		clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &sleep, NULL);
+
+	if (realtime) {
+		clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+		begin = start;
 	}
+
+	while (timer < runtime) {
+		if (realtime) {
+			clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+			heater_compute_iterate(data, timespec_delta(start, end));
+			printf("%.6f: %f\n",
+				   (float)timespec_delta(begin, end) / SEC_TO_NSEC(1),
+				   heater_compute_get_temperature(data));
+			start = end;
+			clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &sleep, NULL);
+		} else {
+			size_t i;
+
+			for (i = 0; i < iters_per_step; i++) {
+				heater_compute_iterate(data, SEC_TO_NSEC(time_delta));
+				printf("%f: %f\n", (float)timer + i * time_delta,
+					   heater_compute_get_temperature(data));
+			}
+
+			timer++;
+		}
+	}
+
+	heater_compute_free(data);
 }

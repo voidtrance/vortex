@@ -23,6 +23,16 @@ def make_figure(graphs):
     fig = go.Figure(graphs, layout=layout)
     return fig
 
+def make_runtime(data):
+    t_graph = go.Bar(x=[x[0] for x in data],
+                     y=[x[1] for x in data])
+    layout = go.Layout(autosize=False, width=1800, height=1800,
+                       xaxis=go.layout.XAxis(title="Run", linecolor="black", linewidth=1, mirror=True),
+                       yaxis=go.layout.YAxis(title="Time (ns)", linecolor="black", linewidth=1, mirror=True),
+                       margin=go.layout.Margin(l=50, r=50, b=100, t=100, pad=4))
+    fig = go.Figure(t_graph, layout=layout)
+    return fig
+
 def output_graph(graphs, filename):
     prefix = """<html>
 <head>
@@ -38,10 +48,12 @@ th.title { text-align: center; background-color: #3f87a6; }
 
     with open(filename, 'w') as fd:
         fd.write(prefix)
-        for algo in graphs:
+        for algo, figure in graphs.items():
+            if not figure:
+                continue
             fd.write(f"<table><tr><th class='title'>{algo}</th></tr>")
             fd.write("<tr><td>")
-            html = graphs[algo].to_html(full_html=False, include_plotlyjs=True)
+            html = figure.to_html(full_html=False, include_plotlyjs=True)
             html = html.replace("<div>", "<div class=\"plotly-graph-top\">")
             fd.write(html)
             fd.write("</td></tr></table></div></div>")
@@ -211,9 +223,12 @@ def parse_compare(fd, ambient):
         if len(parts) == 3:
             parts = parts[1:]
         timestamp, temp = parts
-        timestamp = int(timestamp)
+        try:
+            timestamp = int(timestamp)
+            sec_time = timestamp / 1000000000
+        except ValueError:
+            sec_time = float(timestamp)
         temp = round(float(temp), 3)
-        sec_time = timestamp / 1000000000
         run_end = sec_time
         if not run_start:
             run_start = run_end
@@ -229,18 +244,16 @@ def parse_convection(value):
         return [-1,-1]
     return [top, bottom]
 
-resolution = 0.005
-
 def create_layers(args):
     convection = parse_convection(args.convection)
     if convection[0] == -1:
         print("Invalid convection value")
         sys.exit(1)
 
-    return [Layer(1100000, 0.9, args.heater_conductivity, 0.9, [0, 0], args.heater, resolution),
-            Layer(2650000, 0.9, args.bed_conductivity, 0.2, convection, args.bed, resolution),
-            Layer(3700000, 0.9, 0.25, 0.9, [0,0], ",".join(args.bed.split(",")[:2] + ["1.2"]), resolution),
-            Layer(5500000, 0.6, 0.6, 0.9, [0,0], ",".join(args.bed.split(",")[:2] + ["0.75"]), resolution)]
+    return [Layer(1100000, 0.9, args.heater_conductivity, 0.9, [0, 0], args.heater, args.resolution),
+            Layer(2650000, 0.9, args.bed_conductivity, 0.2, convection, args.bed, args.resolution),
+            Layer(3700000, 0.9, 0.25, 0.9, [0,0], ",".join(args.bed.split(",")[:2] + ["1.2"]), args.resolution),
+            Layer(5500000, 0.6, 0.6, 0.9, [0,0], ",".join(args.bed.split(",")[:2] + ["0.75"]), args.resolution)]
 
 def run_simulation(args):
     data = Namespace()
@@ -258,7 +271,7 @@ def run_simulation(args):
         height += data.layers[idx].size.z
         if sensor_coords[2] < height:
             break
-    sensor_coords = [sensor_coords[0] / resolution, sensor_coords[1] / resolution, idx]
+    sensor_coords = [sensor_coords[0] / args.resolution, sensor_coords[1] / args.resolution, idx]
     sensor_coords = map(int, sensor_coords)
     data.sensor = Size._make(sensor_coords)
 
@@ -270,24 +283,27 @@ def run_simulation(args):
     timer = 0
     timestep = 1
     iter_per_step = 25
+    start = time.time_ns()
+    time_delta = timestep / iter_per_step
     while timer < args.runtime:
-        for _ in range(iter_per_step):
-            compute(data, timestep / iter_per_step)
-            temps.append((timer, data.temp[sensor_elem]))
+        for i in range(iter_per_step):
+            compute(data, time_delta)
+            temps.append((timer + i * time_delta, data.temp[sensor_elem]))
         timer += 1
     if args.down:
         data.power = 0
         while timer < args.runtime * 2:
-            for _ in range(iter_per_step):
-                compute(data, timestep / iter_per_step)
-                temps.append((timer, data.temp[sensor_elem]))
+            for i in range(iter_per_step):
+                compute(data, time_delta)
+                temps.append((timer + i * time_delta, data.temp[sensor_elem]))
             timer += 1
-    return temps
+    end = time.time_ns()
+    return temps, end - start
 
 def create_graph_name(args):
     return f"power={args.power},ambient={args.ambient},\n" + \
         f"convection={args.convection},bed-conductivity={args.bed_conductivity},\n" + \
-        f"heater-conductivity={args.heater_conductivity}"
+        f"heater-conductivity={args.heater_conductivity},resolution={args.resolution}"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--compare", type=argparse.FileType("r"),
@@ -300,6 +316,8 @@ parser.add_argument("--bed", type=str, default=None,
                     help="Bed size (in mm): <width>,<depth>,<height>")
 parser.add_argument("--power", type=float, default=None,
                     help="Heater power in watts")
+parser.add_argument("--resolution", type=float, default=0.005,
+                    help="Element resolution")
 parser.add_argument("--heater", type=str, default=None,
                     help="The size of the heater. Format is same as --bed.")
 parser.add_argument("--ambient", type=float, default=25.0,
@@ -320,13 +338,17 @@ sim_params.add_argument("--heater-conductivity", type=float, default=0.3,
 args = parser.parse_args()
 
 graphs = []
+runtimes = []
+figure_runtime = None
 if args.commands:
     for line in args.commands:
         print(f"Simulation parameters: {line.strip()}")
         args = parser.parse_args(line.split())
-        temps = run_simulation(args)
+        temps, duration = run_simulation(args)
         graphs.append(make_graph(create_graph_name(args), temps))
+        runtimes.append((create_graph_name(args), duration))
     figure = make_figure(graphs)
+    figure_runtime = make_runtime(runtimes)
 else:
     if not args.bed or not args.power or not args.heater:
         print("Arguments '--bed', '--heater', and '--power' are required")
@@ -336,8 +358,8 @@ else:
         comp_temps, args.runtime = parse_compare(args.compare, args.ambient)
         print(f"Simulating {args.runtime} seconds")
         graphs.append(make_graph("Compare", comp_temps))
-    temps = run_simulation(args)
+    temps, _ = run_simulation(args)
     graphs.append(make_graph("Simulation", temps))
     figure = make_figure(graphs)
 
-output_graph({"Heater Simulation": figure}, args.output)
+output_graph({"Heater Simulation": figure, "Runtimes": figure_runtime}, args.output)
