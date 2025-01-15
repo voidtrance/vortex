@@ -197,6 +197,13 @@ class KlipperFrontend(BaseFrontend):
                     return obj
         return None
 
+    def get_controller_clock(self, high=False):
+        ticks = self.get_controller_clock_ticks()
+        if high:
+            return (ticks >> 32) & 0xffffffff
+        else:
+            return ticks & 0xffffffff
+
     def identify(self, cmd, offset, count):
         self._test = None
         data = self.identity_resp[offset:offset+count]
@@ -210,7 +217,7 @@ class KlipperFrontend(BaseFrontend):
             obj.shutdown()
         self.respond(proto.ResponseTypes.RESPONSE,
                      proto.KLIPPER_PROTOCOL.shutdown.shutdown,
-                     clock=self.get_controller_clock_ticks(),
+                     clock=self.get_controller_clock(),
                      static_string_id=reason)
 
     def is_shutdown(self, reson):
