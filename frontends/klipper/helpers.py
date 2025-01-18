@@ -44,6 +44,7 @@ class AnalogPin:
         self.name = name
         self.timer = None
         self._log = Logger(name, oid)
+        self.timer = self.frontend.register_timer(self.handler, 0)
     def schedule_query(self, cmd, clock, sample_ticks,
                        sample_count, rest_ticks, min_value, max_value,
                        range_check_count):
@@ -92,87 +93,125 @@ class AnalogPin:
         self.shutdown()
 
 class Flags(enum.IntFlag):
-    OFF = enum.auto()
     ON = enum.auto()
     TOGGLING = enum.auto()
     CHECK_END = enum.auto()
     DEFAULT_ON = enum.auto()
 
 class DigitalPin:
+    class Cycle:
+        def __init__(self, waketime, duration):
+            self.waketime = waketime
+            self.duration = duration
     def __init__(self, frontend, oid, obj_id, name):
         self.frontend = frontend
         self.oid = oid
         self.id = obj_id
         self.name = name
         self.end_time = 0
-        self.flags = Flags.OFF
+        self.flags = 0
         self.max_duration = 0
         self.handler = self.event
-        self.timer = None
+        self.timer = self.frontend.register_timer(self.timer_handler, 0)
+        self.waketime = 0
         self.cycle_ticks = 0
         self._log = Logger(name, oid)
+        self._cycles = []
+    def _schedule(self, timer, time):
+        try:
+            self.frontend.reschedule_timer(timer, time)
+        except VortexCoreError:
+            self.frontend.shutdown("Timer too close")
     def _set_pin(self, value):
         self.frontend.queue_command(ModuleTypes.DIGITAL_PIN,
                                     self.name, "set", {"state": int(value)})
     def set_initial_value(self, value, default):
-        self.flags = (Flags.ON if value else Flags.OFF) | \
-            (Flags.DEFAULT_ON if default else Flags.OFF)
+        #self._log.debug(f"value: {value}, default: {default}")
+        self.flags = (Flags.ON if value else 0)
+        if default:
+            self.flags |= Flags.DEFAULT_ON
+        self._log.debug(f"flags: {self.flags!r}")
         self._set_pin(self.flags & Flags.ON)
     def set_max_duration(self, duration):
         self.max_duration = duration
     def set_cycle_ticks(self, ticks):
         self.cycle_ticks = ticks
     def schedule_cycle(self, start, ticks_on):
-        self.on_duration = ticks_on
+        c = self.Cycle(start, ticks_on)
+        self._cycles.append(c)
+        self._log.debug(f"len: {len(self._cycles)}, start: {start}, on: {ticks_on}")
+        if len(self._cycles) > 1:
+            return
         self.end_time = start
         self.flags |= Flags.CHECK_END
-        self.handler = self.event
-        if not self.timer:
-            self.timer = self.frontend.register_timer(self.timer_handler,
-                                                      start)
-        else:
-            self.frontend.reschedule_timer(self.timer, start)
+        self._log.debug(f"flags: {self.flags!r}")
+        if not (self.flags & Flags.TOGGLING and \
+                self.frontend.clock_cmp(self.waketime, start)) < 0:
+            self.handler = self.event
+            self.waketime = start
+            self._schedule(self.timer, start)
     def timer_handler(self, ticks):
         return self.handler(ticks)
     def event(self, ticks):
-        flags = Flags.ON if self.on_duration else Flags.OFF
+        self._log.debug(f"[{ticks}] len: {len(self._cycles)}, flags: {self.flags!r}")
+        if len(self._cycles) == 0:
+            self.frontend.shutdown("Missed scheduling of next digital out event")
+            return 0
+        cycle = self._cycles.pop(0)
+        flags = Flags.ON if cycle.duration else 0
         self._set_pin(flags)
         end_time = 0
-        if flags == Flags.OFF or self.on_duration >= self.cycle_ticks:
+        self._log.debug(f"flags: {flags!r}, duration: {cycle.duration}, cycle_ticks: {self.cycle_ticks}")
+        if int(flags) == 0 or cycle.duration >= self.cycle_ticks:
             if (not int(flags)) != (not int(self.flags & Flags.DEFAULT_ON)) \
                 and self.max_duration:
-                end_time = ticks + self.max_duration
+                end_time = self.waketime + self.max_duration
                 flags |= Flags.CHECK_END
         else:
-            self.flags |= Flags.TOGGLING
+            flags |= Flags.TOGGLING
             if self.max_duration:
-                end_time = ticks + self.max_duration
+                end_time = self.waketime + self.max_duration
                 flags |= Flags.CHECK_END
+        self._log.debug(f"flags: {flags!r}")
+        if len(self._cycles):
+            _cycle = self._cycles[0]
+            if Flags.CHECK_END in flags and self.frontend.clock_cmp(end_time, _cycle.waketime) < 0:
+                self.frontend.shutdown("Scheduled digital out event will exceed max duration")
+                return 0
+            end_time = _cycle.waketime
+            flags |= Flags.CHECK_END
         # we are toggling
         self.end_time = end_time
-        self.flags |= flags | (self.flags & Flags.DEFAULT_ON)
-        if Flags.TOGGLING not in flags:
-            if Flags.CHECK_END not in flags:
+        self.flags = flags | (self.flags & Flags.DEFAULT_ON)
+        self._log.debug(f"flags: {flags!r}, end_time: {end_time}")
+        if not (Flags.TOGGLING & flags):
+            if not (Flags.CHECK_END & flags):
                 return 0
+            self.waketime = end_time
             return end_time
-        waketime = ticks + self.on_duration
-        if Flags.CHECK_END in flags and waketime >= end_time:
+        waketime = self.waketime + cycle.duration
+        if Flags.CHECK_END & flags and self.frontend.clock_cmp(waketime, end_time) >= 0:
+            self.waketime = end_time
             return end_time
         self.handler = self.toggling
-        self.off_duration = self.cycle_ticks - self.on_duration
+        self.waketime = waketime
+        self.on_duration = cycle.duration
+        self.off_duration = self.cycle_ticks - cycle.duration
         return waketime
     def toggling(self, ticks):
+        self._log.debug(f"[{ticks}] flags: {self.flags!r}, waketime: {self.waketime}, end_time: {self.end_time}")
         self.flags ^= Flags.ON
-        self.flags ^= Flags.OFF
         self._set_pin(self.flags)
-        waketime = ticks
+        waketime = self.waketime
         if Flags.ON in self.flags:
             waketime += self.on_duration
         else:
             waketime += self.off_duration
-        if Flags.CHECK_END in self.flags and waketime >= self.end_time:
+        self._log.debug(f"waketime: {waketime}, end_time: {self.end_time}")
+        if Flags.CHECK_END & self.flags and self.frontend.clock_cmp(waketime, self.end_time) > 0:
             self.handler = self.event
             waketime = self.end_time
+        self.waketime = waketime
         return waketime
     def shutdown(self):
         if self.timer:
@@ -195,7 +234,7 @@ class HeaterPin(DigitalPin):
         status = self.frontend.query_object([self.id])[self.id]
         self.pin_word = ctypes.cast(status["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
     def _set_pin(self, value):
-        self.pin_word.contents.value = Flags.ON in value
+        self.pin_word.contents.value = int(not (not (Flags.ON & value)))
 
 class StepperPinShift(enum.IntFlag):
     ENABLE = 0
