@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import zlib
 import json
+import ctypes
 import vortex.lib.logging as logging
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends import BaseFrontend
@@ -62,6 +63,8 @@ class KlipperFrontend(BaseFrontend):
         self._string_map = {}
         self._shutdown = False
         self._shutdown_reason = None
+        self._arch = 0
+        self._arch_mask = 0
 
     def _add_commands(self, cmd_set):
         for name, cmd in vars(cmd_set).items():
@@ -72,6 +75,10 @@ class KlipperFrontend(BaseFrontend):
                 self.identity["responses"][cmd.response] = self.counter.next()
 
     def create_identity(self):
+        self._arch = self._raw_controller_params["hw"]["arch"]
+        self._arch_mask = (1 << self._arch) - 1
+        self._clock_c_utype = getattr(ctypes, f"c_uint{self._arch}")
+        self._clock_c_type = getattr(ctypes, f"c_int{self._arch}")
         self.identity = {x: {} for x in ["commands", "enumerations",
                                          "config", "responses"]}
         self.identity["version"] = "96cceed2"
@@ -200,10 +207,14 @@ class KlipperFrontend(BaseFrontend):
     def get_controller_clock(self, high=False):
         ticks = self.get_controller_clock_ticks()
         if high:
-            return (ticks >> 32) & 0xffffffff
+            return (ticks >> self._arch) & self._arch_mask
         else:
-            return ticks & 0xffffffff
+            return ticks & self._arch_mask
 
+    def clock_cmp(self, time_a, time_b):
+        cmp = self._clock_c_type(self._clock_c_utype(time_a - time_b))
+        return cmp.value
+    
     def identify(self, cmd, offset, count):
         self._test = None
         data = self.identity_resp[offset:offset+count]

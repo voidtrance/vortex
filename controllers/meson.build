@@ -13,5 +13,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['__init__.py', 'types.py', 'stm32f4.py'], subdir: 'vortex/controllers')
+py.install_sources(['__init__.py', 'types.py', 'timers.py',
+                    'stm32f4.py'], subdir: 'vortex/controllers')
 subdir('objects')

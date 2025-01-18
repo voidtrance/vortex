@@ -60,9 +60,7 @@ class Emulator:
         interface.event_unregister = self._controller.event_unregister
         interface.get_ticks =  self._controller.get_clock_ticks
         interface.get_runtime = self._controller.get_runtime
-        interface.register_timer = self._controller.register_timer
-        interface.reschedule_timer = self._controller.reschedule_timer
-        interface.unregister_timer = self._controller.unregister_timer
+        interface.timers = self._controller.timers
         self._frontend = frontend
         self._frontend.set_kinematics_model(self._kinematics)
         controller_params = self._controller.get_params()

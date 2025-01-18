@@ -65,9 +65,7 @@ class BaseFrontend:
         self.get_controller_runtime = interface.get_runtime
         self.event_register = interface.event_register
         self.event_unregister = interface.event_unregister
-        self.register_timer = interface.register_timer
-        self.reschedule_timer = interface.reschedule_timer
-        self.unregister_timer = interface.unregister_timer
+        self.timers = interface.timers
 
     def set_controller_data(self, data):
         self._raw_controller_params = data

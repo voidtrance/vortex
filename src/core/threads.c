@@ -60,7 +60,7 @@ core_thread_list_t core_threads;
 static pthread_once_t initialized = PTHREAD_ONCE_INIT;
 
 typedef struct {
-    uint64_t controller_ticks ;
+    uint64_t controller_ticks;
     uint64_t controller_runtime;
     int32_t trigger;
     bool paused;
@@ -119,6 +119,7 @@ static void *core_time_control_thread(void *arg) {
     float update = (1000.0 / ((float)args->update.update_frequency / 1000000));
     struct timespec sleep = { .tv_sec = (uint64_t)update / SEC_TO_NSEC(1),
             .tv_nsec = (uint64_t)update % SEC_TO_NSEC(1) };
+    uint64_t controller_clock_mask = (1UL << args->update.width) - 1;
     struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000 };
     struct timespec start;
     struct timespec now;
@@ -146,7 +147,7 @@ static void *core_time_control_thread(void *arg) {
         runtime = timespec_delta(start, now);
         set_value(global_time_data.controller_runtime, runtime);
         set_value(global_time_data.controller_ticks,
-                  (uint64_t)((float)runtime / tick));
+                  (uint64_t)((float)runtime / tick) & controller_clock_mask);
         timer_update_wake(&global_time_data.trigger);
     }
 

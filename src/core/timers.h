@@ -28,10 +28,13 @@ typedef struct {
 
 typedef uint64_t core_timer_handle_t;
 
-int core_timers_init(void);
+#define CORE_TIMER_ERROR ((core_timer_handle_t)(-1UL))
+
+int core_timers_init(uint16_t width);
 core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout);
 int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout);
 void core_timer_unregister(core_timer_handle_t handle);
+int core_timers_compare(uint64_t timeout1, uint64_t timeout2);
 void core_timers_disarm(void);
 void core_timers_free(void);
 

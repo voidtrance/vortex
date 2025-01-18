@@ -17,6 +17,7 @@ from vortex.controllers import Pins
 from vortex.controllers import Controller
 
 class STM32F446(Controller):
+    ARCH = 32
     PINS = [Pins("PA", 0, 15), Pins("PB", 0, 15),
             Pins("PC", 0, 15), Pins("PD", 0, 15),
             Pins("PE", 0, 15), Pins("PF", 0, 15),

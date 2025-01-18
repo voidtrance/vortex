@@ -32,6 +32,7 @@ typedef struct {
         struct {
             uint64_t tick_frequency;
             uint64_t update_frequency;
+            uint16_t width;
         } update;
         struct {
             void (*callback)(uint64_t, void *);

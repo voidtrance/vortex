@@ -19,15 +19,18 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <sys/queue.h>
+#include <threads.h>
+#include <debug.h>
 #include "timers.h"
-#include "threads.h"
 
-typedef struct core_timers_struct {
-    CIRCLEQ_ENTRY(core_timers_struct) entry;
+#define CHECK_TIMER 0
+
+typedef struct core_timers_entry_struct {
+    CIRCLEQ_ENTRY(core_timers_entry_struct) entry;
     core_timer_t timer;
     uint64_t timestamp;
     bool armed;
-} core_timers_t;
+} core_timers_entry_t;
 
 /* Some useful CIRCLEQ macros which are aren't provided. */
 #define CIRCLEQ_REMOVE_INIT(head, elm, field)                   \
@@ -40,29 +43,74 @@ typedef struct core_timers_struct {
 #define CIRCLEQ_FOREACH_SAFE(elm, next, head, field)                  \
     for ((elm) = ((head)->cqh_first), (next) = (elm)->field.cqe_next;	\
          (elm) != (const void *)(head);                               \
-         (elm) = (next), (next) = (elm)->field.cqe_next)
+         (elm) = (next), (next) = (next)->field.cqe_next)
 
-typedef CIRCLEQ_HEAD(core_timers_list, core_timers_struct) core_timers_list_t;
-static core_timers_list_t core_timers = CIRCLEQ_HEAD_INITIALIZER(core_timers);
-static core_timers_list_t disarmed = CIRCLEQ_HEAD_INITIALIZER(disarmed);
-static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t disarmed_lock = PTHREAD_MUTEX_INITIALIZER;
+typedef CIRCLEQ_HEAD(core_timers_list,
+                     core_timers_entry_struct) core_timers_list_t;
+
+typedef struct {
+    core_timers_list_t list;
+    pthread_mutex_t lock;
+} core_timer_set_t;
+
+typedef struct {
+    core_timer_set_t armed;
+    core_timer_set_t disarmed;
+    uint64_t current;
+    uint64_t mask;
+} core_timers_t;
+
+static core_timers_t timers = {
+    .armed.list = CIRCLEQ_HEAD_INITIALIZER(timers.armed.list),
+    .armed.lock = PTHREAD_MUTEX_INITIALIZER,
+    .disarmed.list = CIRCLEQ_HEAD_INITIALIZER(timers.disarmed.list),
+    .disarmed.lock = PTHREAD_MUTEX_INITIALIZER,
+    .current = 0,
+    .mask = 0,
+};
+
+#ifdef VORTEX_DEBUG
+static struct __timer_check_struct {
+    core_timer_handle_t handles[64];
+    void *lists[5];
+    size_t index;
+} __timer_check = { 0 };
+
+static void __do_timer_check(core_timer_handle_t handle,
+                             core_timers_list_t *list) {
+    size_t i;
+    for (i = 0; i < __timer_check.index; i++) {
+        if (__timer_check.handles[i] == handle)
+            return;
+    }
+    if (!list || (list && (core_timer_handle_t)list == handle))
+        return;
+    breakpoint();
+}
+#endif
 
 static void core_timers_update(uint64_t ticks, void *data);
 
-int core_timers_init(void) {
+int core_timers_init(uint16_t width) {
     core_thread_args_t args;
 
+#ifdef VORTEX_DEBUG
+    __timer_check.lists[0] = &timers.armed.list;
+    __timer_check.lists[1] = &timers.disarmed.list;
+#endif
+
+    timers.mask = (1UL << width) - 1;
     args.timer.callback = core_timers_update;
-    args.timer.data = (void *)&core_timers;
+    args.timer.data = (void *)&timers;
     return core_thread_create(CORE_THREAD_TYPE_TIMER, &args);
 }
 
-static void core_timers_order(core_timers_list_t *list, core_timers_t *timer) {
-    core_timers_t *entry;
+static void core_timers_order(core_timers_list_t *list,
+                              core_timers_entry_t *timer) {
+    core_timers_entry_t *entry;
 
     CIRCLEQ_FOREACH(entry, list, entry) {
-        if (timer->timestamp < entry->timestamp) {
+        if (core_timers_compare(timer->timestamp, entry->timestamp) <= 0) {
             CIRCLEQ_INSERT_BEFORE(list, entry, timer, entry);
             goto inserted;
         }
@@ -75,8 +123,16 @@ inserted:
 }
 
 core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout) {
-    core_timers_t *timers_entry;
+    core_timers_entry_t *timers_entry;
 
+    timeout &= timers.mask;
+
+#if CHECK_TIMER
+    uint64_t now = __atomic_load_n(&timers.current, __ATOMIC_ACQUIRE);
+
+    if (timeout && timeout <= now)
+        return CORE_TIMER_ERROR;
+#endif
     timers_entry = malloc(sizeof(*timers_entry));
     if (!timers_entry) {
         errno = -ENOMEM;
@@ -86,43 +142,57 @@ core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout) {
     timers_entry->timer = timer;
     timers_entry->timestamp = timeout;
 
+#ifdef VORTEX_DEBUG
+    __timer_check.handles[__timer_check.index++] =
+        (core_timer_handle_t)timers_entry;
+#endif
+
     if (timeout) {
-      pthread_mutex_lock(&lock);
-      core_timers_order(&core_timers, timers_entry);
-      pthread_mutex_unlock(&lock);
+        timers_entry->armed = true;
+        pthread_mutex_lock(&timers.armed.lock);
+        core_timers_order(&timers.armed.list, timers_entry);
+        pthread_mutex_unlock(&timers.armed.lock);
     } else {
         /* register but disarm timer */
         timers_entry->armed = false;
-        pthread_mutex_lock(&disarmed_lock);
-        CIRCLEQ_INSERT_TAIL(&disarmed, timers_entry, entry);
-        pthread_mutex_unlock(&disarmed_lock);
+        pthread_mutex_lock(&timers.disarmed.lock);
+        CIRCLEQ_INSERT_TAIL(&timers.disarmed.list, timers_entry, entry);
+        pthread_mutex_unlock(&timers.disarmed.lock);
     }
 
     return (core_timer_handle_t)timers_entry;
 }
 
-static void timer_disarm(core_timers_t *timer) {
+static void timer_disarm(core_timers_entry_t *timer) {
     timer->armed = false;
-    pthread_mutex_lock(&disarmed_lock);
-    CIRCLEQ_INSERT_TAIL(&disarmed, timer, entry);
-    pthread_mutex_unlock(&disarmed_lock);
+    pthread_mutex_lock(&timers.disarmed.lock);
+    CIRCLEQ_INSERT_TAIL(&timers.disarmed.list, timer, entry);
+    pthread_mutex_unlock(&timers.disarmed.lock);
 }
 
 int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout) {
-    core_timers_t *timer = (core_timers_t *)handle;
+    core_timers_entry_t *timer = (core_timers_entry_t *)handle;
 
-    pthread_mutex_lock(&lock);
+    timeout &= timers.mask;
+#ifdef VORTEX_DEBUG
+    __do_timer_check(handle, NULL);
+#endif
+#if CHECK_TIMER
+    if (timeout &&
+        timeout <= __atomic_load_n(&timers.current, __ATOMIC_ACQUIRE))
+        return -1;
+#endif
+
+    pthread_mutex_lock(&timers.armed.lock);
     if (!timer->armed) {
         if (timeout == 0)
             goto unlock;
 
-        pthread_mutex_lock(&disarmed_lock);
-        if (CIRCLEQ_IN_LIST(timer, entry))
-            CIRCLEQ_REMOVE_INIT(&disarmed, timer, entry);
-        pthread_mutex_unlock(&disarmed_lock);
+        pthread_mutex_lock(&timers.disarmed.lock);
+        CIRCLEQ_REMOVE(&timers.disarmed.list, timer, entry);
+        pthread_mutex_unlock(&timers.disarmed.lock);
     } else {
-        if (CIRCLEQ_IN_LIST(timer, entry))
-            CIRCLEQ_REMOVE_INIT(&core_timers, timer, entry);
+        CIRCLEQ_REMOVE(&timers.armed.list, timer, entry);
         if (timeout == 0) {
             timer_disarm(timer);
             goto unlock;
@@ -130,94 +200,105 @@ int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout) {
     }
 
     timer->timestamp = timeout;
-    core_timers_order(&core_timers, timer);
+    core_timers_order(&timers.armed.list, timer);
 unlock:
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&timers.armed.lock);
     return 0;
 }
 
 void core_timer_unregister(core_timer_handle_t handle) {
-    core_timers_t *timer = (core_timers_t *)handle;
+    core_timers_entry_t *timer = (core_timers_entry_t *)handle;
+
+#ifdef VORTEX_DEBUG
+    __do_timer_check(handle, NULL);
+#endif
 
     if (timer->armed) {
-        pthread_mutex_lock(&lock);
-        CIRCLEQ_REMOVE_INIT(&core_timers, timer, entry);
-        pthread_mutex_unlock(&lock);
+        pthread_mutex_lock(&timers.armed.lock);
+        CIRCLEQ_REMOVE(&timers.armed.list, timer, entry);
+        pthread_mutex_unlock(&timers.armed.lock);
     } else {
-        pthread_mutex_lock(&disarmed_lock);
-        CIRCLEQ_REMOVE_INIT(&disarmed, timer, entry);
-        pthread_mutex_unlock(&disarmed_lock);
+        pthread_mutex_lock(&timers.disarmed.lock);
+        CIRCLEQ_REMOVE(&timers.disarmed.list, timer, entry);
+        pthread_mutex_unlock(&timers.disarmed.lock);
     }
     free(timer);
 }
 
+int core_timers_compare(uint64_t timeout1, uint64_t timeout2) {
+    return (int)((timeout1 & timers.mask) - (timeout2 & timers.mask));
+}
+
 static void core_timers_update(uint64_t ticks, void *data) {
-    core_timers_list_t *list = (core_timers_list_t *)data;
-    core_timers_t *timer;
-    core_timers_t *next;
+    core_timers_t *timers = (core_timers_t *)data;
+    core_timers_entry_t *timer;
+    core_timers_entry_t *next;
     uint64_t reschedule;
 
-    pthread_mutex_lock(&lock);
-    CIRCLEQ_FOREACH_SAFE(timer, next, list, entry) {
-        if (timer->timestamp > ticks)
-            goto unlock;
+    __atomic_store_n(&timers->current, ticks, __ATOMIC_RELEASE);
 
-        if (CIRCLEQ_IN_LIST(timer, entry))
-            CIRCLEQ_REMOVE_INIT(list, timer, entry);
-        pthread_mutex_unlock(&lock);
+    pthread_mutex_lock(&timers->armed.lock);
+    CIRCLEQ_FOREACH_SAFE(timer, next, &timers->armed.list, entry) {
+#ifdef VORTEX_DEBUG
+        __do_timer_check((core_timer_handle_t)timer, &timers->armed.list);
+        __do_timer_check((core_timer_handle_t)next, &timers->armed.list);
+#endif
+        if (core_timers_compare(timer->timestamp, ticks) >= 0)
+            break;
 
+        CIRCLEQ_REMOVE(&timers->armed.list, timer, entry);
+        pthread_mutex_unlock(&timers->armed.lock);
         reschedule = timer->timer.callback(ticks, timer->timer.data);
-        if (!reschedule) {
+        pthread_mutex_lock(&timers->armed.lock);
+        if (reschedule) {
+            timer->timestamp = reschedule;
+            core_timers_order(&timers->armed.list, timer);
+        } else {
             timer_disarm(timer);
-            pthread_mutex_lock(&lock);
-            continue;
         }
 
-
-        timer->timestamp = reschedule;
-        pthread_mutex_lock(&lock);
-        core_timers_order(list, timer);
+        if (next->entry.cqe_prev != timer)
+            break;
     }
 
-unlock:
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&timers->armed.lock);
     return;
 }
 
 void core_timers_disarm(void) {
-    core_timers_t *timer;
-    core_timers_t *next;
+    core_timers_entry_t *timer;
+    core_timers_entry_t *next;
 
-    pthread_mutex_lock(&lock);
-    if (!CIRCLEQ_EMPTY(&core_timers)) {
-        pthread_mutex_lock(&disarmed_lock);
-        CIRCLEQ_FOREACH_SAFE(timer, next, &core_timers, entry) {
-            CIRCLEQ_REMOVE(&core_timers, timer, entry);
-            CIRCLEQ_INSERT_TAIL(&disarmed, timer, entry);
+    pthread_mutex_lock(&timers.armed.lock);
+    if (!CIRCLEQ_EMPTY(&timers.armed.list)) {
+        pthread_mutex_lock(&timers.disarmed.lock);
+        CIRCLEQ_FOREACH_SAFE(timer, next, &timers.armed.list, entry) {
+            CIRCLEQ_REMOVE(&timers.armed.list, timer, entry);
+            CIRCLEQ_INSERT_TAIL(&timers.disarmed.list, timer, entry);
         }
 
-        pthread_mutex_unlock(&disarmed_lock);
+        pthread_mutex_unlock(&timers.disarmed.lock);
     }
 
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&timers.armed.lock);
 }
 
-static void timers_free(core_timers_list_t *list, pthread_mutex_t *lock) {
-    core_timers_t *timer;
-    core_timers_t *next;
+static void timers_free(core_timer_set_t *set) {
+    core_timers_entry_t *timer;
+    core_timers_entry_t *next;
 
-    pthread_mutex_lock(lock);
-    if (!CIRCLEQ_EMPTY(list)) {
-        CIRCLEQ_FOREACH_SAFE(timer, next, list, entry) {
-            CIRCLEQ_REMOVE(list, timer, entry);
+    pthread_mutex_lock(&set->lock);
+    if (!CIRCLEQ_EMPTY(&set->list)) {
+        CIRCLEQ_FOREACH_SAFE(timer, next, &set->list, entry) {
+            CIRCLEQ_REMOVE(&set->list, timer, entry);
             free(timer);
         }
     }
-    pthread_mutex_unlock(lock);
-    pthread_mutex_destroy(lock);
+    pthread_mutex_unlock(&set->lock);
+    pthread_mutex_destroy(&set->lock);
 }
 
 void core_timers_free(void) {
-    timers_free(&core_timers, &lock);
-    timers_free(&disarmed, &disarmed_lock);
+    timers_free(&timers.armed);
+    timers_free(&timers.disarmed);
 }

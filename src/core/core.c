@@ -526,11 +526,12 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     core_object_type_t type;
     core_thread_args_t thread_args;
+    uint16_t arch;
     uint64_t frequency;
     uint64_t update_frequency;
     int ret;
 
-    if (PyArg_ParseTuple(args, "KKO", &frequency, &update_frequency,
+    if (PyArg_ParseTuple(args, "HKKO", &arch, &frequency, &update_frequency,
                          &core->python_complete_cb) == -1)
         return NULL;
 
@@ -539,7 +540,7 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    if (core_timers_init()) {
+    if (core_timers_init(arch)) {
         PyErr_Format(VortexCoreError, "Failed to initialize core timers");
         return NULL;
     }
@@ -548,6 +549,7 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
 
     thread_args.update.tick_frequency = frequency;
     thread_args.update.update_frequency = update_frequency;
+    thread_args.update.width = arch;
     if (core_thread_create(CORE_THREAD_TYPE_UPDATE, &thread_args)) {
         PyErr_Format(VortexCoreError, "Failed to create timer thread");
         return NULL;
@@ -1293,6 +1295,20 @@ static PyObject *vortex_core_unregister_timer(PyObject *self, PyObject *args) {
     Py_RETURN_NONE;
 }
 
+static PyObject *vortex_core_compare_timer(PyObject *self, PyObject *args) {
+    uint64_t time1;
+    uint64_t time2;
+    int result;
+    PyObject *py_result;
+
+    if (!PyArg_ParseTuple(args, "kk", &time1, &time2))
+        return NULL;
+
+    result = core_timers_compare(time1, time2);
+    py_result = Py_BuildValue("i", result);
+    return py_result;
+}
+
 void core_log(core_log_level_t level, core_object_type_t type, const char *name,
               const char *fmt, ...) {
     va_list args;
@@ -1353,6 +1369,8 @@ static PyMethodDef VortexCoreMethods[] = {
       "Reschedule registered timer" },
     { "unregister_timer", vortex_core_unregister_timer, METH_VARARGS,
       "Unregister a periodic timer" },
+    { "compare_timer", vortex_core_compare_timer, METH_VARARGS,
+      "Compare two timer timeouts" },
     { NULL, NULL, 0, NULL }
 };
 

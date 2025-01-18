@@ -24,6 +24,7 @@ import vortex.core
 import vortex.lib.ctypes_helpers
 from vortex.lib.utils import Counter
 import vortex.lib.logging as logging
+import vortex.controllers.timers as timers
 
 class PinError(Exception): pass
 class Pins:
@@ -144,9 +145,13 @@ class Controller(core.VortexCore):
         self._virtual_objects = {}
         self._completion_callback = None
         self._event_handlers = {}
+        self._timer_factory = timers.Factory(self)
         self._load_objects(config)
         if not self.init_objects():
             raise core.VortexCoreError("Failed to initialize objects.")
+    @property
+    def timers(self):
+        return self._timer_factory
     def _load_virtual_objects(self):
         vobjs = []
         mod_base = "vortex.controllers.objects"
@@ -215,7 +220,7 @@ class Controller(core.VortexCore):
         return True, None
     def start(self, update_frequency, completion_cb):
         self._completion_callback = completion_cb
-        super().start(self.FREQUENCY, update_frequency, self._completion_callback)
+        super().start(self.ARCH, self.FREQUENCY, update_frequency, self._completion_callback)
     def get_frequency(self):
         return self.FREQUENCY
     def virtual_command_complete(self, cmd_id, status):
@@ -229,6 +234,7 @@ class Controller(core.VortexCore):
                         "heaters": self.HEATER_COUNT, "pwm": self.PWM_PIN_COUNT,
                         "digital": self.DIGITAL_PIN_COUNT,
                         "adc_max": self.ADC_MAX,
+                        "arch": self.ARCH,
                         "frequency": self.FREQUENCY}
         cmds = {x: [] for x in ModuleTypes}
         for klass in ModuleTypes:
