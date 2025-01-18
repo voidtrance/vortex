@@ -40,7 +40,10 @@ STATIC_STRINGS = [
     "Unsupported command",
     "Command failure",
     "Invalid count parameter",
+    "Timer too close",
     "Stepper initialization failure",
+    "Missed scheduling of next digital out event",
+    "Scheduled digital out event will exceed max duration",
 ]
 
 class KlipperFrontend(BaseFrontend):
