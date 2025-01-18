@@ -18,6 +18,7 @@
 # However, to simplify development, this Makefile is here for
 # convinience and to record the require build commands.
 PYTHON ?= $(shell which python3)
+PYTHON_DEBUG ?= $(shell which python3-debug)
 GDB := $(shell which gdb)
 VENV ?=
 VENV_PYTHON := $(VENV)/bin/python3
@@ -33,8 +34,10 @@ endif
 all:
 	$(PYTHON) -m pip install --no-build-isolation \
 		--editable . $(DEBUG_OPTS)
-	ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
-		compile_commands.json
+	@if [ ! -L compile_commands.json ]; then \
+		ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
+			compile_commands.json; \
+	fi
 
 venv:
 	@if [ -z "$(VENV)" ]; then \
@@ -53,7 +56,7 @@ wheel: venv
 	$(VENV_PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
 
 gdb:
-	$(GDB) $(PYTHON) -ex 'r ./vortex_emulator.py $(GDB_OPTS)'
+	$(GDB) $(PYTHON_DEBUG) -ex 'r ./vortex_emulator.py $(GDB_OPTS)'
 
 clean:
 	rm -rf build dist
