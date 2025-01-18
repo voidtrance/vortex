@@ -283,9 +283,10 @@ class Stepper:
         self.timer.callback = self.send_step
         self._needs_reset = False
         self.move = CurrentMove(0, 0, 0, 0)
-        self._total_step_count = 0
-        self._total_step_queued = 0
         self._step_sched = 0
+        self._position = 0
+        self._steps_queued = 0
+        self._steps_executed = 0
         cmd_id = self.frontend.queue_command(ModuleTypes.STEPPER,
                                              self.name, "use_pins",
                                              {"enable": True})
@@ -307,8 +308,10 @@ class Stepper:
         return pin
     @property
     def position(self):
-        status = self.frontend.query([self.id])[self.id]
-        return status.get("steps")
+        p = self._position
+        if self.move:
+            p -= self.move.count * (-1 + 2 * self.move.dir)
+        return p
     def set_stop_on_trigger(self, trsync):
         trsync.add_signal(self.stop_moves)
     def set_next_move_dir(self, dir):
@@ -320,9 +323,9 @@ class Stepper:
             self.frontend.shutdown("Invalid count parameter")
             return
         move = StepperMove(interval, count, add, self.next_dir)
-        self._total_step_queued += count
         self.move_queue.append(move)
         self._steps_queued += self.move.count
+        self._log.debug(f"Queue: {move.count} in {move.dir}")
         if self.move.count == 0:
             timeout = self._next_move()
             self._step_sched = timeout
@@ -332,11 +335,8 @@ class Stepper:
         self.move.count = 0
         self.move_queue.clear()
         self.pin_word.contents.value &= ~StepperPins.DIR
-        self._log.debug(f"total step count for move: {self._total_step_count}, queued: {self._total_step_queued}")
-        self._total_step_count = 0
-        self._total_step_queued = 0
         self._needs_reset = True
-        self._log(f"Steps queued: {self._steps_queued}, executed: {self._steps_executed}")
+        print(f"Steps queued: {self._steps_queued}, executed: {self._steps_executed}")
         self._steps_executed = self._steps_queued = 0
     def _next_move(self):
         if self.move_queue:
@@ -347,16 +347,13 @@ class Stepper:
             next_step_time = self.move.next_step_time
             self.move = CurrentMove(interval, move.count,
                                     move.increment, move.dir)
+            self._position += self.move.count * (-1 + 2 * self.move.dir)
             self.move.next_step_time = \
                 self.frontend.timers.to_time(next_step_time + move.interval)
             return self.move.next_step_time
         return 0
     def _calc_step_time(self, ticks):
-        self.move.count -= 1
-        self._total_step_count += 1
         min_step = ticks + self.step_pulse
-        if self.move.count & 1:
-            return min_step
         if self.move.count:
             self.move.next_step_time = \
                 self.frontend.timers.to_time(self.move.next_step_time + self.move.interval)
@@ -371,6 +368,8 @@ class Stepper:
         return min_step
     def send_step(self, ticks):
         self.pin_word.contents.value ^= StepperPins.STEP
+        self.move.count -= 1
+        self._steps_executed += 1
         return self._calc_step_time(ticks)
     def reset_clock(self, clock):
         self.move.next_step_time = clock
