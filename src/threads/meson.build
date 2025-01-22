@@ -13,17 +13,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-project('vortex', 'c')
-
-py = import('python').find_installation(pure: false)
-root = meson.project_source_root()
-
-# Build the core utils library
-subdir('src')
-
-# Install Python source
-subdir('emulator')
-subdir('controllers')
-subdir('frontends')
-subdir('lib')
-install_data('vortex_emulator.py', install_dir: get_option('bindir'))
+core_threads_include = include_directories('.')
+core_threads = library('threads', ['threads.c'],
+                     install: true,
+                     include_directories: core_utils_include,
+                     install_dir: py.get_install_dir(pure: false) / 'vortex/core/threads')
+core_threads_dep = declare_dependency(link_with: core_threads,
+                                    include_directories: core_threads_include)

@@ -18,7 +18,6 @@
 #ifndef __THREAD_CONTROL_H__
 #define __THREAD_CONTROL_H__
 #include <stdint.h>
-#include "common_defs.h"
 
 typedef enum {
     CORE_THREAD_TYPE_UPDATE,
@@ -26,6 +25,10 @@ typedef enum {
     CORE_THREAD_TYPE_OBJECT,
     CORE_THREAD_TYPE_WORKER,
 } core_thread_type_t;
+
+typedef void (*timer_callback_t)(uint64_t, void *);
+typedef void (*object_callback_t)(void *, uint64_t, uint64_t);
+typedef void (*worker_callback_t)(void *);
 
 typedef struct {
     union {
@@ -35,16 +38,17 @@ typedef struct {
             uint16_t width;
         } update;
         struct {
-            void (*callback)(uint64_t, void *);
+            timer_callback_t callback;
             void *data;
         } timer;
         struct {
-            core_object_t *object;
+            object_callback_t callback;
+            void *data;
             const char *name;
         } object;
         struct {
             uint64_t frequency;
-            void (*callback)(void *);
+            worker_callback_t callback;
             void *data;
         } worker;
     };

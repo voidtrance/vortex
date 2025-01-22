@@ -29,9 +29,7 @@
 #include <sys/resource.h>
 #include <sys/queue.h>
 #include <utils.h>
-#include "core.h"
 #include "threads.h"
-#include "debug.h"
 
 struct core_thread_control {
     int do_run;
@@ -126,9 +124,6 @@ static void *core_time_control_thread(void *arg) {
 
     data->ret = 0;
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, data->name,
-             "step duration: %f, tick: %f", update, tick);
-
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     while (get_value(*data->control) == 1) {
         uint64_t runtime;
@@ -171,14 +166,13 @@ static void *core_timer_thread(void *arg) {
 static void *core_update_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
-    core_object_t *object = args->object.object;
 
     data->ret = 0;
     while (get_value(*data->control) == 1) {
         timer_update_wait(&global_time_data.trigger);
-        object->update(object,
-                       get_value(global_time_data.controller_ticks),
-                       get_value(global_time_data.controller_runtime));
+        args->object.callback(args->object.data,
+                              get_value(global_time_data.controller_ticks),
+                              get_value(global_time_data.controller_runtime));
     }
 
     pthread_exit(&data->ret);
@@ -194,8 +188,6 @@ static void *core_generic_thread(void *arg) {
     if (args->worker.frequency)
         step_duration = ((float)1000 / ((float)args->worker.frequency / 1000000));
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core", "worker frequency: %f",
-             step_duration);
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = step_duration;
 

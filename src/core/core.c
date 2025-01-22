@@ -30,11 +30,11 @@
 #include <sys/queue.h>
 #include <utils.h>
 #include <kinematics.h>
+#include <threads.h>
 
 #include "core.h"
 #include "events.h"
 #include "common_defs.h"
-#include "threads.h"
 #include "timers.h"
 #include "objects/object_defs.h"
 #include "objects/axis.h"
@@ -579,7 +579,8 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
             snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
                      object->name);
             thread_args.object.name = strdup(name);
-            thread_args.object.object = object;
+            thread_args.object.callback = (object_callback_t)object->update;
+            thread_args.object.data = object;
             if (core_thread_create(CORE_THREAD_TYPE_OBJECT, &thread_args)) {
                 core_threads_destroy();
                 return NULL;
