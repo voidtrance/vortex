@@ -22,9 +22,9 @@
 #include <errno.h>
 #include <utils.h>
 #include <kinematics.h>
-#include "../common_defs.h"
+#include <common_defs.h>
 #include "object_defs.h"
-#include "../events.h"
+#include <events.h>
 #include "toolhead.h"
 #include "axis.h"
 

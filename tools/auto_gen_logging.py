@@ -35,11 +35,8 @@ HEADER = """/*
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __DEBUG_H__
-#define __DEBUG_H__
-#ifdef VORTEX_MEM_LEAK
-#include "mem_debug.h"
-#endif
+#ifndef __LOGGING_H__
+#define __LOGGING_H__
 
 """
 FOOTER = "\n#endif\n"

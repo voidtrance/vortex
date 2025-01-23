@@ -23,9 +23,9 @@
 #include <time.h>
 #include <kinematics.h>
 #include <pthread.h>
-#include "../debug.h"
-#include "../common_defs.h"
-#include "../events.h"
+#include <logging.h>
+#include <common_defs.h>
+#include <events.h>
 #include "object_defs.h"
 #include "probe.h"
 #include "toolhead.h"

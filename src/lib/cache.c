@@ -21,11 +21,9 @@
 #include <pthread.h>
 #include <errno.h>
 #include <sys/queue.h>
+#include <debug.h>
 #include <stdint.h>
 #include "cache.h"
-#ifdef VORTEX_DEBUG
-#include <stdio.h>
-#endif
 
 #define OBJECT_CACHE_TAG 0xdeadbeefc0dedead
 
@@ -37,12 +35,16 @@ struct cache_object {
     uint64_t tag;
     object_cache_t *cache;
     void *ptr;
+#ifdef VORTEX_DEBUG
+    uint64_t refcount;
+#endif
 };
 
 STAILQ_HEAD(cache_object_list, cache_object);
 
 struct object_cache {
     void **memory;
+    size_t page_size;
     size_t segment;
     size_t num_segments;
     struct cache_object_list objects;
@@ -56,12 +58,10 @@ struct object_cache {
 static bool object_cache_fill(object_cache_t *cache) {
     void *new_memory;
     void *ptr;
-    size_t page_size;
     size_t limit;
 
     /* Allocate a page at a time. */
-    page_size = sysconf(_SC_PAGESIZE);
-    new_memory = calloc(1, page_size);
+    new_memory = calloc(1, cache->page_size);
     if (!new_memory)
         return false;
 
@@ -86,7 +86,7 @@ static bool object_cache_fill(object_cache_t *cache) {
         }
     }
 
-    limit = page_size - sizeof(struct cache_object) - cache->object_size;
+    limit = cache->page_size - sizeof(struct cache_object) - cache->object_size;
     for (ptr = new_memory; ptr < new_memory + limit; cache->num_objects++) {
         struct cache_object *object_entry = (struct cache_object *)ptr;
 
@@ -94,6 +94,9 @@ static bool object_cache_fill(object_cache_t *cache) {
         object_entry->tag = OBJECT_CACHE_TAG;
         object_entry->ptr = ptr;
         object_entry->cache = cache;
+#ifdef VORTEX_DEBUG
+        object_entry->refcount = 0;
+#endif
         ptr += cache->object_size;
         STAILQ_INSERT_TAIL(&cache->objects, object_entry, entry);
     }
@@ -111,6 +114,7 @@ int object_cache_create(object_cache_t **cache_ptr, size_t object_size) {
         if (!cache)
             return -ENOMEM;
 
+        cache->page_size = sysconf(_SC_PAGESIZE);
         cache->segment = 0;
         cache->num_segments = 0;
         cache->object_size = object_size;
@@ -150,6 +154,16 @@ void *object_cache_alloc(object_cache_t *cache) {
 
     object = STAILQ_FIRST(&cache->objects);
     STAILQ_REMOVE(&cache->objects, object, cache_object, entry);
+
+#ifdef VORTEX_DEBUG
+    if (object->refcount) {
+        fprintf(stderr, "Cache object has more than one reference!");
+        breakpoint();
+    }
+
+    object->refcount++;
+#endif
+
     STAILQ_INSERT_TAIL(&cache->alloced, object, entry);
     cache->refcount++;
     pthread_mutex_unlock(&cache->lock);
@@ -160,6 +174,7 @@ void object_cache_free(void *object) {
     struct cache_object *obj;
     object_cache_t *cache;
 #ifdef VORTEX_DEBUG
+    struct cache_object *__obj;
     bool found = false;
 #endif
 
@@ -176,14 +191,15 @@ void object_cache_free(void *object) {
 
     pthread_mutex_lock(&cache->lock);
 #ifdef VORTEX_DEBUG
-    STAILQ_FOREACH(obj, &cache->alloced, entry) {
-        if (obj->ptr == object) {
-            found = true;
-            break;
-        }
-    }
-    if (!found)
+    STAILQ_FOREACH(__obj, &cache->alloced, entry)
+        found |= __obj->ptr == object;
+
+    if (!found) {
         fprintf(stderr, "Cache object not found in alloced list.\n");
+        breakpoint();
+    }
+
+    obj->refcount--;
 #endif
     STAILQ_REMOVE(&cache->alloced, obj, cache_object, entry);
     STAILQ_INSERT_TAIL(&cache->objects, obj, entry);

@@ -19,7 +19,7 @@
 #include <string.h>
 #include <math.h>
 #include "object_defs.h"
-#include "../common_defs.h"
+#include <common_defs.h>
 #include "heater.h"
 #include "thermistor.h"
 

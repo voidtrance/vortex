@@ -15,12 +15,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __CORE_H__
-#define __CORE_H__
-#include "logging.h"
-#include "objects/object_defs.h"
+#ifndef __DEBUG_H__
+#define __DEBUG_H__
 
-void core_log(core_log_level_t level, core_object_type_t type,
-              const char *name, const char *fmt, ...);
+#ifdef VORTEX_DEBUG
+#include <stdio.h>
+#include <signal.h>
+#define breakpoint() raise(SIGSEGV)
+#else
+#define breakpoint()
+#endif
 
 #endif

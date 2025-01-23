@@ -23,17 +23,19 @@ GDB := $(shell which gdb)
 VENV ?=
 VENV_PYTHON := $(VENV)/bin/python3
 DEBUG_OPTS :=
+MESON_DEBUG_OPTS :=
 
 PYTHON_VERSION=$(shell $(PYTHON) -c "import platform; print(platform.python_version())")
 PYTHON_VERSION_NUMS = $(subst ., ,$(PYTHON_VERSION))
 
 ifeq ($(DEBUG),1)
-	DEBUG_OPTS=--config-settings=setup-args=-Dbuildtype=debug
+	DEBUG_OPTS=CFLAGS=-DVORTEX_DEBUG
+	MESON_DEBUG_OPTS=--config-settings=setup-args="-Dbuildtype=debug"
 endif
 
 all:
-	$(PYTHON) -m pip install --no-build-isolation \
-		--editable . $(DEBUG_OPTS)
+	$(DEBUG_OPTS) $(PYTHON) -m pip install --no-build-isolation \
+		--editable . $(MESON_DEBUG_OPTS)
 	@if [ ! -L compile_commands.json ]; then \
 		ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
 			compile_commands.json; \
@@ -61,4 +63,4 @@ gdb:
 clean:
 	rm -rf build dist
 	rm -f src/core/auto-events.h src/core/objects/auto-types.h \
-		src/core/debug.h compile_commands.json
+		src/core/logging.h compile_commands.json

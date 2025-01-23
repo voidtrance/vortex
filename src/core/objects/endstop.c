@@ -21,9 +21,9 @@
 #include <cache.h>
 #include <errno.h>
 #include <kinematics.h>
-#include "../common_defs.h"
+#include <common_defs.h>
+#include <events.h>
 #include "object_defs.h"
-#include "../events.h"
 #include "endstop.h"
 #include "axis.h"
 

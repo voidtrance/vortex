@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include "object_defs.h"
-#include "../common_defs.h"
+#include <common_defs.h>
 #include "heater_compute.h"
 #include <utils.h>
 #include "heater.h"

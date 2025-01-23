@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "stepper.h"
-#include "../common_defs.h"
-#include "../debug.h"
+#include <common_defs.h>
+#include <logging.h>
 #include "object_defs.h"
 #include <cache.h>
 #include <math.h>

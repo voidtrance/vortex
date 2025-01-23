@@ -19,7 +19,7 @@
 #define __OBJECTS_COMMON_DEFS_H__
 #include "objects/object_defs.h"
 #include "events.h"
-#include "debug.h"
+#include "logging.h"
 
 #define CMD_ERROR_PREFIX (0xdeadbeef)
 #define CMD_ID_IS_ERROR(x) ((x) >> 32 == CMD_ERROR_PREFIX)

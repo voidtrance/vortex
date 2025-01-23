@@ -13,11 +13,4 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-core_utils_include = include_directories('.')
-core_utils = library('utils',
-                     ['utils.c', 'cache.c', 'random.c'],
-                     include_directories: core_include_general,
-                     install: true,
-                     install_dir: py.get_install_dir(pure: false) / 'vortex/core/lib')
-core_utils_dep = declare_dependency(link_with: core_utils,
-                                    include_directories: [core_utils_include, core_include_general])
+core_include_general = include_directories('.')

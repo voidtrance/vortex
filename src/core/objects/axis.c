@@ -21,9 +21,9 @@
 #include <errno.h>
 #include <math.h>
 #include <time.h>
-#include "../debug.h"
-#include "../common_defs.h"
-#include "../events.h"
+#include <logging.h>
+#include <common_defs.h>
+#include <events.h>
 #include "axis.h"
 #include "endstop.h"
 #include "object_defs.h"
