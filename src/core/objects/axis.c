@@ -64,12 +64,12 @@ typedef struct {
     float length;
     double start_position;
     double position;
+    stepper_status_t stepper_status;
 } axis_t;
 
 typedef int (*command_func_t)(core_object_t *object, void *args);
 
 static object_cache_t *axis_event_cache = NULL;
-static stepper_status_t stepper_status;
 
 static void axis_event_handler(core_object_t *object, const char *name,
                                const core_object_event_type_t event,
@@ -124,11 +124,12 @@ static int axis_init(core_object_t *object) {
         if (!axis->motors[i].obj)
             return -ENODEV;
 
-        axis->motors[i].obj->get_state(axis->motors[i].obj, &stepper_status);
+        axis->motors[i].obj->get_state(axis->motors[i].obj,
+                                       &axis->stepper_status);
         axis->motors[i].move_complete = true;
-        axis->motors[i].steps_per_mm = stepper_status.steps_per_mm;
-        axis->motors[i].initial_step = stepper_status.steps;
-        axis->motors[i].microsteps = stepper_status.microsteps;
+        axis->motors[i].steps_per_mm = axis->stepper_status.steps_per_mm;
+        axis->motors[i].initial_step = axis->stepper_status.steps;
+        axis->motors[i].microsteps = axis->stepper_status.microsteps;
     }
 
     if (axis->endstop_name) {
@@ -182,8 +183,9 @@ static void axis_update(core_object_t *object, uint64_t ticks,
      *      steps the stepper can perform.
      */
     for (i = 0; i < axis->n_motors; i++) {
-        axis->motors[i].obj->get_state(axis->motors[i].obj, &stepper_status);
-        axis->motors[i].steps = stepper_status.steps;
+        axis->motors[i].obj->get_state(axis->motors[i].obj,
+                                       &axis->stepper_status);
+        axis->motors[i].steps = axis->stepper_status.steps;
     }
 
     if (kinematics == KINEMATICS_COREXY &&

@@ -52,7 +52,7 @@ typedef struct {
     stepper_config_params_t config;
     uint64_t last_timestep;
     uint64_t move_steps;
-    double current_step;
+    int64_t current_step;
     double steps;
     double rps;
     double spns;
@@ -204,11 +204,10 @@ static void *pin_monitor_thread(void *args) {
     while (*(volatile bool *)&stepper->use_pins) {
         uint8_t val = __atomic_fetch_and(&stepper->pin_word, EN_DIR_MASK,
                                          __ATOMIC_SEQ_CST);
-
         stepper->enabled = val & ENABLE_PIN;
         stepper->dir = MOVE_DIR_BACK - !!(val & DIR_PIN);
-        stepper->current_step += ((val & ENABLE_PIN) & !!(val & STEP_PIN)) *
-            (-1 + !!(val & DIR_PIN) * 2);
+        stepper->current_step += (!!(val & ENABLE_PIN) & !!(val & STEP_PIN)) *
+                                 (-1 + !!(val & DIR_PIN) * 2);
         nanosleep(&sleep, NULL);
     }
 
@@ -260,8 +259,9 @@ static void stepper_status(core_object_t *object, void *status) {
     stepper_status_t *s = (stepper_status_t *)status;
     stepper_t *stepper = (stepper_t *)object;
 
+    memset(s, 0, sizeof(*s));
     s->enabled = stepper->enabled;
-    s->steps = (int64_t)round(stepper->current_step);
+    s->steps = stepper->current_step;
     s->spr = stepper->config.steps_per_rotation;
     s->microsteps = stepper->config.microsteps;
     s->speed = stepper->spns;
