@@ -13,6 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+subdir('atomics')
 core_utils_include = include_directories('.')
 core_utils = library('utils',
                      ['utils.c', 'cache.c', 'random.c'],
