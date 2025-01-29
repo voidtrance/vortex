@@ -61,7 +61,7 @@ typedef struct {
     stepper_move_dir_t dir;
     bool enabled;
     bool use_pins;
-    uint8_t pin_word;
+    uint32_t pin_word;
     pthread_t pin_thread;
 } stepper_t;
 
@@ -190,23 +190,26 @@ static int stepper_move(core_object_t *object, uint64_t id, void *args) {
 }
 
 enum {
-    ENABLE_PIN = (1 << 0),
-    DIR_PIN = (1 << 1),
-    STEP_PIN = (1 << 2),
+    ENABLE_PIN = (1U << 31),
+    DIR_PIN = (1U << 30),
+    VALUE_SHIFT = (1U << 16),
 };
 
 #define EN_DIR_MASK (ENABLE_PIN | DIR_PIN)
+#define VALUE_MASK (VALUE_SHIFT - 1)
+#define CONTROL_MASK (~VALUE_MASK)
 
 static void *pin_monitor_thread(void *args) {
     stepper_t *stepper = (stepper_t *)args;
-    struct timespec sleep = { .tv_sec = 0, .tv_nsec = 1000 };
+    struct timespec sleep = { .tv_sec = 0, .tv_nsec = 5000 };
 
     while (*(volatile bool *)&stepper->use_pins) {
-        uint8_t val = __atomic_fetch_and(&stepper->pin_word, EN_DIR_MASK,
-                                         __ATOMIC_SEQ_CST);
+        uint32_t val = __atomic_fetch_and(&stepper->pin_word, CONTROL_MASK,
+                                          __ATOMIC_SEQ_CST);
         stepper->enabled = val & ENABLE_PIN;
         stepper->dir = MOVE_DIR_BACK - !!(val & DIR_PIN);
-        stepper->current_step += (!!(val & ENABLE_PIN) & !!(val & STEP_PIN)) *
+        stepper->current_step += (int32_t)(val & VALUE_MASK) *
+                                 !!(val & ENABLE_PIN) *
                                  (-1 + !!(val & DIR_PIN) * 2);
         nanosleep(&sleep, NULL);
     }

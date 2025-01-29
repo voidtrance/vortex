@@ -16,6 +16,7 @@
 import enum
 import ctypes
 import vortex.lib.logging as logging
+import vortex.core.lib.atomics as atomics
 from collections import namedtuple
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
@@ -234,16 +235,19 @@ class HeaterPin(DigitalPin):
     def _set_pin(self, value):
         self.pin_word.contents.value = int(not (not (Flags.ON & value)))
 
-class StepperPinShift(enum.IntFlag):
-    ENABLE = 0
-    DIR = 1
-    STEP = 2
+class StepperPinShift(enum.IntEnum):
+    STEPS = 16
+    DIR = 30
+    ENABLE = 31
 
 class StepperPins(enum.IntFlag):
     ENABLE = (1 << StepperPinShift.ENABLE)
     DIR = (1 << StepperPinShift.DIR)
-    STEP = (1 << StepperPinShift.STEP)
-    EN_DIR = (ENABLE | DIR)
+
+class StepperMasks(enum.IntEnum):
+    STEPS = (1 << StepperPinShift.STEPS) - 1
+    CONTROL = ~((1 << StepperPinShift.STEPS) - 1)
+    EN_DIR = (StepperPins.ENABLE | StepperPins.DIR)
 
 class StepperEnablePin(DigitalPin):
     def __init__(self, frontend, oid, obj_id, name, word):
@@ -251,9 +255,9 @@ class StepperEnablePin(DigitalPin):
         self.word = word
     def _set_pin(self, value):
         if value:
-            self.word.contents.value |= StepperPins.ENABLE
+            self.word |= StepperPins.ENABLE
         else:
-            self.word.contents.value &= ~StepperPins.ENABLE
+            self.word &= ~StepperPins.ENABLE
 
 StepperMove = namedtuple("StepperMove", ["interval", "count", "increment", "dir"])
 
@@ -285,8 +289,6 @@ class Stepper:
         self.move = CurrentMove(0, 0, 0, 0)
         self._step_sched = 0
         self._position = 0
-        self._steps_queued = 0
-        self._steps_executed = 0
         cmd_id = self.frontend.queue_command(ModuleTypes.STEPPER,
                                              self.name, "use_pins",
                                              {"enable": True})
@@ -294,7 +296,7 @@ class Stepper:
         if result < 0:
             raise ValueError(f"Stepper {self.name} pin enable error")
         status = self.frontend.query_object([self.id])[self.id]
-        self.pin_word = ctypes.cast(status["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
+        self.pin_word = atomics.Atomic(32, var=status["pin_addr"])
     def owns_pin(self, pin):
         return pin in self.pins.values()
     def configure_pin(self, oid, pin):
@@ -308,10 +310,8 @@ class Stepper:
         return pin
     @property
     def position(self):
-        p = self._position
-        if self.move:
-            p -= self.move.count * (-1 + 2 * self.move.dir)
-        return p
+        status = self.frontend.query_object([self.id])[self.id]
+        return status['steps']
     def set_stop_on_trigger(self, trsync):
         trsync.add_signal(self.stop_moves)
     def set_next_move_dir(self, dir):
@@ -324,8 +324,6 @@ class Stepper:
             return
         move = StepperMove(interval, count, add, self.next_dir)
         self.move_queue.append(move)
-        self._steps_queued += self.move.count
-        self._log.debug(f"Queue: {move.count} in {move.dir}")
         if self.move.count == 0:
             timeout = self._next_move()
             self._step_sched = timeout
@@ -334,16 +332,14 @@ class Stepper:
         self.timer.timeout = 0
         self.move.count = 0
         self.move_queue.clear()
-        self.pin_word.contents.value &= ~StepperPins.DIR
+        self.pin_word &= ~StepperPins.DIR
         self._needs_reset = True
-        print(f"Steps queued: {self._steps_queued}, executed: {self._steps_executed}")
-        self._steps_executed = self._steps_queued = 0
     def _next_move(self):
         if self.move_queue:
             move = self.move_queue.pop(0)
             interval = move.interval + move.increment
             if self.move.dir != move.dir:
-                self.pin_word.contents.value ^= StepperPins.DIR ^ self.invert
+                self.pin_word ^= StepperPins.DIR ^ self.invert
             next_step_time = self.move.next_step_time
             self.move = CurrentMove(interval, move.count,
                                     move.increment, move.dir)
@@ -367,10 +363,10 @@ class Stepper:
         #if timeout - min_step < -(ticks)
         return min_step
     def send_step(self, ticks):
-        self.pin_word.contents.value ^= StepperPins.STEP
+        self.pin_word.inc()
         self.move.count -= 1
-        self._steps_executed += 1
-        return self._calc_step_time(ticks)
+        next_step = self._calc_step_time(ticks)
+        return next_step
     def reset_clock(self, clock):
         self.move.next_step_time = clock
         self._needs_reset = False
