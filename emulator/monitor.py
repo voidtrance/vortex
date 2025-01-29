@@ -19,65 +19,37 @@ import pickle
 import os
 from vortex.controllers.types import ModuleTypes
 
-class MonitorServer(threading.Thread):
-    path = "/tmp/vortex_monitor"
-    def __init__(self, controller, queue):
-        if os.path.exists(self.path):
-            os.unlink(self.path)
+class MonitorThread(threading.Thread):
+    def __init__(self, index, connection, controller):
+        self._conn = connection
         self._controller = controller
-        self._queue = queue
-        self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self._socket.bind(self.path)
-        self._monitor_run = False
-        self._conn = None
-        super().__init__(None, None, "vortex-monitor")
-
+        self._do_run = False
+        super().__init__(None, None, f"vortex-monitor-{index}")
     def run(self):
-        self._socket.listen(1)
-        self._monitor_run = True
-
-        while self._monitor_run:
+        self._do_run = True
+        while self._do_run:
             try:
-                self._conn, address = self._socket.accept()
-            except OSError:
-                continue
-            while True:
-                try:
-                    data = self._conn.recv(1024)
-                except ConnectionResetError:
-                    break
-                if not data:
-                    self._conn.close()
-                    break
-                request = pickle.loads(data)
-                if request["request"] == "object_list":
-                    response = self.get_object_list()
-                elif request["request"] == "query":
-                    response = self.query_objects(request["objects"])
-                elif request["request"] == "commands":
-                    response = self.get_object_commands(request.get("klass", None))
-                elif request["request"] == "events":
-                    response = self.get_object_events(request.get("klass", None))
-                elif request["request"] == "pause":
-                    self._controller.pause(request["action"])
-                    response = True
-                else:
-                    continue
-                self._conn.sendall(pickle.dumps(response))
-
-    def stop(self):
-        self._monitor_run = False
-        self._socket.shutdown(socket.SHUT_RDWR)
-        self._socket.close()
-        if self._conn:
-            try:
-                self._conn.shutdown(socket.SHUT_RDWR)
+                data = self._conn.recv(1024)
+            except ConnectionResetError:
+                break
+            if not data:
                 self._conn.close()
-            except OSError:
-                pass
-        self.join()
-        os.unlink(self.path)
-
+                break
+            request = pickle.loads(data)
+            if request["request"] == "object_list":
+                response = self.get_object_list()
+            elif request["request"] == "query":
+                response = self.query_objects(request["objects"])
+            elif request["request"] == "commands":
+                response = self.get_object_commands(request.get("klass", None))
+            elif request["request"] == "events":
+                response = self.get_object_events(request.get("klass", None))
+            elif request["request"] == "pause":
+                self._controller.pause(request["action"])
+                response = True
+            else:
+                continue
+            self._conn.sendall(pickle.dumps(response))
     def get_object_list(self):
         objects = {}
         klasses = {x: str(x) for x in ModuleTypes}
@@ -135,3 +107,47 @@ class MonitorServer(threading.Thread):
                 events[klass].append({"id": event,
                                       "args": [] if args is None else args})
         return events
+    def stop(self):
+        try:
+            self._conn.shutdown(socket.SHUT_RDWR)
+            self._conn.close()
+        except OSError:
+            pass
+
+class MonitorServer(threading.Thread):
+    path = "/tmp/vortex_monitor"
+    def __init__(self, controller, queue, max_conns=5):
+        if os.path.exists(self.path):
+            os.unlink(self.path)
+        self._controller = controller
+        self._max_connections = max_conns
+        self._queue = queue
+        self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._socket.bind(self.path)
+        self._monitor_run = False
+        self._threads = []
+        super().__init__(None, None, "vortex-monitor")
+
+    def run(self):
+        self._socket.listen(self._max_connections)
+        self._monitor_run = True
+        child_count = 0
+        while self._monitor_run:
+            try:
+                _conn, address = self._socket.accept()
+                thread = MonitorThread(child_count, _conn, self._controller)
+                thread.start()
+                self._threads.append(thread)
+                child_count += 1
+            except OSError:
+                continue
+
+    def stop(self):
+        self._monitor_run = False
+        for thread in self._threads:
+            thread.stop()
+            thread.join()
+        self._socket.shutdown(socket.SHUT_RDWR)
+        self._socket.close()
+        self.join()
+        os.unlink(self.path)
