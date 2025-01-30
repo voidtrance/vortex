@@ -40,10 +40,7 @@ class BaseFrontend:
         self._run = True
         self._run_sequential = False
         self._queue = CommandQueue(queue_size)
-        self.query = None
-        self.reset = None
-        self.get_controller_clock_ticks = None
-        self.get_controller_runtime = None
+        self._thread = None
         self.is_reset = False
         self.event_register = lambda a, b, c, d: False
         self.event_unregister = lambda a, b, c, d: False
@@ -59,13 +56,36 @@ class BaseFrontend:
         self._command_id_queue = []
 
     def set_controller_interface(self, interface):
-        self.query = interface.query
-        self.reset = interface.reset
-        self.get_controller_clock_ticks = interface.get_ticks
-        self.get_controller_runtime = interface.get_runtime
-        self.event_register = interface.event_register
-        self.event_unregister = interface.event_unregister
+        self._query = interface.query
+        self._reset = interface.reset
+        self._get_controller_clock_ticks = interface.get_ticks
+        self._get_controller_runtime = interface.get_runtime
+        self._event_register = interface.event_register
+        self._event_unregister = interface.event_unregister
         self.timers = interface.timers
+
+    # Implement these as class methods so subclasses can
+    # override them. If they they are implemented as class
+    # attributes, any subclass lookup of those methods will
+    # return the base class method instead of the overriden
+    # one.
+    def reset(self, *args, **kwargs):
+        return self._reset(*args, **kwargs)
+
+    def query(self, *args, **kwargs):
+        return self._query(*args, **kwargs)
+
+    def get_controller_clock_ticks(self, *args, **kwargs):
+        return self._get_controller_clock_ticks(*args, **kwargs)
+
+    def get_controller_runtime(self, *args, **kwargs):
+        return self._get_controller_runtime(*args, **kwargs)
+
+    def event_register(self, *args, **kwargs):
+        return self._event_register(*args, **kwargs)
+
+    def event_unregister(self, *args, **kwargs):
+        return self._event_unregister(*args, **kwargs)
 
     def set_controller_data(self, data):
         self._raw_controller_params = data

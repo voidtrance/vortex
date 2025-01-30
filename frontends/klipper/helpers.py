@@ -88,7 +88,7 @@ class AnalogPin:
     def shutdown(self):
         try:
             del self.timer
-        except NameError:
+        except (NameError, AttributeError):
             pass
     def __del__(self):
         self.shutdown()
@@ -224,7 +224,7 @@ class DigitalPin:
     def shutdown(self):
         try:
             del self.timer
-        except NameError:
+        except (NameError, AttributeError):
             pass
     def __del__(self):
         self.shutdown()
@@ -384,7 +384,7 @@ class Stepper:
     def shutdown(self):
         try:
             del self.timer
-        except NameError:
+        except (NameError, AttributeError):
             pass
     def __del__(self):
         self.shutdown()
@@ -456,7 +456,7 @@ class EndstopPin:
     def shutdown(self):
         try:
             del self.timer
-        except NameError:
+        except (NameError, AttributeError):
             pass
     def __del__(self):
         self.shutdown()
@@ -529,7 +529,7 @@ class TRSync:
         try:
             del self.report_timer
             del self.expire_timer
-        except NameError:
+        except (NameError, AttributeError):
             pass
     def __del__(self):
         self.shutdown()

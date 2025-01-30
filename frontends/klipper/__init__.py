@@ -39,6 +39,7 @@ STATIC_STRINGS = [
     "ADC out of range",
     "Unsupported command",
     "Command failure",
+    "Command request",
     "Invalid count parameter",
     "Timer too close",
     "Stepper initialization failure",
@@ -118,6 +119,8 @@ class KlipperFrontend(BaseFrontend):
             self.identity["commands"][cmd.command] = self.counter.next()
             if cmd.response:
                 self.identity["responses"][cmd.response] = self.counter.next()
+        self.all_commands["reset"] = "reset"
+        self.identity["commands"]["reset"] = self.counter.next()
 
         # Shutdown commands
         self._add_commands(proto.KLIPPER_PROTOCOL.shutdown)
@@ -240,9 +243,16 @@ class KlipperFrontend(BaseFrontend):
                      static_string_id=self._shutdown_reason)
 
     def emergency_stop(self, cmd):
+        self.shutdown("Command request")
+        return True
+
+    def reset(self, cmd):
         for oid, obj in self._oid_map.items():
             obj.shutdown()
-        self.reset()
+        self._oid_map.clear()
+        self.config_crc = 0
+        self.oid_count = 0
+        super().reset()
         return True
 
     def get_uptime(self, cmd):
