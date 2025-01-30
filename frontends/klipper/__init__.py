@@ -317,6 +317,11 @@ class KlipperFrontend(BaseFrontend):
         pin.schedule_cycle(clock, on_ticks)
         return True
 
+    def update_digital_out(self, cmd, oid, value):
+        pin = self._oid_map[oid]
+        pin.update(value)
+        return True
+
     def config_stepper(self, cmd, oid, step_pin, dir_pin, invert_step,
                        step_pulse_ticks):
         obj_id, klass = self._find_object(step_pin, ModuleTypes.STEPPER)

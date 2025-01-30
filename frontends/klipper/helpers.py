@@ -147,6 +147,17 @@ class DigitalPin:
             self.handler = self.event
             self.waketime = start
             self.timer.timeout = start
+    def update(self, value):
+        self.timer.timeout = 0
+        flags = Flags.ON if value else 0
+        self._set_pin(flags)
+        if (not int(flags)) != (not int(self.flags & Flags.DEFAULT_ON)) and self.max_duration:
+            self.handler = self.event
+            self.flags = (self.flags & Flags.DEFAULT_ON) | flags | Flags.CHECK_END
+            self.timer.timeout = self.end_time = \
+                self.frontend.get_controller_clock_ticks() + self.max_duration
+        else:
+            self.flags = (self.flags & Flags.DEFAULT_ON) | flags
     def timer_handler(self, ticks):
         return self.handler(ticks)
     def event(self, ticks):
