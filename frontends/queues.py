@@ -1,5 +1,5 @@
 # vortex - GCode machine emulator
-# Copyright (C) 2024  Mitko Haralanov
+# Copyright (C) 2024-2025 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
