@@ -9,10 +9,22 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/resource.h>
 
 static bool do_run = true;
 
 #define SEC2NSEC 1000 * 1000 * 1000
+#define __stringify(x) #x
+#define stringify(x) __stringify(x)
+
+#define PTHREAD_CALL(func, ...)                                          \
+    do {                                                                 \
+        int __ret = func(__VA_ARGS__);                                   \
+        if (__ret) {                                                     \
+            printf("ERROR: " stringify(func) ": %s\n", strerror(__ret)); \
+            return __ret;                                                \
+        }                                                                \
+    } while (0)
 
 int SCHED_POLICY = SCHED_RR;
 
@@ -42,6 +54,15 @@ static void *thread_func(void *arg) {
     }
 }
 
+static void show_thread_policy(int policy, struct sched_param params) {
+    printf("Thread policy: %s, priority: %d\n",
+           (policy == SCHED_FIFO)  ? "SCHED_FIFO" :
+           (policy == SCHED_RR)    ? "SCHED_RR" :
+           (policy == SCHED_OTHER) ? "SCHED_OTHER" :
+                                     "unknown",
+           params.sched_priority);
+}
+
 int main(int argc, char **argv) {
     pthread_attr_t attrs;
     pthread_t thread;
@@ -51,9 +72,11 @@ int main(int argc, char **argv) {
     void *res;
     int opt;
     int ret;
+    int policy;
     int min_priority, max_priority, priority;
     unsigned int relative = 0;
     struct sched_param sparam;
+    struct rlimit rlimit;
     cpu_set_t mask;
 
     while ((opt = getopt(argc, argv, "s:r:p:")) != -1) {
@@ -76,6 +99,13 @@ int main(int argc, char **argv) {
     min_priority = sched_get_priority_min(SCHED_POLICY);
     max_priority = sched_get_priority_max(SCHED_POLICY);
     printf("min/max priority: %d/%d\n", min_priority, max_priority);
+    rlimit.rlim_cur = max_priority;
+    rlimit.rlim_max = max_priority;
+    if (setrlimit(RLIMIT_RTPRIO, &rlimit) == -1) {
+        perror("setrlimit");
+        return errno;
+    }
+
     priority = min_priority + relative;
     if (priority > max_priority)
         priority = max_priority;
@@ -83,37 +113,21 @@ int main(int argc, char **argv) {
     printf("run priority: %d\n", priority);
     sparam.sched_priority = priority;
 
-    ret = pthread_attr_init(&attrs);
-    if (ret) {
-	printf("pthread_attr_init: %s\n", strerror(ret));
-	return ret;
-    }
+    PTHREAD_CALL(pthread_attr_init, &attrs);
+    PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_POLICY);
+    PTHREAD_CALL(pthread_attr_setinheritsched, &attrs, PTHREAD_EXPLICIT_SCHED);
+    PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_POLICY);
+    PTHREAD_CALL(pthread_attr_setschedparam, &attrs, &sparam);
+    PTHREAD_CALL(pthread_attr_getschedparam, &attrs, &sparam);
+    PTHREAD_CALL(pthread_attr_getschedpolicy, &attrs, &policy);
 
-    ret = pthread_attr_setschedpolicy(&attrs, SCHED_POLICY);
-    if (ret) {
-	printf("pthread_attr_setschedpolicy: %s\n", strerror(ret));
-	return ret;
-    }
-
-    ret = pthread_attr_setinheritsched(&attrs, PTHREAD_EXPLICIT_SCHED);
-    if (ret) {
-	printf("pthread_attr_setinheritsched: %s\n", strerror(ret));
-	return ret;
-    }
+    show_thread_policy(policy, sparam);
 
     args.sleep_time = sleeptime;
     ret = pthread_create(&thread, &attrs, &thread_func, &args);
     if (ret) {
-	printf("pthread_create: %s\n", strerror(ret));
-	return ret;
-    }
-
-    ret = pthread_setschedparam(thread, SCHED_POLICY, &sparam);
-    if (ret) {
-	printf("pthread_setschedparam: %s\n", strerror(ret));
-	do_run = false;
-	pthread_join(thread, NULL);
-	return ret;
+        printf("pthread_create: %s\n", strerror(ret));
+        return ret;
     }
 
     sleep(runtime);
