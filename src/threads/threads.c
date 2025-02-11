@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #define _GNU_SOURCE
+#include <stdio.h>
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
@@ -199,40 +200,80 @@ static void *core_generic_thread(void *arg) {
     pthread_exit(&data->ret);
 }
 
-int start_thread(struct core_control_data *thread_data) {
-    // struct sched_param sched_params;
-    pthread_attr_t attrs;
+#define __stringify(x) #x
+#define stringify(x) __stringify(x)
+
+#define PTHREAD_CALL(func, ...)                                          \
+    do {                                                                 \
+        int __ret = func(__VA_ARGS__);                                   \
+        if (__ret) {                                                     \
+            printf("ERROR: " stringify(func) ": %s\n", strerror(__ret)); \
+            return __ret;                                                \
+        }                                                                \
+    } while (0)
+
+static int start_thread(struct core_control_data *thread_data) {
+    struct sched_param sched_params;
+    struct rlimit rlimit;
+    pthread_attr_t attrs, *attrp;
+    int min_prio, max_prio, prio_step;
+    bool attempt_prio = true;
     int ret;
 
-    // sched_params.sched_priority =
-    // sched_get_priority_min(DEFAULT_SCHED_POLICY);
+    min_prio = sched_get_priority_min(SCHED_RR);
+    max_prio = sched_get_priority_max(SCHED_RR);
+    if (getrlimit(RLIMIT_RTPRIO, &rlimit) == -1 || rlimit.rlim_max == 0 ||
+        max_prio - min_prio < 3) {
+        fprintf(
+            stderr,
+            "WARNING: Process does not have permission to set thread priority.\n");
+        fprintf(stderr, "WARNING: Elevated RTPRIO rlimit is requires:\n");
+        fprintf(stderr, "WARNING: \tsudo prlimit --rtprio=99:99 --pid $$\n");
+        attempt_prio = false;
+    }
 
-    ret = pthread_attr_init(&attrs);
-    if (ret)
-        return ret;
+    prio_step = (max_prio - min_prio) / 3;
 
-    // ret = pthread_attr_setschedpolicy(&attrs, DEFAULT_SCHED_POLICY);
-    // if (ret)
-    //	return ret;
+    switch (thread_data->type) {
+    case CORE_THREAD_TYPE_UPDATE:
+    case CORE_THREAD_TYPE_TIMER:
+        sched_params.sched_priority = min_prio;
+        break;
+    case CORE_THREAD_TYPE_OBJECT:
+        sched_params.sched_priority = min_prio + prio_step;
+        break;
+    default:
+        sched_params.sched_priority = min_prio + prio_step * 2;
+    }
 
-    ret = pthread_attr_setinheritsched(&attrs, PTHREAD_EXPLICIT_SCHED);
-    if (ret)
-        return ret;
+    PTHREAD_CALL(pthread_attr_init, &attrs);
+
+    if (attempt_prio) {
+        PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_RR);
+        PTHREAD_CALL(pthread_attr_setinheritsched, &attrs,
+                     PTHREAD_EXPLICIT_SCHED);
+        PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_RR);
+        PTHREAD_CALL(pthread_attr_setschedparam, &attrs, &sched_params);
+    }
 
     thread_data->control.do_run = 1;
     thread_data->control.pause = false;
     thread_data->args.control = &thread_data->control.do_run;
     thread_data->args.pause = &thread_data->control.pause;
-    ret = pthread_create(&thread_data->control.thread_id, &attrs,
+    attrp = &attrs;
+recreate:
+    ret = pthread_create(&thread_data->control.thread_id, attrp,
                          thread_data->thread_func, &thread_data->args);
-    if (ret)
-        return ret;
+    if (ret) {
+        if (ret == EPERM && attrp) {
+            fprintf(stderr, "ERROR: Failed to set thread scheduling policy.\n");
+            fprintf(stderr, "ERROR: Using default policy.\n");
+            attrp = NULL;
+            goto recreate;
+        }
 
-    // ret = pthread_setschedparam(core_global_data.thread_id,
-    // DEFAULT_SCHED_POLICY,
-    //                             &sched_params);
-    // if (ret)
-    //	return ret;
+        return ret;
+    }
 
     pthread_attr_destroy(&attrs);
     return 0;
