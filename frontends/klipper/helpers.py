@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import enum
 import ctypes
+from threading import Lock
 import vortex.lib.logging as logging
 import vortex.core.lib.atomics as atomics
 from collections import namedtuple
@@ -35,6 +36,23 @@ class Logger:
         prefix = f"{self._name}[{self._oid}] "
         #return lambda f, *a, **k: func(prefix + f, *a, **k)
         return lambda f, *a, **k: print(prefix + f.format(*a, **k))
+
+class MoveQueue:
+    def __init__(self, size):
+        self._size = size
+        self._queue = []
+        self._lock = Lock()
+    def put(self, item):
+        with self._lock:
+            self._queue.append(item)
+    def get(self):
+        with self._lock:
+            if self._queue:
+                return self._queue.pop(0)
+            return None
+    def clear(self):
+        with self._lock:
+            self._queue.clear()
 
 class AnalogPin:
     def __init__(self, frontend, oid, obj_id, klass, name):
@@ -292,14 +310,12 @@ class Stepper:
                      "dir": status.get("dir_pin"),
                      "step": status.get("step_pin")}
         self.oid_handlers = {}
-        self.move_queue = []
+        self.move_queue = MoveQueue(self.frontend._queue.max_size)
         self.next_dir = 0
         self.timer = self.frontend.timers.new()
         self.timer.callback = self.send_step
         self._needs_reset = False
         self.move = CurrentMove(0, 0, 0, 0)
-        self._step_sched = 0
-        self._position = 0
         cmd_id = self.frontend.queue_command(ModuleTypes.STEPPER,
                                              self.name, "use_pins",
                                              {"enable": True})
@@ -334,45 +350,35 @@ class Stepper:
             self.frontend.shutdown("Invalid count parameter")
             return
         move = StepperMove(interval, count, add, self.next_dir)
-        self.move_queue.append(move)
+        self.move_queue.put(move)
         if self.move.count == 0:
-            timeout = self._next_move()
-            self._step_sched = timeout
+            timeout = self._next_move(0)
             self.timer.timeout = timeout
-    def stop_moves(self, reason):
+    def stop_moves(self, time, reason):
+        self._needs_reset = True
         self.timer.timeout = 0
         self.move.count = 0
         self.move_queue.clear()
         self.pin_word &= ~StepperPins.DIR
-        self._needs_reset = True
-    def _next_move(self):
-        if self.move_queue:
-            move = self.move_queue.pop(0)
-            interval = move.interval + move.increment
-            if self.move.dir != move.dir:
-                self.pin_word ^= StepperPins.DIR ^ self.invert
-            next_step_time = self.move.next_step_time
-            self.move = CurrentMove(interval, move.count,
-                                    move.increment, move.dir)
-            self._position += self.move.count * (-1 + 2 * self.move.dir)
-            self.move.next_step_time = \
-                self.frontend.timers.to_time(next_step_time + move.interval)
-            return self.move.next_step_time
-        return 0
+    def _next_move(self, ticks):
+        move = self.move_queue.get()
+        if not move:
+            return 0
+        if self.move.dir != move.dir:
+            self.pin_word ^= StepperPins.DIR ^ self.invert
+        prev_step_time = self.move.next_step_time
+        self.move = CurrentMove(move.interval + move.increment, move.count,
+                                move.increment, move.dir)
+        self.move.next_step_time = \
+            self.frontend.timers.to_time(prev_step_time + move.interval)
+        return self.move.next_step_time
     def _calc_step_time(self, ticks):
-        min_step = ticks + self.step_pulse
         if self.move.count:
             self.move.next_step_time = \
                 self.frontend.timers.to_time(self.move.next_step_time + self.move.interval)
             self.move.interval += self.move.increment
-            if self.frontend.timers.is_before(self.move.next_step_time, min_step):
-                return min_step
             return self.move.next_step_time
-        timeout = self._next_move()
-        if not timeout or self.frontend.timers.is_after(timeout, min_step):
-            return timeout
-        #if timeout - min_step < -(ticks)
-        return min_step
+        return self._next_move(ticks)
     def send_step(self, ticks):
         self.pin_word.inc()
         self.move.count -= 1
