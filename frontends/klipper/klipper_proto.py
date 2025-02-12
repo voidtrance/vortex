@@ -54,7 +54,7 @@ KLIPPER_PROTOCOL.basecmd.identify = Namespace(command="identify offset=%u count=
 KLIPPER_PROTOCOL.shutdown.shutdown = Namespace(command=None, flags=KlipperProtoFlags.HF_NONE, response="shutdown clock=%u static_string_id=%hu")
 KLIPPER_PROTOCOL.shutdown.is_shutdown = Namespace(command=None, flags=KlipperProtoFlags.HF_NONE, response="is_shutdown static_string_id=%hu")
 # basecmd tasts
-KLIPPER_PROTOCOL.tasks.stats = Namespace(command=None, flags=KlipperProtoFlags.HF_NONE, interval="5000000", response="stats count=%u sum=%u sumsq=%u")
+KLIPPER_PROTOCOL.tasks.stats = Namespace(command=None, flags=KlipperProtoFlags.HF_NONE, interval=5000000, response="stats count=%u sum=%u sumsq=%u")
 
 # buttons commands
 KLIPPER_PROTOCOL.buttons.config_buttons = Namespace(command="config_buttons oid=%c button_count=%c", flags=KlipperProtoFlags.HF_NONE, response=None)

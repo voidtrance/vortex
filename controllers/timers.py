@@ -102,3 +102,5 @@ class Factory:
         tt1 = self.new()
         tt1.timeout = t1
         return tt1.is_after(t2)
+    def from_us(self, us):
+        return int(us * (self._controller.FREQUENCY / 1000000))
