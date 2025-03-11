@@ -42,6 +42,7 @@ typedef struct {
             void *data;
         } timer;
         struct {
+            uint64_t frequency;
             object_callback_t callback;
             void *data;
             const char *name;

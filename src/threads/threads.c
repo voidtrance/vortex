@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <errno.h>
 #include <pthread.h>
-#include <sched.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -29,27 +28,28 @@
 #include <limits.h>
 #include <sys/resource.h>
 #include <sys/queue.h>
+#include <sys/timerfd.h>
 #include <utils.h>
 #include "threads.h"
 
-struct core_thread_control {
-    int do_run;
-    bool pause;
-    pthread_t thread_id;
+enum {
+    THREAD_CONTROL_STOP = 0,
+    THREAD_CONTROL_RUN,
+    THREAD_CONTROL_RUNNING,
+    THREAD_CONTROL_PAUSED,
 };
 
 struct core_thread_args {
     const char *name;
     core_thread_args_t args;
-    int *control;
-    bool *pause;
+    int control;
     int ret;
 };
 
 typedef struct core_control_data {
     STAILQ_ENTRY(core_control_data) entry;
     core_thread_type_t type;
-    struct core_thread_control control;
+    pthread_t thread_id;
     struct core_thread_args args;
     void *(*thread_func)(void *);
 } core_control_data_t;
@@ -62,7 +62,6 @@ typedef struct {
     uint64_t controller_ticks;
     uint64_t controller_runtime;
     int32_t trigger;
-    bool paused;
 } core_time_data_t;
 
 enum {
@@ -74,7 +73,6 @@ static core_time_data_t global_time_data = {
     .controller_ticks = 0,
     .controller_runtime = 0,
     .trigger = TIMER_TRIGGER_WAKE,
-    .paused = false,
 };
 
 #define DEFAULT_SCHED_POLICY SCHED_FIFO
@@ -102,10 +100,12 @@ static long timer_update_wait(int32_t *flag) {
 }
 
 static long timer_update_wake(int32_t *flag) {
+    uint32_t wait_value = TIMER_TRIGGER_WAIT;
 
-    __atomic_store_n(flag, TIMER_TRIGGER_WAKE, __ATOMIC_SEQ_CST);
-    return syscall(SYS_futex, flag, FUTEX_WAKE | FUTEX_PRIVATE_FLAG, INT_MAX,
-                   TIMER_TRIGGER_WAKE, NULL, NULL, NULL);
+    if (__atomic_compare_exchange_n(flag, &wait_value, TIMER_TRIGGER_WAKE,
+                                    false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+        return syscall(SYS_futex, flag, FUTEX_WAKE | FUTEX_PRIVATE_FLAG,
+                       INT_MAX, TIMER_TRIGGER_WAKE, NULL, NULL, NULL);
 }
 
 #define get_value(x) (*(volatile typeof((x)) *)&(x))
@@ -117,25 +117,20 @@ static void *core_time_control_thread(void *arg) {
     float tick = (1000.0 / ((float)args->update.tick_frequency / 1000000));
     float update = (1000.0 / ((float)args->update.update_frequency / 1000000));
     struct timespec sleep = { .tv_sec = (uint64_t)update / SEC_TO_NSEC(1),
-            .tv_nsec = (uint64_t)update % SEC_TO_NSEC(1) };
+                              .tv_nsec = (uint64_t)update % SEC_TO_NSEC(1) };
     uint64_t controller_clock_mask = (1UL << args->update.width) - 1;
     struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000 };
     struct timespec start;
     struct timespec now;
+    uint64_t runtime = 0;
 
     data->ret = 0;
-
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    while (get_value(*data->control) == 1) {
-        uint64_t runtime;
-
-        /* Pause after threads have been signaled. */
-        if (get_value(*data->pause)) {
-            set_value(global_time_data.paused, true);
+    set_value(data->control, THREAD_CONTROL_RUNNING);
+    while (likely(get_value(data->control))) {
+        if (unlikely(get_value(data->control) == THREAD_CONTROL_PAUSED)) {
             clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &pause, NULL);
             continue;
-        } else if (global_time_data.paused) {
-            set_value(global_time_data.paused, false);
         }
 
         clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &sleep, NULL);
@@ -155,7 +150,8 @@ static void *core_timer_thread(void *arg) {
     core_thread_args_t *args = &data->args;
 
     data->ret = 0;
-    while (get_value(*data->control) == 1) {
+    set_value(data->control, THREAD_CONTROL_RUNNING);
+    while (get_value(data->control)) {
         timer_update_wait(&global_time_data.trigger);
         args->timer.callback(get_value(global_time_data.controller_ticks),
                              args->timer.data);
@@ -167,13 +163,20 @@ static void *core_timer_thread(void *arg) {
 static void *core_update_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
+    float update = (1000.0 / ((float)args->update.update_frequency / 1000000));
+    struct timespec sleep;
+
+    sleep.tv_sec = (uint64_t)update / SEC_TO_NSEC(1);
+    sleep.tv_nsec = (uint64_t)update % SEC_TO_NSEC(1);
 
     data->ret = 0;
-    while (get_value(*data->control) == 1) {
+    set_value(data->control, THREAD_CONTROL_RUNNING);
+    while (get_value(data->control)) {
         timer_update_wait(&global_time_data.trigger);
         args->object.callback(args->object.data,
                               get_value(global_time_data.controller_ticks),
                               get_value(global_time_data.controller_runtime));
+        clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &sleep, NULL);
     }
 
     pthread_exit(&data->ret);
@@ -192,7 +195,8 @@ static void *core_generic_thread(void *arg) {
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = step_duration;
 
-    while (get_value(*data->control) == 1) {
+    set_value(data->control, THREAD_CONTROL_RUNNING);
+    while (get_value(data->control)) {
         args->worker.callback(args->worker.data);
         nanosleep(&sleep_time, NULL);
     }
@@ -203,13 +207,14 @@ static void *core_generic_thread(void *arg) {
 #define __stringify(x) #x
 #define stringify(x) __stringify(x)
 
-#define PTHREAD_CALL(func, ...)                                          \
-    do {                                                                 \
-        int __ret = func(__VA_ARGS__);                                   \
-        if (__ret) {                                                     \
-            printf("ERROR: " stringify(func) ": %s\n", strerror(__ret)); \
-            return __ret;                                                \
-        }                                                                \
+#define PTHREAD_CALL(func, ...)                                 \
+    do {                                                        \
+        int __ret = func(__VA_ARGS__);                          \
+        if (__ret) {                                            \
+            fprintf(stderr, "ERROR: " stringify(func) ": %s\n", \
+                    strerror(__ret));                           \
+            return __ret;                                       \
+        }                                                       \
     } while (0)
 
 static int start_thread(struct core_control_data *thread_data) {
@@ -218,17 +223,23 @@ static int start_thread(struct core_control_data *thread_data) {
     pthread_attr_t attrs, *attrp;
     int min_prio, max_prio, prio_step;
     bool attempt_prio = true;
+    static bool warning_shown = false;
     int ret;
 
     min_prio = sched_get_priority_min(SCHED_RR);
     max_prio = sched_get_priority_max(SCHED_RR);
     if (getrlimit(RLIMIT_RTPRIO, &rlimit) == -1 || rlimit.rlim_max == 0 ||
         max_prio - min_prio < 3) {
-        fprintf(
-            stderr,
-            "WARNING: Process does not have permission to set thread priority.\n");
-        fprintf(stderr, "WARNING: Elevated RTPRIO rlimit is requires:\n");
-        fprintf(stderr, "WARNING: \tsudo prlimit --rtprio=99:99 --pid $$\n");
+        if (!warning_shown) {
+            fprintf(
+                stderr,
+                "WARNING: Process does not have permission to set thread priority.\n");
+            fprintf(stderr, "WARNING: Elevated RTPRIO rlimit is requires:\n");
+            fprintf(stderr,
+                    "WARNING: \tsudo prlimit --rtprio=99:99 --pid $$\n");
+            warning_shown = true;
+        }
+
         attempt_prio = false;
     }
 
@@ -256,13 +267,10 @@ static int start_thread(struct core_control_data *thread_data) {
         PTHREAD_CALL(pthread_attr_setschedparam, &attrs, &sched_params);
     }
 
-    thread_data->control.do_run = 1;
-    thread_data->control.pause = false;
-    thread_data->args.control = &thread_data->control.do_run;
-    thread_data->args.pause = &thread_data->control.pause;
+    thread_data->args.control = THREAD_CONTROL_RUN;
     attrp = &attrs;
 recreate:
-    ret = pthread_create(&thread_data->control.thread_id, attrp,
+    ret = pthread_create(&thread_data->thread_id, attrp,
                          thread_data->thread_func, &thread_data->args);
     if (ret) {
         if (ret == EPERM && attrp) {
@@ -343,12 +351,12 @@ void core_threads_stop(void) {
      */
     STAILQ_FOREACH(data, &core_threads, entry) {
         if (data->type != CORE_THREAD_TYPE_UPDATE)
-            set_value(data->control.do_run, 0);
+            set_value(data->args.control, THREAD_CONTROL_STOP);
     }
 
     STAILQ_FOREACH(data, &core_threads, entry) {
         if (data->type != CORE_THREAD_TYPE_UPDATE)
-            pthread_join(data->control.thread_id, NULL);
+            pthread_join(data->thread_id, NULL);
     }
 
     /*
@@ -357,8 +365,8 @@ void core_threads_stop(void) {
      */
     STAILQ_FOREACH(data, &core_threads, entry) {
         if (data->type == CORE_THREAD_TYPE_UPDATE) {
-            set_value(data->control.do_run, 0);
-            pthread_join(data->control.thread_id, NULL);
+            set_value(data->args.control, THREAD_CONTROL_STOP);
+            pthread_join(data->thread_id, NULL);
         }
     }
 }
@@ -376,10 +384,7 @@ void core_threads_pause(void) {
     struct timespec ts = {.tv_sec = 0, .tv_nsec = 50000};
 
     STAILQ_FOREACH(data, &core_threads, entry)
-        set_value(data->control.pause, true);
-
-    while (get_value(global_time_data.paused))
-        nanosleep(&ts, NULL);
+        set_value(data->args.control, THREAD_CONTROL_PAUSED);
 }
 
 void core_threads_resume(void) {
@@ -387,10 +392,7 @@ void core_threads_resume(void) {
     struct timespec ts = {.tv_sec = 0, .tv_nsec = 50000};
 
     STAILQ_FOREACH(data, &core_threads, entry)
-        set_value(data->control.pause, false);
-
-    while (get_value(global_time_data.paused))
-        nanosleep(&ts, NULL);
+        set_value(data->args.control, THREAD_CONTROL_RUNNING);
 }
 
 void core_threads_destroy(void) {

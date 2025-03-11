@@ -30,9 +30,9 @@
 #define KHZ_TO_HZ(x) ((x)*1000)
 #define MHZ_TO_HZ(x) (KHZ_TO_HZ(x)*1000)
 #define GHZ_TO_HZ(x) (MHZ_TO_HZ(x)*1000)
-#define MHZ_TO_NSEC(x) (1000 / (x))
-#define GHZ_TO_NSEC(x) (1/(x))
-#define HZ_TO_NSEC(x) MHZ_TO_NSEC((x) / MHZ_TO_HZ(1))
+#define MHZ_TO_NSEC(x) (1000 * (x))
+#define GHZ_TO_NSEC(x) ((x))
+#define HZ_TO_NSEC(x) (SEC_TO_NSEC(1) / (x))
 
 #define max(a, b) ({__typeof__(a) _a = a;       \
             __typeof__(b) _b = b;               \
