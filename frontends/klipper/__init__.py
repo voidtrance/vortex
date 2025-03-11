@@ -67,10 +67,9 @@ class KlipperFrontend(BaseFrontend):
         self._string_map = {}
         self._shutdown = False
         self._shutdown_reason = None
-        self._arch = 0
-        self._arch_mask = 0
         self._clock_high = 0
         self._stats_sent_time = 0
+        self._object_pin_map = {}
 
     def _add_commands(self, cmd_set):
         for name, cmd in vars(cmd_set).items():
@@ -81,8 +80,6 @@ class KlipperFrontend(BaseFrontend):
                 self.identity["responses"][cmd.response] = self.counter.next()
 
     def _create_identity(self):
-        self._arch = self._raw_controller_params["hw"]["arch"]
-        self._arch_mask = (1 << self._arch) - 1
         self.identity = {x: {} for x in ["commands", "enumerations",
                                          "config", "responses"]}
         self.identity["version"] = "96cceed2"
@@ -152,27 +149,39 @@ class KlipperFrontend(BaseFrontend):
         self.mp.process_identify(self.identity_resp, False)
         self.identity_resp = zlib.compress(self.identity_resp)
 
+    def _create_object_pin_map(self):
+        pmap = {}
+        for klass in ModuleTypes:
+            pmap[klass] = {}
+            objects = self.get_object_id_set(klass)
+            object_status = self.query_object(objects)
+            for obj_id, status in object_status.items():
+                for k, v in status.items():
+                    if k == "pin" or "_pin" in k:
+                        pmap[klass][v] = obj_id
+        return pmap
+
     def klipper_stats(self, ticks):
         diff = ticks - self.start_tick
         self.stats_sum += diff
         stat_period = self.timers.from_us(proto.KLIPPER_PROTOCOL.tasks.stats.interval)
-        if self._stats_timer.is_before(self._stats_sent_time + stat_period):
-            return ticks + stat_period
+        if self.timers.is_before(ticks, self._stats_sent_time + stat_period):
+            return ticks + self.timers.from_us(100000)
         if ticks < self._stats_sent_time:
             self._clock_high += 1
         self._stats_sent_time = ticks
-        return ticks + stat_period
+        return ticks + self.timers.from_us(100000)
 
     def run(self):
         if self.emulation_frequency < parse_frequency("600KHz"):
             logging.warning("Using frequency of less than 600KHz may result")
             logging.warning("in Klipper failures due to timing granularity.")
-        self.create_identity()
+        self._create_identity()
+        self._object_pin_map = self._create_object_pin_map()
         self.start_tick = self.get_controller_clock_ticks()
         self._stats_timer = self.timers.new()
         self._stats_timer.callback = self.klipper_stats
-        self._stats_timer.timeout = self.start_tick + \
-            self.timers.from_us(proto.KLIPPER_PROTOCOL.tasks.stats.interval)
+        self._stats_timer.timeout = self.start_tick + self.timers.from_us(100000)
         super().run()
 
     def respond(self, type, cmd=None, **kwargs):
@@ -195,22 +204,11 @@ class KlipperFrontend(BaseFrontend):
         self._fd.flush()
 
     def _find_object(self, pin, *klasses):
-        def find(pin, objects):
-            object_status = self.query_object(objects)
-            for obj_id, status in object_status.items():
-                pins = []
-                for k, v in status.items():
-                    if k == "pin" or "_pin" in k:
-                        pins.append(v)
-                if pin in pins:
-                    return obj_id
         if not klasses:
             klasses = ModuleTypes
         for klass in klasses:
-            objects = self.get_object_id_set(klass)
-            obj_id = find(pin, objects)
-            if obj_id is not None:
-                return obj_id, klass
+            if pin in self._object_pin_map[klass]:
+                return self._object_pin_map[klass][pin], klass
         return None, None
     
     def find_existing_object(self, obj_id):
@@ -220,25 +218,13 @@ class KlipperFrontend(BaseFrontend):
                     return obj
         return None
 
-    def get_controller_clock(self, high=False):
-        ticks = self.get_controller_clock_ticks()
-        if high:
-            return (ticks >> self._arch) & self._arch_mask
-        else:
-            return ticks & self._arch_mask
+    def _reset_objects(self):
+        for obj in self._oid_map.values():
+            obj.shutdown()
+        self._oid_map.clear()
+        self.oid_count = 0
 
-    def clock_cmp(self, time_a, time_b):
-        t = self.timers.new()
-        t.timeout = time_a
-        if t < time_b:
-            return -1
-        elif t > time_b:
-            return 1
-        else:
-            return 0
-    
     def identify(self, cmd, offset, count):
-        self._test = None
         data = self.identity_resp[offset:offset+count]
         self.respond(proto.ResponseTypes.RESPONSE, cmd, offset=offset, data=data)
         return True
@@ -246,11 +232,10 @@ class KlipperFrontend(BaseFrontend):
     def shutdown(self, reason):
         self._shutdown_reason = reason
         self._shutdown = True
-        for obj in self._oid_map.values():
-            obj.shutdown()
+        self._reset_objects()
         self.respond(proto.ResponseTypes.RESPONSE,
                      proto.KLIPPER_PROTOCOL.shutdown.shutdown,
-                     clock=self.get_controller_clock(),
+                     clock=self.get_controller_clock_ticks(),
                      static_string_id=reason)
 
     def is_shutdown(self, reson):
@@ -263,24 +248,21 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def reset(self, cmd):
-        for oid, obj in self._oid_map.items():
-            obj.shutdown()
-        self._oid_map.clear()
+        self._reset_objects()
         self.config_crc = 0
-        self.oid_count = 0
         super().reset()
         return True
 
     def get_uptime(self, cmd):
         runtime = self.get_controller_clock_ticks()
         self.respond(proto.ResponseTypes.RESPONSE, cmd,
-                     high=int(self._clock_high + (runtime < self._stats_sent_time)) & 0xffffffff,
-                     clock=(runtime & 0xffffffff))
+                     high=self._clock_high + int(runtime < self._stats_sent_time),
+                     clock=runtime)
         return True
 
     def get_clock(self, cmd):
         now = self.get_controller_clock_ticks()
-        self.respond(proto.ResponseTypes.RESPONSE, cmd, clock=(now & 0xffffffff))
+        self.respond(proto.ResponseTypes.RESPONSE, cmd, clock=now)
         return True
 
     def get_config(self, cmd):
@@ -291,6 +273,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def allocate_oids(self, cmd, count):
+        self._reset_objects()
         self.oid_count = count
         return True
 
@@ -465,6 +448,10 @@ class KlipperFrontend(BaseFrontend):
                         break
             self.respond(proto.ResponseTypes.ACK)
             self.serial_data = self.serial_data[i:]
+
+    def __del__(self):
+        self._reset_objects()
+        super().__del__()
 
 def create():
     return KlipperFrontend()
