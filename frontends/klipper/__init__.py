@@ -355,8 +355,7 @@ class KlipperFrontend(BaseFrontend):
             return False
         name = self.get_object_name(klass, obj_id)
         try:
-            self._oid_map[oid] = Stepper(self, oid, obj_id, name,
-                                         invert_step, step_pulse_ticks)
+            self._oid_map[oid] = Stepper(self, oid, obj_id, name)
         except ValueError:
             self.shutdown("Stepper initialization failed")
         return True

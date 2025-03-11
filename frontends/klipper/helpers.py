@@ -35,7 +35,7 @@ class Logger:
         func = getattr(logging, name)
         prefix = f"{self._name}[{self._oid}] "
         #return lambda f, *a, **k: func(prefix + f, *a, **k)
-        return lambda f, *a, **k: print(prefix + f.format(*a, **k))
+        return lambda f, *a, **k: print(prefix + f.format(*a, **k), flush=True)
 
 class MoveQueue:
     def __init__(self, size):
@@ -201,13 +201,13 @@ class DigitalPin:
         self._log.debug(f"flags: {flags!r}")
         if len(self._cycles):
             _cycle = self._cycles[0]
-            if Flags.CHECK_END in flags and self.frontend.timers.is_before(end_time, _cycle.waketime):
+            if Flags.CHECK_END & flags and self.frontend.timers.is_before(end_time, _cycle.waketime):
                 self.frontend.shutdown("Scheduled digital out event will exceed max duration")
                 return 0
             end_time = _cycle.waketime
             flags |= Flags.CHECK_END
         # we are toggling
-        self.end_time = end_time = self.frontend.timers.to_time(end_time)
+        self.end_time = end_time = end_time
         self.flags = flags | (self.flags & Flags.DEFAULT_ON)
         self._log.debug(f"flags: {flags!r}, end_time: {end_time}")
         if not (Flags.TOGGLING & flags):
@@ -220,7 +220,7 @@ class DigitalPin:
             self.waketime = self.end_time
             return self.end_time
         self.handler = self.toggling
-        self.waketime = self.frontend.timers.to_time(waketime)
+        self.waketime = waketime
         self.on_duration = cycle.duration
         self.off_duration = self.cycle_ticks - cycle.duration
         return self.waketime
@@ -237,7 +237,7 @@ class DigitalPin:
         if Flags.CHECK_END & self.flags and self.frontend.timers.is_after(waketime, self.end_time):
             self.handler = self.event
             waketime = self.end_time
-        self.waketime = self.frontend.timers.to_time(waketime)
+        self.waketime = waketime
         return waketime
     def shutdown(self):
         try:
@@ -294,17 +294,14 @@ class CurrentMove:
     def __init__(self, interval, count, increment, dir):
         self.interval, self.count, self.increment, self.dir = \
             interval, count, increment, dir
-        self.next_step_time = 0
 
 class Stepper:
-    def __init__(self, frontend, oid, obj_id, name, invert_step, step_pulse):
+    def __init__(self, frontend, oid, obj_id, name):
         self.frontend = frontend
         self.oid = oid
         self.id = obj_id
         self.name = name
         self._log = Logger(name, oid)
-        self.invert = invert_step
-        self.step_pulse = step_pulse
         status = self.frontend.query([obj_id])[obj_id]
         self.pins = {"enable": status.get("enable_pin"),
                      "dir": status.get("dir_pin"),
@@ -312,6 +309,7 @@ class Stepper:
         self.oid_handlers = {}
         self.move_queue = MoveQueue(self.frontend._queue.max_size)
         self.next_dir = 0
+        self.next_step_time = 0
         self.timer = self.frontend.timers.new()
         self.timer.callback = self.send_step
         self._needs_reset = False
@@ -356,6 +354,7 @@ class Stepper:
             self.timer.timeout = timeout
     def stop_moves(self, time, reason):
         self._needs_reset = True
+        self.next_step_time = 0
         self.timer.timeout = 0
         self.move.count = 0
         self.move_queue.clear()
@@ -365,27 +364,51 @@ class Stepper:
         if not move:
             return 0
         if self.move.dir != move.dir:
-            self.pin_word ^= StepperPins.DIR ^ self.invert
-        prev_step_time = self.move.next_step_time
+            # Only switch direction if the current set of
+            # steps have been finished by the stepper.
+            while self.pin_word() & StepperMasks.STEPS:
+                continue
+            self.pin_word ^= StepperPins.DIR
         self.move = CurrentMove(move.interval + move.increment, move.count,
                                 move.increment, move.dir)
-        self.move.next_step_time = \
-            self.frontend.timers.to_time(prev_step_time + move.interval)
-        return self.move.next_step_time
+        self.next_step_time = self.frontend.timers.to_time(self.next_step_time + move.interval)
+        self._log.debug(f"ticks={ticks}, move_next_step={self.next_step_time}, interval={move.interval}")
+        return self.next_step_time
     def _calc_step_time(self, ticks):
         if self.move.count:
-            self.move.next_step_time = \
-                self.frontend.timers.to_time(self.move.next_step_time + self.move.interval)
+            self.next_step_time = self.frontend.timers.to_time(self.next_step_time + self.move.interval)
             self.move.interval += self.move.increment
-            return self.move.next_step_time
+            return self.next_step_time
         return self._next_move(ticks)
-    def send_step(self, ticks):
-        self.pin_word.inc()
+    def _do_step(self):
         self.move.count -= 1
+        self.pin_word.inc()
+    def send_step(self, ticks):
+        self._diff = ticks - self.next_step_time
+        self._do_step()
         next_step = self._calc_step_time(ticks)
+        # A drift can occur in step timing due to the impresise
+        # nature of the simulated controller clock.
+        # The core of the issue is that controller clock ticks
+        # are updated based on elapsed wall clock time.
+        # For controllers running at high enough frequencies, this
+        # results in the clock ticks jumping instead of incrementing
+        # by 1.
+        # Therefore, a timer callback can be called with a ticks
+        # value that is past the timers wake up time. This "error"
+        # accumulates slowly and results in step time error after
+        # the clock has wrapped a sufficient number of times.
+        # Furthermore, the next step cannot be calculated based of
+        # the current tick value because that will throw off
+        # Klipper's step calculation and Klipper will compute the
+        # wrong axis position.
+        while next_step != 0 and self.frontend.timers.is_before(next_step, ticks):
+            self._do_step()
+            next_step = self._calc_step_time(ticks)
+        self._log.debug(f"ticks={ticks}, count={self.move.count}, next_step_time={self.next_step_time}, interval={self.move.interval}")
         return next_step
     def reset_clock(self, clock):
-        self.move.next_step_time = clock
+        self.next_step_time = clock
         self._needs_reset = False
     def shutdown(self):
         try:
@@ -414,7 +437,7 @@ class EndstopPin:
         self.trsync = None
         self.is_homing = False
         status = frontend.query_object([self.id])[self.id]
-        self.pin_word = ctypes.cast(status["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
+        self.pin_word = atomics.Atomic(8, var=status["pin_addr"])
         self._log = Logger(name, oid)
         self.timer = self.frontend.timers.new()
         self.timer.callback = self._event
@@ -434,25 +457,23 @@ class EndstopPin:
         self.handler = self._event_sample
         self.timer.timeout = clock
     def _get_status(self):
-        return self.pin_word.contents.value & 1
+        return self.pin_word.value & 1
     def _event(self, ticks):
         return self.handler(ticks)
     def _event_sample(self, ticks):
-        triggered = self._get_status()
-        if not triggered:
+        if not self._get_status():
             return ticks + self.rest_time
         self.nextwake = ticks + self.rest_time
         self.handler = self._event_oversample
         return self._event_oversample(ticks)
     def _event_oversample(self, ticks):
-        triggered = self._get_status()
-        if not triggered:
+        if not self._get_status():
             self.handler = self._event_sample
             self.trigger_count = self.sample_count
             return self.nextwake
         count = self.trigger_count - 1
         if not count:
-            self.trsync.do_trigger(self.trigger_reason)
+            self.trsync.do_trigger(self.timer.timeout, self.trigger_reason)
             return 0
         self.trigger_count = count
         return ticks + self.sample_time
@@ -501,7 +522,7 @@ class TRSync:
             self.report_timer.timeout = report_clock
     def set_timeout(self, timeout):
         if TRSyncFlags.CAN_TRIGGER in self.flags:
-                self.expire_timer.timeout = timeout
+            self.expire_timer.timeout = timeout
     def add_signal(self, handler):
         self.signals.append(handler)
     def report(self, ticks, reason=None):
@@ -512,24 +533,25 @@ class TRSync:
                               oid=self.oid,
                               can_trigger=int(TRSyncFlags.CAN_TRIGGER in self.flags),
                               trigger_reason=reason, clock=ticks)
-    def do_trigger(self, reason):
+    def do_trigger(self, ticks, reason):
         if TRSyncFlags.CAN_TRIGGER not in self.flags:
             return
         self.flags &= ~TRSyncFlags.CAN_TRIGGER
         self.trigger_reason = reason
         for signal in self.signals:
-            signal(reason)
+            signal(ticks, reason)
         self.signals.clear()
-        self.report(self.frontend.get_controller_clock_ticks())
+        self.report(ticks)
     def trigger(self, reason):
-        self.do_trigger(reason)
         self.report_timer.timeout = 0
         self.expire_timer.timeout = 0
+        self.do_trigger(self.frontend.get_controller_clock_ticks(), reason)
     def report_handler(self, ticks):
         self.report(ticks)
         return ticks + self.report_ticks
     def expire_handler(self, ticks):
-        self.do_trigger(self.expire_reason)
+        self.report_timer.timeout = 0
+        self.do_trigger(ticks, self.expire_reason)
         return 0
     def shutdown(self):
         try:
