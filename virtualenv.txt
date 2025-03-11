@@ -3,3 +3,5 @@ regex
 cffi
 meson-python
 setuptools
+plotly
+dash

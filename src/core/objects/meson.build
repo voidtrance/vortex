@@ -27,7 +27,7 @@ foreach object : objects
     r = run_command(py, root / 'tools/find_modules.py', meson.current_source_dir(), object, check: true)
     sources = r.stdout().strip().split()
     lib = library(object, sources + [auto_gen_types, auto_gen_events],
-                         include_directories: [core_include],
+                         include_directories: [core_include, core_include_general],
                          dependencies: [core_utils_dep, core_kinematics_dep, math],
                          name_prefix: '',
                          install: true,
