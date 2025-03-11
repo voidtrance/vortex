@@ -18,6 +18,7 @@ import sys
 import argparse
 import logging
 import errno
+import traceback
 import vortex.emulator
 import vortex.emulator.config
 import vortex.frontends
@@ -105,6 +106,8 @@ def main():
     except KeyboardInterrupt:
         pass
     except Exception as e:
+        if opts.debug.lower() == "debug":
+            traceback.print_exc(e)
         print(f"Emulator exception: {e}")
     finally:
         emulation.stop()
