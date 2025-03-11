@@ -17,6 +17,7 @@
 import argparse
 import configparser
 from typing import Type
+from time import strftime
 from vortex.controllers.types import ModuleTypes
 from vortex.emulator.kinematics import AxisType
 
@@ -140,12 +141,20 @@ def generate_bed_layers(section : str, esection : str, name : str,
     # Make one up.
     econfig.set(esection, "power", "400")
     # Get axis sizes so we can infer bed size
+    bed_size = dict.fromkeys(["x", "y", "z"], 0.)
+    axes = [x for x in econfig.sections() if x.startswith("axis")]
+    for axis in axes:
+        axis_type = econfig.get(axis, "type")
+        if axis_type in ('x', 'y'):
+            bed_size[axis_type] = econfig.getfloat(axis, "length")
+    # It's possible that the heaters are defined prior to the axis
+    # in which case the bed size would not be available.
+    # Use the Klipper config for all missing sizes
     steppers = [x for x in kconfig.sections() if x.startswith("stepper")]
-    bed_size = {b: 0 for a in steppers for b in a.split("_")[1]}
-    for sec in steppers:
-        size = kconfig.getfloat(sec, "position_max")
-        _, axis = sec.split("_")
-        bed_size[axis] = size
+    for axis in bed_size:
+        if bed_size[axis] != 0.:
+            size = kconfig.getfloat(f"stepper_{axis}", "position_max")
+            bed_size[axis] = size
     # Generate bed thermal layers
     econfig.set(esection, "layers_1_type", "1")
     econfig.set(esection, "layers_1_density", "1100000")
@@ -273,6 +282,9 @@ for section in klipper_config.sections():
             handler(section, klipper_config, emulator_config)
 
 with open(opts.emulator_config, 'w') as fd:
+    fd.write("### Auto-generated Vortex configuration\n")
+    fd.write(f"### Generated from {opts.klipper_config}\n")
+    fd.write(f"### on {strftime('%m-%d-%Y %H:%M:%S')}\n")
     emulator_config.write(fd)
 
 print("Emulator configuration file generated.")
