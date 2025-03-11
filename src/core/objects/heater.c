@@ -26,6 +26,11 @@
 #include "heater.h"
 #include <cache.h>
 
+/*
+ * Heater temperature is updated 25 times per second.
+ */
+#define HEATER_UPDATE_FREQ (HZ_TO_NSEC(25))
+
 typedef struct {
     uint16_t power;
     char pin[8];
@@ -216,6 +221,9 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     if (heater->temp_data.compute_start == 0)
         heater->temp_data.compute_start = timestep;
 
+    if (time_delta < HEATER_UPDATE_FREQ)
+        return;
+
     heater->timestep = timestep;
 
     /*
@@ -223,7 +231,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
      * ramp.
      */
     heater_compute_iterate(heater->temp_data.compute, time_delta,
-        timestep - heater->temp_data.compute_start);
+                           timestep - heater->temp_data.compute_start);
     heater->temp_data.current =
         heater_compute_get_temperature(heater->temp_data.compute);
 
