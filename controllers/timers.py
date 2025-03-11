@@ -20,7 +20,7 @@ class Timer:
         self._schedule = schedule
         self._unregister = unregister
         self._compare = compare
-        self._handle = None
+        self._handle = self._register(self.handler, 0)
 
     @property
     def timeout(self):
@@ -45,13 +45,11 @@ class Timer:
         return self._timeout
 
     def schedule(self, timeout):
-        self._timeout = timeout
-        if self._callback is None:
+        if self._callback is None or \
+            (self._timeout == 0 and timeout == 0):
             return
-        if self._handle is None:
-            self._handle = self._register(self.handler, self._timeout)
-        else:
-            self._schedule(self._handle, self._timeout)
+        self._timeout = timeout
+        self._schedule(self._handle, self._timeout)
 
     def is_before(self, other):
         return self < other
@@ -95,12 +93,8 @@ class Factory:
         c_value = self._controller_time_type(value)
         return c_value.value
     def is_before(self, t1, t2):
-        tt1 = self.new()
-        tt1.timeout = t1
-        return tt1.is_before(t2)
+        return self._controller.compare_timer(t1, t2) < 0
     def is_after(self, t1, t2):
-        tt1 = self.new()
-        tt1.timeout = t1
-        return tt1.is_after(t2)
+        return self._controller.compare_timer(t1, t2) > 0
     def from_us(self, us):
         return int(us * (self._controller.FREQUENCY / 1000000))

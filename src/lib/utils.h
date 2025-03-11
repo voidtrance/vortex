@@ -19,6 +19,9 @@
 #define __UTILS_H__
 #include <stdint.h>
 
+#define likely(x) (__builtin_expect(!!(x), 1))
+#define unlikely(x) (__builtin_expect(!!(x), 0))
+
 #define SEC_TO_MSEC(x) ((uint64_t)(x)*1000)
 #define MSEC_TO_USEC(x) SEC_TO_MSEC(x)
 #define SEC_TO_USEC(x) (SEC_TO_MSEC(x) * 1000)
