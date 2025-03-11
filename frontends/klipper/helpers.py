@@ -263,6 +263,9 @@ class HeaterPin(DigitalPin):
         self.pin_word = ctypes.cast(status["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
     def _set_pin(self, value):
         self.pin_word.contents.value = int(not (not (Flags.ON & value)))
+    def shutdown(self):
+        self._set_pin(not (not int(Flags.DEFAULT_ON & self.flags)))
+        super().shutdown()
 
 class StepperPinShift(enum.IntEnum):
     STEPS = 16
