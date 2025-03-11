@@ -16,10 +16,19 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import sys
 import os
+import time
+import json
+import socket
 import argparse
 import configparser
 
 parser = argparse.ArgumentParser()
+seq = parser.add_argument_group("Sequential Printing",
+                                description="Print file by sending commands one by one.")
+seq.add_argument("--sequential", action="store_true", help="Enable sequential printing")
+seq.add_argument("--interval", type=float, default=0.0, help="Send commands every INTERVAL seconds")
+seq.add_argument("--wait", action="store_true", help="Wait for use intput before continuing")
+parser.add_argument("--pipe", default="/tmp/printer", help="Klipper command pipe")
 parser.add_argument("config", help="Klipper config file")
 
 args = parser.parse_args()
@@ -50,9 +59,28 @@ except KeyboardInterrupt:
     sys.exit(0)
 
 print(f"Printing {gcode_file}...")
-with open("/tmp/printer", 'a') as fd:
-    fd.write("M21\n")
-    fd.write(f"M23 {gcode_file}\n")
-    fd.write("M24\n")
+if args.sequential:
+    printer = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    printer.connect(args.pipe)
+    id = 0
+    with open(os.path.join(gcode_path, gcode_file), 'r') as gcode:
+        for line in gcode:
+            if not line.strip() or line.startswith(';'):
+                continue
+            print(f"Executing {line.strip()}...")
+            data = json.dumps({'id': id, 'method': 'gcode/script',
+                               'params': {'script': line.strip()}}).encode()
+            printer.sendall(data + chr(0x3).encode())
+            id += 1
+            response = printer.recv(1024)
+            if args.wait:
+                input("Next line? ")
+            elif args.interval:
+                time.sleep(args.interval)
+else:
+    printer = open(args.pipe, 'a')
+    printer.write("M21\n")
+    printer.write(f"M23 {gcode_file}\n")
+    printer.write("M24\n")
 
     
