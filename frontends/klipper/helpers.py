@@ -266,12 +266,14 @@ class HeaterPin(DigitalPin):
 
 class StepperPinShift(enum.IntEnum):
     STEPS = 16
+    DEBUG = 29
     DIR = 30
     ENABLE = 31
 
 class StepperPins(enum.IntFlag):
     ENABLE = (1 << StepperPinShift.ENABLE)
     DIR = (1 << StepperPinShift.DIR)
+    DEBUG = (1 << StepperPinShift.DEBUG)
 
 class StepperMasks(enum.IntEnum):
     STEPS = (1 << StepperPinShift.STEPS) - 1
