@@ -23,7 +23,7 @@
 #include "heater.h"
 #include "thermistor.h"
 
-#define TO_KELVIN(x) ((x) + 273.15)
+#define TO_KELVIN(x) ((float)(x) + 273.15)
 
 typedef enum {
     SENSOR_TYPE_PT100,
@@ -94,10 +94,13 @@ static inline float resistance_calc(float base, float temp) {
                    (temp - 100) * pt100_C * temp * temp * temp);
 }
 
-static inline uint16_t calc_adc_value(float resistance, uint32_t resistor,
+static inline uint16_t calc_adc_value(double resistance, uint32_t resistor,
                                       uint16_t max_adc) {
-    return (uint16_t)round((resistance / ((float)resistor + resistance)) *
-                           (max_adc + 1));
+    double sum = (double)resistor + resistance;
+    double div = resistance / sum;
+    double adc_f = div * max_adc;
+
+    return (uint16_t)adc_f;
 }
 
 static inline void calc_coefficiants_beta(float temp, float resistance,
