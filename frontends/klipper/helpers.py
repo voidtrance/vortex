@@ -23,7 +23,7 @@ from vortex.controllers.types import ModuleTypes
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
-           "Stepper", "TRSync"]
+           "Stepper", "TRSync", "Logger"]
 
 class Logger:
     def __init__(self, name, oid):
@@ -34,8 +34,8 @@ class Logger:
             return getattr(self, name)
         func = getattr(logging, name)
         prefix = f"{self._name}[{self._oid}] "
-        #return lambda f, *a, **k: func(prefix + f, *a, **k)
-        return lambda f, *a, **k: print(prefix + f.format(*a, **k), flush=True)
+        return lambda f, *a, **k: func(prefix + f.format(*a, **k))
+        #return lambda f, *a, **k: print(prefix + f.format(*a, **k), flush=True)
 
 class MoveQueue:
     def __init__(self, size):

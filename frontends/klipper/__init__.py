@@ -51,6 +51,7 @@ class KlipperFrontend(BaseFrontend):
     STATS_SUMSQ_BASE = 256
     def __init__(self):
         super().__init__(1024)
+        self._log = Logger("klipper", -1)
         self.next_sequence = 1
         self.serial_data = bytes()
         self.mp = msgproto.MessageParser()
@@ -184,6 +185,10 @@ class KlipperFrontend(BaseFrontend):
         self._stats_timer.timeout = self.start_tick + self.timers.from_us(100000)
         super().run()
 
+    def stop(self):
+        self._reset_objects()
+        super().stop()
+
     def respond(self, type, cmd=None, **kwargs):
         if type == proto.ResponseTypes.RESPONSE:
             if not cmd:
@@ -191,7 +196,7 @@ class KlipperFrontend(BaseFrontend):
             if not cmd.response:
                 return
             msg = self.mp.lookup_command(cmd.response)
-            logging.debug(f"response: {msg.format_params(kwargs)}")
+            self._log.debug("response: {}", msg.format_params(kwargs))
             data = msg.encode_by_name(**kwargs)
         else:
             data = []
@@ -431,7 +436,7 @@ class KlipperFrontend(BaseFrontend):
                     msgid, param_pos = self.mp.msgid_parser.parse(block, pos)
                     mid = self.mp.messages_by_id.get(msgid, self.mp.unknown)
                     msg_params, pos = mid.parse(block, pos)
-                    logging.debug(f"request: {mid.name} {msg_params}")
+                    self._log.debug("request: {} {}", mid.name, msg_params)
                     cmd = self.all_commands[mid.name]
                     if self._shutdown and \
                         proto.KlipperProtoFlags.HF_IN_SHUTDOWN not in cmd.flags:
