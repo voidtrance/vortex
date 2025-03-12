@@ -23,18 +23,45 @@ class ResponseTypes(ExtIntEnum):
     NACK = auto()
     RESPONSE = auto()
 
+# Klipper command flags
 class KlipperProtoFlags(enum.Flag):
     HF_NONE = 0
-    HF_IN_SHUTDOWN = auto()
+    HF_IN_SHUTDOWN = 1
 
-KLIPPER_PROTOCOL = Namespace(adccmds=Namespace(), basecmd=Namespace(), shutdown=Namespace(), buttons=Namespace(),
-            debugcmds=Namespace(), endstop=Namespace(), gpiocmds=Namespace(), lcd_hd44780=Namespace(),
-            lcd_st7920=Namespace(),	neopixel=Namespace(), pulse_counter=Namespace(), pwmcmds=Namespace(),
-            spi_software=Namespace(), stepper=Namespace(), thermocouple=Namespace(), tmcuart=Namespace(),
-            trsync=Namespace(),	sdiocmds=Namespace(), i2c_software=Namespace(), spicmds=Namespace(),
-            sensor_adxl345=Namespace(),	sensor_angle=Namespace(), sensor_lis2dw=Namespace(),
-            sensor_mpu9250=Namespace(), sensor_ads1220=Namespace(),	sensor_hx71x=Namespace(),
-            sensor_ldc1612=Namespace(), i2ccmds=Namespace(), tasks=Namespace())
+KLIPPER_PROTOCOL = Namespace(
+    adccmds=Namespace(),
+    basecmd=Namespace(),
+    buttons=Namespace(),
+    command=Namespace(),
+    debugcmds=Namespace(),
+    endstop=Namespace(),
+    gpiocmds=Namespace(),
+    i2c_software=Namespace(),
+    i2ccmds=Namespace(),
+    lcd_hd44780=Namespace(),
+    lcd_st7920=Namespace(),
+    neopixel=Namespace(),
+    pulse_counter=Namespace(),
+    pwmcmds=Namespace(),
+    sched=Namespace(),
+    sdiocmds=Namespace(),
+    sensor_ads1220=Namespace(),
+    sensor_adxl345=Namespace(),
+    sensor_angle=Namespace(),
+    sensor_bulk=Namespace(),
+    sensor_hx71x=Namespace(),
+    sensor_ldc1612=Namespace(),
+    sensor_lis2dw=Namespace(),
+    sensor_mpu9250=Namespace(),
+    spi_software=Namespace(),
+    spicmds=Namespace(),
+    stepper=Namespace(),
+    thermocouple=Namespace(),
+    tmcuart=Namespace(),
+    trsync=Namespace(),
+)
+
+KLIPPER_PROTOCOL.version = "96cceed2"
 
 # adccmds commands
 KLIPPER_PROTOCOL.adccmds.config_analog_in = Namespace(command="config_analog_in oid=%c pin=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
@@ -49,18 +76,15 @@ KLIPPER_PROTOCOL.basecmd.get_uptime = Namespace(command="get_uptime", flags=Klip
 KLIPPER_PROTOCOL.basecmd.emergency_stop = Namespace(command="emergency_stop", flags=KlipperProtoFlags.HF_IN_SHUTDOWN, response=None)
 KLIPPER_PROTOCOL.basecmd.clear_shutdown = Namespace(command="clear_shutdown", flags=KlipperProtoFlags.HF_IN_SHUTDOWN, response=None)
 KLIPPER_PROTOCOL.basecmd.identify = Namespace(command="identify offset=%u count=%c", flags=KlipperProtoFlags.HF_IN_SHUTDOWN, response="identify_response offset=%u data=%.*s")
-
-# shutdown commands
-KLIPPER_PROTOCOL.shutdown.shutdown = Namespace(command=None, flags=KlipperProtoFlags.HF_NONE, response="shutdown clock=%u static_string_id=%hu")
-KLIPPER_PROTOCOL.shutdown.is_shutdown = Namespace(command=None, flags=KlipperProtoFlags.HF_NONE, response="is_shutdown static_string_id=%hu")
-# basecmd tasts
-KLIPPER_PROTOCOL.tasks.stats = Namespace(command=None, flags=KlipperProtoFlags.HF_NONE, interval=5000000, response="stats count=%u sum=%u sumsq=%u")
+KLIPPER_PROTOCOL.basecmd.stats = Namespace(command=None, flags=None, response="stats count=%u sum=%u sumsq=%u")
 
 # buttons commands
 KLIPPER_PROTOCOL.buttons.config_buttons = Namespace(command="config_buttons oid=%c button_count=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
 KLIPPER_PROTOCOL.buttons.buttons_add = Namespace(command="buttons_add oid=%c pos=%c pin=%u pull_up=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
 KLIPPER_PROTOCOL.buttons.buttons_query = Namespace(command="buttons_query oid=%c clock=%u rest_ticks=%u retransmit_count=%c invert=%c", flags=KlipperProtoFlags.HF_NONE, response="buttons_state oid=%c ack_count=%c state=%*s")
 KLIPPER_PROTOCOL.buttons.buttons_ack = Namespace(command="buttons_ack oid=%c count=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+
+# command commands
 
 # debugcmds commands
 KLIPPER_PROTOCOL.debugcmds.debug_read = Namespace(command="debug_read order=%c addr=%u", flags=KlipperProtoFlags.HF_IN_SHUTDOWN, response="debug_result val=%u")
@@ -79,6 +103,15 @@ KLIPPER_PROTOCOL.gpiocmds.set_digital_out_pwm_cycle = Namespace(command="set_dig
 KLIPPER_PROTOCOL.gpiocmds.queue_digital_out = Namespace(command="queue_digital_out oid=%c clock=%u on_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
 KLIPPER_PROTOCOL.gpiocmds.update_digital_out = Namespace(command="update_digital_out oid=%c value=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
 KLIPPER_PROTOCOL.gpiocmds.set_digital_out = Namespace(command="set_digital_out pin=%u value=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+
+# i2c_software commands
+KLIPPER_PROTOCOL.i2c_software.i2c_set_software_bus = Namespace(command="i2c_set_software_bus oid=%c scl_pin=%u sda_pin=%u rate=%u address=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+
+# i2ccmds commands
+KLIPPER_PROTOCOL.i2ccmds.config_i2c = Namespace(command="config_i2c oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.i2ccmds.i2c_set_bus = Namespace(command="i2c_set_bus oid=%c i2c_bus=%u rate=%u address=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.i2ccmds.i2c_write = Namespace(command="i2c_write oid=%c data=%*s", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.i2ccmds.i2c_read = Namespace(command="i2c_read oid=%c reg=%*s read_len=%u", flags=KlipperProtoFlags.HF_NONE, response="i2c_read_response oid=%c response=%*s")
 
 # lcd_hd44780 commands
 KLIPPER_PROTOCOL.lcd_hd44780.config_hd44780 = Namespace(command="config_hd44780 oid=%c rs_pin=%u e_pin=%u d4_pin=%u d5_pin=%u d6_pin=%u d7_pin=%u delay_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
@@ -104,31 +137,10 @@ KLIPPER_PROTOCOL.pwmcmds.config_pwm_out = Namespace(command="config_pwm_out oid=
 KLIPPER_PROTOCOL.pwmcmds.queue_pwm_out = Namespace(command="queue_pwm_out oid=%c clock=%u value=%hu", flags=KlipperProtoFlags.HF_NONE, response=None)
 KLIPPER_PROTOCOL.pwmcmds.set_pwm_out = Namespace(command="set_pwm_out pin=%u cycle_ticks=%u value=%hu", flags=KlipperProtoFlags.HF_NONE, response=None)
 
-# spi_software commands
-KLIPPER_PROTOCOL.spi_software.spi_set_software_bus = Namespace(command="spi_set_software_bus oid=%c miso_pin=%u mosi_pin=%u sclk_pin=%u mode=%u rate=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-
-# stepper commands
-KLIPPER_PROTOCOL.stepper.config_stepper = Namespace(command="config_stepper oid=%c step_pin=%c dir_pin=%c invert_step=%c step_pulse_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.stepper.queue_step = Namespace(command="queue_step oid=%c interval=%u count=%hu add=%hi", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.stepper.set_next_step_dir = Namespace(command="set_next_step_dir oid=%c dir=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.stepper.reset_step_clock = Namespace(command="reset_step_clock oid=%c clock=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.stepper.stepper_get_position = Namespace(command="stepper_get_position oid=%c", flags=KlipperProtoFlags.HF_NONE, response="stepper_position oid=%c pos=%i")
-KLIPPER_PROTOCOL.stepper.stepper_stop_on_trigger = Namespace(command="stepper_stop_on_trigger oid=%c trsync_oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-
-# thermocouple commands
-KLIPPER_PROTOCOL.thermocouple.config_thermocouple = Namespace(command="config_thermocouple oid=%c spi_oid=%c thermocouple_type=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.thermocouple.query_thermocouple = Namespace(command="query_thermocouple oid=%c clock=%u rest_ticks=%u min_value=%u max_value=%u max_invalid_count=%c", flags=KlipperProtoFlags.HF_NONE, response="thermocouple_result oid=%c next_clock=%u value=%u fault=%c")
-
-# tmcuart commands
-KLIPPER_PROTOCOL.tmcuart.config_tmcuart = Namespace(command="config_tmcuart oid=%c rx_pin=%u pull_up=%c tx_pin=%u bit_time=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.tmcuart.tmcuart_send = Namespace(command="tmcuart_send oid=%c write=%*s read=%c", flags=KlipperProtoFlags.HF_NONE, response="tmcuart_response oid=%c read=%*s")
-
-# trsync commands
-KLIPPER_PROTOCOL.trsync.config_trsync = Namespace(command="config_trsync oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.trsync.trsync_start = Namespace(command="trsync_start oid=%c report_clock=%u report_ticks=%u expire_reason=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.trsync.trsync_set_timeout = Namespace(command="trsync_set_timeout oid=%c clock=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.trsync.trsync_trigger = Namespace(command="trsync_trigger oid=%c reason=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.trsync.trsync_state = Namespace(command=None, flags=KlipperProtoFlags.HF_NONE, interval=0, response="trsync_state oid=%c can_trigger=%c trigger_reason=%c clock=%u")
+# sched commands
+KLIPPER_PROTOCOL.sched.shutdown = Namespace(command=None, flags=None, response="shutdown clock=%u static_string_id=%hu")
+KLIPPER_PROTOCOL.sched.is_shutdown = Namespace(command=None, flags=None, response="is_shutdown static_string_id=%hu")
+KLIPPER_PROTOCOL.sched.starting = Namespace(command=None, flags=None, response="starting")
 
 # sdiocmds commands
 KLIPPER_PROTOCOL.sdiocmds.config_sdio = Namespace(command="config_sdio oid=%c blocksize=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
@@ -140,16 +152,10 @@ KLIPPER_PROTOCOL.sdiocmds.sdio_write_data = Namespace(command="sdio_write_data o
 KLIPPER_PROTOCOL.sdiocmds.sdio_read_data_buffer = Namespace(command="sdio_read_data_buffer oid=%c offset=%u len=%c", flags=KlipperProtoFlags.HF_NONE, response="sdio_read_data_buffer_response oid=%c data=%*s")
 KLIPPER_PROTOCOL.sdiocmds.sdio_write_data_buffer = Namespace(command="sdio_write_data_buffer oid=%c offset=%u data=%*s", flags=KlipperProtoFlags.HF_NONE, response=None)
 
-# i2c_software commands
-KLIPPER_PROTOCOL.i2c_software.i2c_set_software_bus = Namespace(command="i2c_set_software_bus oid=%c scl_pin=%u sda_pin=%u rate=%u address=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-
-# spicmds commands
-KLIPPER_PROTOCOL.spicmds.config_spi = Namespace(command="config_spi oid=%c pin=%u cs_active_high=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.spicmds.config_spi_without_cs = Namespace(command="config_spi_without_cs oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.spicmds.spi_set_bus = Namespace(command="spi_set_bus oid=%c spi_bus=%u mode=%u rate=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.spicmds.spi_transfer = Namespace(command="spi_transfer oid=%c data=%*s", flags=KlipperProtoFlags.HF_NONE, response="spi_transfer_response oid=%c response=%*s")
-KLIPPER_PROTOCOL.spicmds.spi_send = Namespace(command="spi_send oid=%c data=%*s", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.spicmds.config_spi_shutdown = Namespace(command="config_spi_shutdown oid=%c spi_oid=%c shutdown_msg=%*s", flags=KlipperProtoFlags.HF_NONE, response=None)
+# sensor_ads1220 commands
+KLIPPER_PROTOCOL.sensor_ads1220.config_ads1220 = Namespace(command="config_ads1220 oid=%c spi_oid=%c data_ready_pin=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.sensor_ads1220.query_ads1220 = Namespace(command="query_ads1220 oid=%c rest_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.sensor_ads1220.query_ads1220_status = Namespace(command="query_ads1220_status oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
 
 # sensor_adxl345 commands
 KLIPPER_PROTOCOL.sensor_adxl345.config_adxl345 = Namespace(command="config_adxl345 oid=%c spi_oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
@@ -161,20 +167,9 @@ KLIPPER_PROTOCOL.sensor_angle.config_spi_angle = Namespace(command="config_spi_a
 KLIPPER_PROTOCOL.sensor_angle.query_spi_angle = Namespace(command="query_spi_angle oid=%c clock=%u rest_ticks=%u time_shift=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
 KLIPPER_PROTOCOL.sensor_angle.spi_angle_transfer = Namespace(command="spi_angle_transfer oid=%c data=%*s", flags=KlipperProtoFlags.HF_NONE, response="spi_angle_transfer_response oid=%c clock=%u response=%*s")
 
-# sensor_lis2dw commands
-KLIPPER_PROTOCOL.sensor_lis2dw.config_lis2dw = Namespace(command="config_lis2dw oid=%c spi_oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.sensor_lis2dw.query_lis2dw = Namespace(command="query_lis2dw oid=%c rest_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.sensor_lis2dw.query_lis2dw_status = Namespace(command="query_lis2dw_status oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-
-# sensor_mpu9250 commands
-KLIPPER_PROTOCOL.sensor_mpu9250.config_mpu9250 = Namespace(command="config_mpu9250 oid=%c i2c_oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.sensor_mpu9250.query_mpu9250 = Namespace(command="query_mpu9250 oid=%c rest_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.sensor_mpu9250.query_mpu9250_status = Namespace(command="query_mpu9250_status oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-
-# sensor_ads1220 commands
-KLIPPER_PROTOCOL.sensor_ads1220.config_ads1220 = Namespace(command="config_ads1220 oid=%c spi_oid=%c data_ready_pin=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.sensor_ads1220.query_ads1220 = Namespace(command="query_ads1220 oid=%c rest_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.sensor_ads1220.query_ads1220_status = Namespace(command="query_ads1220_status oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+# sensor_bulk commands
+KLIPPER_PROTOCOL.sensor_bulk.sensor_bulk_data = Namespace(command=None, flags=None, response="sensor_bulk_data oid=%c sequence=%hu data=%*s")
+KLIPPER_PROTOCOL.sensor_bulk.sensor_bulk_status = Namespace(command=None, flags=None, response="sensor_bulk_status oid=%c clock=%u query_ticks=%u next_sequence=%hu buffered=%u possible_overflows=%hu")
 
 # sensor_hx71x commands
 KLIPPER_PROTOCOL.sensor_hx71x.config_hx71x = Namespace(command="config_hx71x oid=%c gain_channel=%c dout_pin=%u sclk_pin=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
@@ -189,9 +184,97 @@ KLIPPER_PROTOCOL.sensor_ldc1612.query_ldc1612_home_state = Namespace(command="qu
 KLIPPER_PROTOCOL.sensor_ldc1612.query_ldc1612 = Namespace(command="query_ldc1612 oid=%c rest_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
 KLIPPER_PROTOCOL.sensor_ldc1612.query_status_ldc1612 = Namespace(command="query_status_ldc1612 oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
 
-# i2ccmds commands
-KLIPPER_PROTOCOL.i2ccmds.config_i2c = Namespace(command="config_i2c oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.i2ccmds.i2c_set_bus = Namespace(command="i2c_set_bus oid=%c i2c_bus=%u rate=%u address=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.i2ccmds.i2c_write = Namespace(command="i2c_write oid=%c data=%*s", flags=KlipperProtoFlags.HF_NONE, response=None)
-KLIPPER_PROTOCOL.i2ccmds.i2c_read = Namespace(command="i2c_read oid=%c reg=%*s read_len=%u", flags=KlipperProtoFlags.HF_NONE, response="i2c_read_response oid=%c response=%*s")
+# sensor_lis2dw commands
+KLIPPER_PROTOCOL.sensor_lis2dw.config_lis2dw = Namespace(command="config_lis2dw oid=%c spi_oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.sensor_lis2dw.query_lis2dw = Namespace(command="query_lis2dw oid=%c rest_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.sensor_lis2dw.query_lis2dw_status = Namespace(command="query_lis2dw_status oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
 
+# sensor_mpu9250 commands
+KLIPPER_PROTOCOL.sensor_mpu9250.config_mpu9250 = Namespace(command="config_mpu9250 oid=%c i2c_oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.sensor_mpu9250.query_mpu9250 = Namespace(command="query_mpu9250 oid=%c rest_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.sensor_mpu9250.query_mpu9250_status = Namespace(command="query_mpu9250_status oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+
+# spi_software commands
+KLIPPER_PROTOCOL.spi_software.spi_set_software_bus = Namespace(command="spi_set_software_bus oid=%c miso_pin=%u mosi_pin=%u sclk_pin=%u mode=%u rate=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+
+# spicmds commands
+KLIPPER_PROTOCOL.spicmds.config_spi = Namespace(command="config_spi oid=%c pin=%u cs_active_high=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.spicmds.config_spi_without_cs = Namespace(command="config_spi_without_cs oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.spicmds.spi_set_bus = Namespace(command="spi_set_bus oid=%c spi_bus=%u mode=%u rate=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.spicmds.spi_transfer = Namespace(command="spi_transfer oid=%c data=%*s", flags=KlipperProtoFlags.HF_NONE, response="spi_transfer_response oid=%c response=%*s")
+KLIPPER_PROTOCOL.spicmds.spi_send = Namespace(command="spi_send oid=%c data=%*s", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.spicmds.config_spi_shutdown = Namespace(command="config_spi_shutdown oid=%c spi_oid=%c shutdown_msg=%*s", flags=KlipperProtoFlags.HF_NONE, response=None)
+
+# stepper commands
+KLIPPER_PROTOCOL.stepper.config_stepper = Namespace(command="config_stepper oid=%c step_pin=%c dir_pin=%c invert_step=%c step_pulse_ticks=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.stepper.queue_step = Namespace(command="queue_step oid=%c interval=%u count=%hu add=%hi", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.stepper.set_next_step_dir = Namespace(command="set_next_step_dir oid=%c dir=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.stepper.reset_step_clock = Namespace(command="reset_step_clock oid=%c clock=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.stepper.stepper_get_position = Namespace(command="stepper_get_position oid=%c", flags=KlipperProtoFlags.HF_NONE, response="stepper_position oid=%c pos=%i")
+KLIPPER_PROTOCOL.stepper.stepper_stop_on_trigger = Namespace(command="stepper_stop_on_trigger oid=%c trsync_oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+
+# thermocouple commands
+KLIPPER_PROTOCOL.thermocouple.config_thermocouple = Namespace(command="config_thermocouple oid=%c spi_oid=%c thermocouple_type=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.thermocouple.query_thermocouple = Namespace(command="query_thermocouple oid=%c clock=%u rest_ticks=%u min_value=%u max_value=%u max_invalid_count=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.thermocouple.thermocouple_result = Namespace(command=None, flags=None, response="thermocouple_result oid=%c next_clock=%u value=%u fault=%c")
+
+# tmcuart commands
+KLIPPER_PROTOCOL.tmcuart.config_tmcuart = Namespace(command="config_tmcuart oid=%c rx_pin=%u pull_up=%c tx_pin=%u bit_time=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.tmcuart.tmcuart_send = Namespace(command="tmcuart_send oid=%c write=%*s read=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.tmcuart.tmcuart_response = Namespace(command=None, flags=None, response="tmcuart_response oid=%c read=%*s")
+
+# trsync commands
+KLIPPER_PROTOCOL.trsync.config_trsync = Namespace(command="config_trsync oid=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.trsync.trsync_start = Namespace(command="trsync_start oid=%c report_clock=%u report_ticks=%u expire_reason=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.trsync.trsync_set_timeout = Namespace(command="trsync_set_timeout oid=%c clock=%u", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.trsync.trsync_trigger = Namespace(command="trsync_trigger oid=%c reason=%c", flags=KlipperProtoFlags.HF_NONE, response=None)
+KLIPPER_PROTOCOL.trsync.trsync_state = Namespace(command=None, flags=None, response="trsync_state oid=%c can_trigger=%c trigger_reason=%c clock=%u")
+
+
+# Static strings
+KLIPPER_PROTOCOL.strings = [
+    "ADC out of range",
+    "alloc_chunk failed",
+    "alloc_chunks failed",
+    "Move queue overflow",
+    "Invalid move request size",
+    "Already finalized",
+    "Invalid oid type",
+    "Can't assign oid",
+    "oids already allocated",
+    "config_reset only available when shutdown",
+    "Command request",
+    "Max of 8 buttons",
+    "Set button past maximum button count",
+    "Invalid buttons retransmit count",
+    "Command parser error",
+    "Message encode error",
+    "Invalid command",
+    "Missed scheduling of next digital out event",
+    "Scheduled digital out event will exceed max_duration",
+    "Can not set soft pwm cycle ticks while updates pending",
+    "Scheduled digital out event will exceed max_duration",
+    "update_digital_out not valid with active queue",
+    "soft_i2c NACK",
+    "Invalid neopixel data_size",
+    "Invalid neopixel update command",
+    "Missed scheduling of next hard pwm event",
+    "Scheduled pwm event will exceed max_duration",
+    "Scheduled pwm event will exceed max_duration",
+    "sentinel timer called",
+    "Timer too close",
+    "Shutdown cleared when not shutdown",
+    "Invalid spi_angle chip type",
+    "angle sensor requires cs pin",
+    "HX71x gain/channel out of range 1-4",
+    "Invalid spi config",
+    "Invalid spi config",
+    "Invalid spi config",
+    "Stepper too far in past",
+    "Invalid count parameter",
+    "Can't reset time when stepper active",
+    "Invalid thermocouple chip type",
+    "Thermocouple reader fault",
+    "tmcuart data too large",
+    "Can't add signal that is already active",
+]

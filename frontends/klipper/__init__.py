@@ -15,7 +15,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import zlib
 import json
-import ctypes
 import vortex.lib.logging as logging
 from vortex.controllers.types import ModuleTypes
 from vortex.frontends import BaseFrontend
@@ -83,7 +82,7 @@ class KlipperFrontend(BaseFrontend):
     def _create_identity(self):
         self.identity = {x: {} for x in ["commands", "enumerations",
                                          "config", "responses"]}
-        self.identity["version"] = "96cceed2"
+        self.identity["version"] = proto.KLIPPER_PROTOCOL.version
         self.tag_to_cmd = {}
 
         # Setup enumerations
@@ -121,7 +120,7 @@ class KlipperFrontend(BaseFrontend):
         self.identity["commands"]["reset"] = self.counter.next()
 
         # Shutdown commands
-        self._add_commands(proto.KLIPPER_PROTOCOL.shutdown)
+        self._add_commands(proto.KLIPPER_PROTOCOL.sched)
 
         # Setup stepper commands
         if self._raw_controller_params["hw"]["motors"]:
@@ -165,7 +164,7 @@ class KlipperFrontend(BaseFrontend):
     def klipper_stats(self, ticks):
         diff = ticks - self.start_tick
         self.stats_sum += diff
-        stat_period = self.timers.from_us(proto.KLIPPER_PROTOCOL.tasks.stats.interval)
+        stat_period = self.timers.from_us(5000000)
         if self.timers.is_before(ticks, self._stats_sent_time + stat_period):
             return ticks + self.timers.from_us(100000)
         if ticks < self._stats_sent_time:
@@ -239,13 +238,13 @@ class KlipperFrontend(BaseFrontend):
         self._shutdown = True
         self._reset_objects()
         self.respond(proto.ResponseTypes.RESPONSE,
-                     proto.KLIPPER_PROTOCOL.shutdown.shutdown,
+                     proto.KLIPPER_PROTOCOL.sched.shutdown,
                      clock=self.get_controller_clock_ticks(),
                      static_string_id=reason)
 
     def is_shutdown(self, reson):
         self.respond(proto.ResponseTypes.RESPONSE,
-                     proto.KLIPPER_PROTOCOL.shutdown.is_shutdown,
+                     proto.KLIPPER_PROTOCOL.sched.is_shutdown,
                      static_string_id=self._shutdown_reason)
 
     def emergency_stop(self, cmd):

@@ -5,3 +5,4 @@ meson-python
 setuptools
 plotly
 dash
+clang
