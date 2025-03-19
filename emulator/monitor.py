@@ -24,6 +24,12 @@ class MonitorThread(threading.Thread):
         self._conn = connection
         self._controller = controller
         self._do_run = False
+        self._objects = {}
+        self._klasses = {x: str(x) for x in ModuleTypes}
+        for klass, name, id in self._controller.objects:
+            if klass not in self._objects:
+                self._objects[klass] = []
+            self._objects[klass].append({"name":name, "id":id})
         super().__init__(None, None, f"vortex-monitor-{index}")
     def run(self):
         self._do_run = True
@@ -47,17 +53,13 @@ class MonitorThread(threading.Thread):
             elif request["request"] == "pause":
                 self._controller.pause(request["action"])
                 response = True
+            elif request["request"] == "get_pid":
+                response = os.getpid()
             else:
                 continue
             self._conn.sendall(pickle.dumps(response))
     def get_object_list(self):
-        objects = {}
-        klasses = {x: str(x) for x in ModuleTypes}
-        for klass, name, id in self._controller.objects:
-            if klass not in objects:
-                objects[klass] = []
-            objects[klass].append({"name":name, "id":id})
-        return {"klass": klasses, "objects": objects}
+        return {"klass": self._klasses, "objects": self._objects}
     
     def query_objects(self, obj_list):
         obj_list = [int(x) for x in obj_list]
