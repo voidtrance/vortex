@@ -285,7 +285,7 @@ def main():
                 break
             except BrokenPipeError:
                 print("Emulator socket closed remotely.", file=sys.stderr)
-                return -1
+                break
 
         if args.csv:
             c = csv.writer(args.csv)
