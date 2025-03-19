@@ -229,8 +229,8 @@ static void core_timers_update(uint64_t ticks, void *data) {
         reschedule = timer->timer.callback(ticks, timer->timer.data);
         pthread_mutex_lock(&timers->lock);
         timer_remove_locked(timer);
-        if (reschedule) {
-            timer->timestamp = reschedule & timers->mask;
+        timer->timestamp = reschedule & timers->mask;
+        if (timer->timestamp) {
             timer_arm_locked(timer);
         } else {
             timer_disarm_locked(timer);
