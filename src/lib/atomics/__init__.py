@@ -50,42 +50,42 @@ class Atomic:
         if not isinstance(other, int):
             raise TypeError
         return self.value == other
-    def __add__(self, other):
+    def __iadd__(self, other):
         if isinstance(other, Atomic):
             other = other.value
         if not isinstance(other, int):
             raise TypeError
         self.__add(self._value, other)
         return self
-    def __sub__(self, other):
+    def __isub__(self, other):
         if isinstance(other, Atomic):
             other = other.value
         if not isinstance(other, int):
             raise TypeError
         self.__sub(self._value, other)
         return self
-    def __or__(self, other):
+    def __ior__(self, other):
         if isinstance(other, Atomic):
             other = other.value
         if not isinstance(other, int):
             raise TypeError
         self.__or(self._value, other)
         return self
-    def __and__(self, other):
+    def __iand__(self, other):
         if isinstance(other, Atomic):
             other = other.value
         if not isinstance(other, int):
             raise TypeError
         self.__and(self._value, other)
         return self
-    def __or__(self, other):
+    def __ior__(self, other):
         if isinstance(other, Atomic):
             other = other.value
         if not isinstance(other, int):
             raise TypeError
         self.__or(self._value, other)
         return self
-    def __xor__(self, other):
+    def __ixor__(self, other):
         if isinstance(other, Atomic):
             other = other.value
         if not isinstance(other, int):

@@ -30,9 +30,13 @@
     type atomic##size##_inc(type *ptr);                                        \
     type atomic##size##_dec(type *ptr);                                        \
     type atomic##size##_and(type *ptr, type value);                            \
+    type atomic##size##_load_and(type *ptr, type value);                       \
     type atomic##size##_or(type *ptr, type value);                             \
+    type atomic##size##_load_or(type *ptr, type value);                        \
     type atomic##size##_xor(type *ptr, type value);                            \
-    type atomic##size##_not(type *ptr);
+    type atomic##size##_load_xor(type *ptr, type value);                       \
+    type atomic##size##_not(type *ptr);                                        \
+    type atomic##size##_load_not(type *ptr);
 #endif
 
 DEFINE_FUNCS(8, uint8_t)

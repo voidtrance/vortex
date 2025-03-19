@@ -21,24 +21,24 @@
 #undef DEFINE_FUNCS
 #define DEFINE_FUNCS(size, type)                                              \
     type atomic##size##_load(type *ptr) {                                     \
-        return __atomic_load_n(ptr, __ATOMIC_SEQ_CST);                        \
+        return __atomic_load_n(ptr, ATOMIC_OP_ORDER);                         \
     }                                                                         \
     void atomic##size##_store(type *ptr, type value) {                        \
-        __atomic_store_n(ptr, value, __ATOMIC_SEQ_CST);                       \
+        __atomic_store_n(ptr, value, ATOMIC_OP_ORDER);                        \
     }                                                                         \
     type atomic##size##_exchange(type *ptr, type value) {                     \
-        return __atomic_exchange_n(ptr, value, __ATOMIC_SEQ_CST);             \
+        return __atomic_exchange_n(ptr, value, ATOMIC_OP_ORDER);              \
     }                                                                         \
     type atomic##size##_compare_exchange(type *ptr, type oldval,              \
                                          type newval) {                       \
-        return __atomic_compare_exchange_n(                                   \
-            ptr, &oldval, newval, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); \
+        return __atomic_compare_exchange_n(ptr, &oldval, newval, false,       \
+                                           ATOMIC_OP_ORDER, ATOMIC_OP_ORDER); \
     }                                                                         \
     type atomic##size##_add(type *ptr, type value) {                          \
-        return __atomic_add_fetch(ptr, value, __ATOMIC_SEQ_CST);              \
+        return __atomic_add_fetch(ptr, value, ATOMIC_OP_ORDER);               \
     }                                                                         \
     type atomic##size##_sub(type *ptr, type value) {                          \
-        return __atomic_sub_fetch(ptr, value, __ATOMIC_SEQ_CST);              \
+        return __atomic_sub_fetch(ptr, value, ATOMIC_OP_ORDER);               \
     }                                                                         \
     type atomic##size##_inc(type *ptr) {                                      \
         return atomic##size##_add(ptr, 1);                                    \
@@ -47,18 +47,31 @@
         return atomic##size##_sub(ptr, 1);                                    \
     }                                                                         \
     type atomic##size##_and(type *ptr, type value) {                          \
-        return __atomic_and_fetch(ptr, value, __ATOMIC_SEQ_CST);              \
+        return __atomic_and_fetch(ptr, value, ATOMIC_OP_ORDER);               \
+    }                                                                         \
+    type atomic##size##_load_and(type *ptr, type value) {                     \
+        return __atomic_fetch_and(ptr, value, ATOMIC_OP_ORDER);               \
     }                                                                         \
     type atomic##size##_or(type *ptr, type value) {                           \
-        return __atomic_or_fetch(ptr, value, __ATOMIC_SEQ_CST);               \
+        return __atomic_or_fetch(ptr, value, ATOMIC_OP_ORDER);                \
+    }                                                                         \
+    type atomic##size##_load_or(type *ptr, type value) {                      \
+        return __atomic_fetch_or(ptr, value, ATOMIC_OP_ORDER);                \
     }                                                                         \
     type atomic##size##_xor(type *ptr, type value) {                          \
-        return __atomic_xor_fetch(ptr, value, __ATOMIC_SEQ_CST);              \
+        return __atomic_xor_fetch(ptr, value, ATOMIC_OP_ORDER);               \
+    }                                                                         \
+    type atomic##size##_load_xor(type *ptr, type value) {                     \
+        return __atomic_fetch_xor(ptr, value, ATOMIC_OP_ORDER);               \
     }                                                                         \
     type atomic##size##_not(type *ptr) {                                      \
-        return __atomic_nand_fetch(ptr, (type)(-1UL), __ATOMIC_SEQ_CST);      \
+        return __atomic_nand_fetch(ptr, (type)(-1UL), ATOMIC_OP_ORDER);       \
+    }                                                                         \
+    type atomic##size##_load_not(type *ptr) {                                 \
+        return __atomic_fetch_nand(ptr, (type)(-1UL), ATOMIC_OP_ORDER);       \
     }
 
 #undef __ATOMICS_H__
 #define MULTI_INCLUDE
+#define ATOMIC_OP_ORDER __ATOMIC_SEQ_CST
 #include "atomics.h"
