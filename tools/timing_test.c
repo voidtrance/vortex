@@ -10,6 +10,8 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/resource.h>
+#include <linux/prctl.h>
+#include <sys/prctl.h>
 
 static bool do_run = true;
 
@@ -47,11 +49,11 @@ static void *thread_func(void *arg) {
         clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
         nanosleep(&sleep, &rem);
         clock_gettime(CLOCK_MONOTONIC_RAW, &te);
-        duration = ((te.tv_sec - ts.tv_sec) * SEC2NSEC) +
-            (te.tv_nsec - ts.tv_nsec);
-        args->total += duration;
         args->count++;
+        args->total +=
+            ((te.tv_sec - ts.tv_sec) * SEC2NSEC) + (te.tv_nsec - ts.tv_nsec);
     }
+    return NULL;
 }
 
 static void show_thread_policy(int policy, struct sched_param params) {
@@ -114,13 +116,13 @@ int main(int argc, char **argv) {
     sparam.sched_priority = priority;
 
     PTHREAD_CALL(pthread_attr_init, &attrs);
-    PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_POLICY);
     PTHREAD_CALL(pthread_attr_setinheritsched, &attrs, PTHREAD_EXPLICIT_SCHED);
     PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_POLICY);
     PTHREAD_CALL(pthread_attr_setschedparam, &attrs, &sparam);
     PTHREAD_CALL(pthread_attr_getschedparam, &attrs, &sparam);
     PTHREAD_CALL(pthread_attr_getschedpolicy, &attrs, &policy);
 
+    PTHREAD_CALL(prctl, PR_SET_TIMERSLACK, 1);
     show_thread_policy(policy, sparam);
 
     args.sleep_time = sleeptime;
@@ -134,8 +136,8 @@ int main(int argc, char **argv) {
     do_run = false;
     pthread_join(thread, &res);
 
-    printf("sleep time: %llu / %llu = %f\n", args.total, args.count,
-            (float)args.total / args.count);
+    printf("sleep time: %llu / %llu = %f ns\n", args.total, args.count,
+           (float)args.total / args.count);
     pthread_attr_destroy(&attrs);
     return 0;
 }
