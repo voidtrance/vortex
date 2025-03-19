@@ -5,6 +5,10 @@ table > thead:has(> tr > th:empty):not(:has(> tr > th:not(:empty))) {
 </style>
 
 # Klipper Command Reference
+The list of commands below are the basic set of commands needed to configure and
+operate MCU steppers, heaters, and temperature sensors, including the necessary
+auxiliary objects to perform axis homing. It is not a reference of the complete
+command set that Klipper supports.
 
 ## *identify*
 ```
@@ -131,6 +135,9 @@ allocate_oids count=%c
 | *allocate_oids* | count | The number of OIDs to allocate |
 
 ## *config_analog_in*
+Configure an analog input pin. Analog input pins read analog signals
+from HW, convert it through DACs, and send data back to the Klipper host.
+
 ```
 config_analog_in oid=%c pin=%u
 ```
@@ -143,7 +150,8 @@ config_analog_in oid=%c pin=%u
 ## *query_analog_in*
 
 The *query_analog_in* command sets up a analog input sample cycle. The
-controller is required to respond at intervals specified by the command with the sum of all sampled values.
+controller is required to respond at intervals specified by the command
+with the sum of all sampled values.
 
 ```
 query_analog_in oid=%c clock=%u sample_ticks=%u sample_count=%c rest_ticks=%u min_value=%hu max_value=%hu range_check_count=%c
@@ -161,10 +169,13 @@ analog_in_state oid=%c next_clock=%u value=%hu
 | | max_value | The maximum value allowed for the sampled value |
 | | range_check_count | The number of consequitive samples outside of the (min_value,max_value) range |
 | *analog_in_state* | oid | The OID generating the response |
-| | next_clock | The clock time when sampleing will restart |
+| | next_clock | The clock time when sampling will restart |
 | | value | The sum of all samples |
 
 ## *config_digital_out*
+Configure a digital output pin. Digital output pins which the MCU controls. These pins are used to turn on/off
+external HW as opposed to read state from it.
+
 ```
 config_digital_out oid=%c pin=%u value=%c default_value=%c max_duration=%u
 ```
@@ -188,8 +199,89 @@ set_digital_out_pwm_cycle oid=%c cycle_ticks=%u
 | | cycle_ticks | The clock tick count specifying the duration of one PWM cycle (ON duration + OFF duration) |
 
 ## *queue_digital_out*
+Queue a PWM cycle on a digital pin. The PWM cycle works in combination with the digital pin's configuration,
+specifically the *max_duration* value.
+
 ```
 queue_digital_out oid=%c clock=%u on_ticks=%u
 ```
 
-|
+
+| Command/Response | Argument | Description |
+|-|-|-|
+| *queue_digital_out* | oid | The OID of the pin to be cycled |
+| | clock | The clock tick on which the cycle is to start |
+| | on_ticks | The number of clock ticks for which the pin is to stay on |
+
+## *update_digital_out*
+
+## *config_stepper*
+```
+config_stepper oid=%c step_pin=%c dir_pin=%c invert_step=%c step_pulse_ticks=%u
+```
+
+| Command/Response | Argument | Description |
+|-|-|-|
+| *config_stepper* | oid | The OID of the stepper |
+| | step_pin | The name of the stepper's STEP pin |
+| | dir_pin | The name of the stepper's DIRECTION pin |
+| | invert_step | Whether the stepper's STEP pin is inverted. An inverted pin means that the controller has to set the pin low for a step. |
+| | step_pulse_ticks | The number of clock ticks for which the STEP pin has to be switched for a single step. |
+
+## *queue_step*
+Queue an set of steps.
+
+```
+queue_step oid=%c interval=%u count=%hu add=%hi
+```
+
+| Command/Response | Argument | Description |
+|-|-|-|
+| *queue_step* | oid | The OID of the stepper on which the steps are to be queue. |
+| | interval | The tick interval between the previous step and the beginning of this set of steps. If a sequence of steps has completed this is the absolute clock tick on which this set is to start. |
+| | count | The number of steps to be done. |
+| | add | The clock ticks by which to adjust the interval between steps. If this value is positive, the stepper slows down as the interval between steps increases. If it is negative, the stepper speeds up. |
+
+## *set_next_step_dir*
+Set the step direction of the next set of steps.
+
+```
+set_next_step_dir oid=%c dir=%c
+```
+
+## *reset_step_clock*
+```
+reset_step_clock oid=%c clock=%u
+```
+
+## *stepper_get_position*
+```
+stepper_get_position oid=%c
+stepper_position oid=%c pos=%i
+```
+
+## *stepper_stop_on_trigger*
+```
+stepper_stop_on_trigger oid=%c trsync_oid=%c
+```
+
+## *config_trsync*
+```
+config_trsync oid=%c
+```
+
+## *trsync_start*
+```
+trsync_start oid=%c report_clock=%u report_ticks=%u expire_reason=%c
+trsync_state oid=%c can_trigger=%c trigger_reason=%c clock=%u
+```
+
+## *trsync_set_timeout*
+```
+trsync_set_timeout oid=%c clock=%u
+```
+
+## *trsync_trigger*
+```
+trsync_trigger oid=%c reason=%c
+```

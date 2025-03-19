@@ -70,6 +70,64 @@ There is a separate processor thread in order to allow the update
 threads to run as fast as possible in order achieve high update
 frequencies.
 
+#### Emulation and Controller Frequencies
+Each HW controller defines the controller's clock frequency. This is the
+frequency with which the actual HW processor run on and can be obtained
+from the processor's data sheet.
+
+The emulation control loops run at a different frequency which is
+configuration through a command line parameter. There is a main control
+thread, which runs at that frequency and is used to wake up any other
+threads.
+
+The elapsed controller clock ticks are computed based on the elapsed
+wall clock time between control thread loop interations and the defined
+controller frequency.
+
+What this means is that the emulator controller clock can only attain a
+granularity based on the control thread frequency.
+
+To better understand this, here is an example:
+
+If the HW controller frequency is defined as 1Mhz, each clock tick takes
+1000ns. If the control thread frequency is give as 1KHz, it runs once
+every 1ms. Therefore, the HW controller clock granularity will be 1000
+ticks per control loop interation. In other words, the HW controller
+clock will advance is steps of 1000 ticks each control loop iteration.
+
+For emaulation combinations (HW controller, frontend, client) that
+require higher HW controller clock precision, the emulator should be
+started using a higher update frequency.
+
+Note that higher update frequencies result in higher CPU usage due to
+the control thread running more frequently.
+
+##### Thread Scheduling Priority
+Thread scheduling policy plays an important role in the clock tick
+update frequency.
+
+The main control thread uses `nanosleep()` to sleep for some time
+between iterations. The sleep time is determined by the control thread
+frequency value specified on the command line.
+
+On Linux, the default thread scheduling policy is `SCHED_OTHER`.
+Furthermore, by default, a non-priviledge users cannot change either
+the scheduling policy or the thread priority. With default policy and
+priority, a call to `nanosleep()` with a duration of 1ns ends up
+taken 50us. This means that the best control thread frequency that can
+be achieved is 20KHz.
+
+On the other hand, if `SCHED_RR` is used, the latency if `nanosleep()`
+with a sleep period of 1ns drops to 2000ns, which is 0.5MHz.
+
+To allow the emulator to switch thread scheduling policy, the following
+command should be executed in the shell where the emulator will be
+started from, prior to starting it:
+
+```
+# sudo prlimit --rtprio=99:99 --pid $$
+```
+
 ### Core HW Objects
 
 ## Frontend Architecture
