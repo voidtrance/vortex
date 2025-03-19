@@ -81,7 +81,6 @@ static core_time_data_t global_time_data = {
     ((SEC_TO_NSEC((e).tv_sec - (s).tv_sec)) + ((e).tv_nsec - (s).tv_nsec))
 
 static long timer_update_wait(int32_t *flag) {
-    long ret = 0;
     int32_t wake_value = TIMER_TRIGGER_WAKE;
 
     while (1) {
@@ -90,13 +89,13 @@ static long timer_update_wait(int32_t *flag) {
                                         __ATOMIC_SEQ_CST))
             break;
 
-        ret = syscall(SYS_futex, flag, FUTEX_WAIT | FUTEX_PRIVATE_FLAG,
-                      TIMER_TRIGGER_WAIT, NULL, NULL, NULL);
-        if (ret)
-            break;
+        if (syscall(SYS_futex, flag, FUTEX_WAIT_PRIVATE, TIMER_TRIGGER_WAIT,
+                    NULL, NULL, NULL) == -1 &&
+            errno != EAGAIN)
+            return -errno;
     }
 
-    return ret;
+    return 0;
 }
 
 static long timer_update_wake(int32_t *flag) {
@@ -104,8 +103,10 @@ static long timer_update_wake(int32_t *flag) {
 
     if (__atomic_compare_exchange_n(flag, &wait_value, TIMER_TRIGGER_WAKE,
                                     false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
-        return syscall(SYS_futex, flag, FUTEX_WAKE | FUTEX_PRIVATE_FLAG,
-                       INT_MAX, TIMER_TRIGGER_WAKE, NULL, NULL, NULL);
+        return syscall(SYS_futex, flag, FUTEX_WAKE_PRIVATE, TIMER_TRIGGER_WAKE,
+                       INT_MAX, NULL, NULL, 0);
+
+    return 0;
 }
 
 #define get_value(x) (*(volatile typeof((x)) *)&(x))
