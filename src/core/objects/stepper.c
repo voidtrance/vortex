@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <utils.h>
+#include <atomics.h>
 
 typedef struct {
     uint32_t steps_per_rotation;
@@ -123,7 +124,7 @@ static void stepper_reset(core_object_t *object) {
 
     stepper->current_step = 0;
     stepper->current_cmd = 0;
-    stepper->dir = MOVE_DIR_NONE;
+    stepper->dir = 0;
     stepper->steps = 0;
     stepper->move_steps = 0;
     memset(&stepper->accel, 0, sizeof(stepper->accel));
@@ -193,25 +194,26 @@ enum {
     ENABLE_PIN = (1U << 31),
     DIR_PIN = (1U << 30),
     DEBUG_PIN = (1U << 29),
-    VALUE_SHIFT = (1U << 16),
+    STEPS_SHIFT = (1U << 16),
 };
 
 #define EN_DIR_MASK (ENABLE_PIN | DIR_PIN)
-#define VALUE_MASK (VALUE_SHIFT - 1)
-#define CONTROL_MASK (~VALUE_MASK)
+#define STEPS_MASK (STEPS_SHIFT - 1)
+#define CONTROL_MASK (~STEPS_MASK)
 
 static void *pin_monitor_thread(void *args) {
     stepper_t *stepper = (stepper_t *)args;
     struct timespec sleep = { .tv_sec = 0, .tv_nsec = 1000 }; // sleep for 1us.
 
     while (*(volatile bool *)&stepper->use_pins) {
-        uint32_t val = __atomic_fetch_and(&stepper->pin_word, EN_DIR_MASK,
-                                          __ATOMIC_SEQ_CST);
-        stepper->enabled = val & ENABLE_PIN;
-        stepper->dir = MOVE_DIR_BACK - !!(val & DIR_PIN);
-        stepper->current_step += (int32_t)(val & VALUE_MASK) *
-                                 !!(val & ENABLE_PIN) *
-                                 (-1 + !!(val & DIR_PIN) * 2);
+        uint32_t val = atomic32_load_and(&stepper->pin_word, EN_DIR_MASK);
+        uint8_t dir = !!(val & DIR_PIN);
+        uint8_t enabled = !!(val & ENABLE_PIN);
+
+        stepper->enabled = enabled;
+        stepper->dir = (stepper_move_dir_t)dir;
+        stepper->current_step +=
+            (int64_t)(val & STEPS_MASK) * enabled * (-1 + (dir << 1));
 
         nanosleep(&sleep, NULL);
     }

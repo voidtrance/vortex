@@ -299,6 +299,9 @@ class CurrentMove:
     def __init__(self, interval, count, increment, dir):
         self.interval, self.count, self.increment, self.dir = \
             interval, count, increment, dir
+        self.active = False
+    def __repr__(self):
+        return f"interval={self.interval}, count={self.count}, increment={self.increment}, dir={self.dir}"
 
 class Stepper:
     def __init__(self, frontend, oid, obj_id, name):
@@ -354,7 +357,7 @@ class Stepper:
             return
         move = StepperMove(interval, count, add, self.next_dir)
         self.move_queue.put(move)
-        if self.move.count == 0:
+        if not self.move.active:
             timeout = self._next_move(0)
             self.timer.timeout = timeout
     def stop_moves(self, time, reason):
@@ -362,20 +365,30 @@ class Stepper:
         self.next_step_time = 0
         self.timer.timeout = 0
         self.move.count = 0
+        self.move.active = False
         self.move_queue.clear()
         self.pin_word &= ~StepperPins.DIR
+    def _change_direction(self, dir):
+        # Only switch direction if the current set of
+        # steps have been finished by the stepper.
+        while self.pin_word.value & StepperMasks.STEPS:
+            continue
+        self.pin_word ^= StepperPins.DIR
+        # Wait for the stepper to acknowledge the direction change
+        while (self.pin_word.value >> StepperPinShift.DIR) & 0x1 != dir:
+            continue
     def _next_move(self, ticks):
         move = self.move_queue.get()
         if not move:
+            self.move.active = False
             return 0
         if self.move.dir != move.dir:
-            # Only switch direction if the current set of
-            # steps have been finished by the stepper.
-            while self.pin_word() & StepperMasks.STEPS:
-                continue
-            self.pin_word ^= StepperPins.DIR
-        self.move = CurrentMove(move.interval + move.increment, move.count,
-                                move.increment, move.dir)
+            self._change_direction(move.dir)
+        self.move.active = True
+        self.move.interval = move.interval + move.increment
+        self.move.count = move.count
+        self.move.increment = move.increment
+        self.move.dir = move.dir
         self.next_step_time = self.frontend.timers.to_time(self.next_step_time + move.interval)
         self._log.debug(f"ticks={ticks}, move_next_step={self.next_step_time}, interval={move.interval}")
         return self.next_step_time
@@ -389,7 +402,6 @@ class Stepper:
         self.move.count -= 1
         self.pin_word.inc()
     def send_step(self, ticks):
-        self._diff = ticks - self.next_step_time
         self._do_step()
         next_step = self._calc_step_time(ticks)
         # A drift can occur in step timing due to the impresise

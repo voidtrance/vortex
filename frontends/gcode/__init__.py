@@ -75,7 +75,7 @@ class GCodeFrontend(BaseFrontend):
         move_cmds = []
         for idx in range(len(movement)):
             distance = int(movement[idx])
-            direction = 1 + int(distance < 0.)
+            direction = int(distance > 0.)
             cmd_id = self.queue_command(ModuleTypes.STEPPER,
                                         status[axis_id]["motors"][idx],
                                         "move",

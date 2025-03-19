@@ -21,9 +21,9 @@
 #include <stdbool.h>
 
 typedef enum {
-    MOVE_DIR_NONE,
+    MOVE_DIR_BACK = 0,
     MOVE_DIR_FWD,
-    MOVE_DIR_BACK
+    MOVE_DIR_MAX,
 } stepper_move_dir_t;
 
 enum {
