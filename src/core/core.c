@@ -527,11 +527,13 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     core_object_type_t type;
     core_thread_args_t thread_args;
     uint16_t arch;
-    uint64_t frequency;
+    uint64_t ctlr_frequency;
+    uint64_t timer_frequency;
     uint64_t update_frequency;
     int ret;
 
-    if (PyArg_ParseTuple(args, "HKKO", &arch, &frequency, &update_frequency,
+    if (PyArg_ParseTuple(args, "HKKKO", &arch, &ctlr_frequency,
+                         &timer_frequency, &update_frequency,
                          &core->python_complete_cb) == -1)
         return NULL;
 
@@ -547,15 +549,15 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
 
     Py_INCREF(core->python_complete_cb);
 
-    thread_args.update.tick_frequency = frequency;
-    thread_args.update.update_frequency = update_frequency;
+    thread_args.update.tick_frequency = ctlr_frequency;
+    thread_args.update.update_frequency = timer_frequency;
     thread_args.update.width = arch;
     if (core_thread_create(CORE_THREAD_TYPE_UPDATE, &thread_args)) {
         PyErr_Format(VortexCoreError, "Failed to create timer thread");
         return NULL;
     }
 
-    thread_args.worker.frequency = frequency;
+    thread_args.worker.frequency = update_frequency;
     thread_args.worker.callback = core_process_work;
     thread_args.worker.data = self;
     if (core_thread_create(CORE_THREAD_TYPE_WORKER, &thread_args)) {

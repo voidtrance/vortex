@@ -42,9 +42,13 @@ def create_arg_parser():
                             emulation. This argument is required.""")
     controller.add_argument("-F", "--frequency", default="100kHZ",
                             help="""This is the frequency with which the
-                            object update loop will run. Controllers still
-                            clock ticks are still updated based on their
-                            defined frequency.""")
+                            object updates will run.""")
+    controller.add_argument("-T", "--timer-frequency", default="1MHz",
+                            help="""Frequency of time control loop. The time
+                            control loop is the main emulator control loop. It's
+                            the on that updates controller clock and emulation
+                            runtime. Higher values provide more precise
+                            emulation but at the cost of CPU load.""")
     debug = parser.add_argument_group("Debug Options")
     debug_levels = [logging._levelToName[x] for x in sorted(logging._levelToName.keys())]
     debug.add_argument("-d", "--debug", choices=debug_levels,
@@ -97,7 +101,7 @@ def main():
         print(err)
         return errno.ENOENT
     
-    emulation.set_frequency(opts.frequency)
+    emulation.set_frequency(opts.timer_frequency, opts.frequency)
     if opts.monitor:
         emulation.start_monitor()
 

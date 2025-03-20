@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <linux/futex.h>
 #include <sys/syscall.h>
+#include <sys/sysinfo.h>
 #include <limits.h>
 #include <sys/resource.h>
 #include <sys/queue.h>
@@ -103,8 +104,8 @@ static long timer_update_wake(int32_t *flag) {
 
     if (__atomic_compare_exchange_n(flag, &wait_value, TIMER_TRIGGER_WAKE,
                                     false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
-        return syscall(SYS_futex, flag, FUTEX_WAKE_PRIVATE, TIMER_TRIGGER_WAKE,
-                       INT_MAX, NULL, NULL, 0);
+        return syscall(SYS_futex, flag, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL,
+                       0);
 
     return 0;
 }
@@ -173,11 +174,11 @@ static void *core_update_thread(void *arg) {
     data->ret = 0;
     set_value(data->control, THREAD_CONTROL_RUNNING);
     while (get_value(data->control)) {
-        timer_update_wait(&global_time_data.trigger);
+        //timer_update_wait(&global_time_data.trigger);
         args->object.callback(args->object.data,
                               get_value(global_time_data.controller_ticks),
                               get_value(global_time_data.controller_runtime));
-        clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &sleep, NULL);
+        nanosleep(&sleep, NULL);
     }
 
     pthread_exit(&data->ret);
@@ -225,43 +226,60 @@ static int start_thread(struct core_control_data *thread_data) {
     int min_prio, max_prio, prio_step;
     bool attempt_prio = true;
     static bool warning_shown = false;
+    cpu_set_t cpu_mask;
+    int num_procs = get_nprocs();
     int ret;
 
-    min_prio = sched_get_priority_min(SCHED_RR);
-    max_prio = sched_get_priority_max(SCHED_RR);
-    if (getrlimit(RLIMIT_RTPRIO, &rlimit) == -1 || rlimit.rlim_max == 0 ||
-        max_prio - min_prio < 3) {
-        if (!warning_shown) {
-            fprintf(
-                stderr,
-                "WARNING: Process does not have permission to set thread priority.\n");
-            fprintf(stderr, "WARNING: Elevated RTPRIO rlimit is requires:\n");
-            fprintf(stderr,
-                    "WARNING: \tsudo prlimit --rtprio=99:99 --pid $$\n");
-            warning_shown = true;
-        }
+    if (num_procs > 1) {
+        min_prio = sched_get_priority_min(SCHED_RR);
+        max_prio = sched_get_priority_max(SCHED_RR);
+        if (getrlimit(RLIMIT_RTPRIO, &rlimit) == -1 || rlimit.rlim_max == 0 ||
+            max_prio - min_prio < 3) {
+            if (!warning_shown) {
+                fprintf(
+                    stderr,
+                    "WARNING: Process does not have permission to set thread priority.\n");
+                fprintf(stderr,
+                        "WARNING: Elevated RTPRIO rlimit is requires:\n");
+                fprintf(stderr,
+                        "WARNING: \tsudo prlimit --rtprio=99:99 --pid $$\n");
+                warning_shown = true;
+            }
 
-        attempt_prio = false;
+            attempt_prio = false;
+        } else {
+            attempt_prio = false;
+        }
     }
 
     prio_step = (max_prio - min_prio) / 3;
 
+    CPU_ZERO(&cpu_mask);
+
     switch (thread_data->type) {
     case CORE_THREAD_TYPE_UPDATE:
     case CORE_THREAD_TYPE_TIMER:
+        CPU_SET(0, &cpu_mask);
         sched_params.sched_priority = min_prio;
         break;
     case CORE_THREAD_TYPE_OBJECT:
+        if (num_procs > 1)
+            CPU_SET(1, &cpu_mask);
         sched_params.sched_priority = min_prio + prio_step;
         break;
     default:
+        if (num_procs > 2)
+            CPU_SET(2, &cpu_mask);
         sched_params.sched_priority = min_prio + prio_step * 2;
     }
 
     PTHREAD_CALL(pthread_attr_init, &attrs);
 
+    if (CPU_COUNT(&cpu_mask))
+        PTHREAD_CALL(pthread_attr_setaffinity_np, &attrs, sizeof(cpu_mask),
+                     &cpu_mask);
+
     if (attempt_prio) {
-        PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_RR);
         PTHREAD_CALL(pthread_attr_setinheritsched, &attrs,
                      PTHREAD_EXPLICIT_SCHED);
         PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_RR);
@@ -382,7 +400,6 @@ uint64_t core_get_runtime(void) {
 
 void core_threads_pause(void) {
     core_control_data_t *data;
-    struct timespec ts = {.tv_sec = 0, .tv_nsec = 50000};
 
     STAILQ_FOREACH(data, &core_threads, entry)
         set_value(data->args.control, THREAD_CONTROL_PAUSED);
@@ -390,7 +407,6 @@ void core_threads_pause(void) {
 
 void core_threads_resume(void) {
     core_control_data_t *data;
-    struct timespec ts = {.tv_sec = 0, .tv_nsec = 50000};
 
     STAILQ_FOREACH(data, &core_threads, entry)
         set_value(data->args.control, THREAD_CONTROL_RUNNING);

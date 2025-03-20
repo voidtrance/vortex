@@ -218,9 +218,10 @@ class Controller(core.VortexCore):
                 if not pin_set:
                     return False, value
         return True, None
-    def start(self, update_frequency, completion_cb):
+    def start(self, timer_frequency, update_frequency, completion_cb):
         self._completion_callback = completion_cb
-        super().start(self.ARCH, self.FREQUENCY, update_frequency, self._completion_callback)
+        super().start(self.ARCH, self.FREQUENCY, timer_frequency, update_frequency,
+                      self._completion_callback)
     def get_frequency(self):
         return self.FREQUENCY
     def virtual_command_complete(self, cmd_id, status):
