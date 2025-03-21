@@ -118,8 +118,8 @@ static void *core_time_control_thread(void *arg) {
     core_thread_args_t *args = &data->args;
     float tick = (1000.0 / ((float)args->update.tick_frequency / 1000000));
     float update = (1000.0 / ((float)args->update.update_frequency / 1000000));
-    struct timespec sleep = { .tv_sec = (uint64_t)update / SEC_TO_NSEC(1),
-                              .tv_nsec = (uint64_t)update % SEC_TO_NSEC(1) };
+    struct timespec sleep = { .tv_sec = (time_t)update / SEC_TO_NSEC(1),
+                              .tv_nsec = (long int)update % SEC_TO_NSEC(1) };
     uint64_t controller_clock_mask = (1UL << args->update.width) - 1;
     struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000 };
     struct timespec start;
@@ -135,7 +135,7 @@ static void *core_time_control_thread(void *arg) {
             continue;
         }
 
-        clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &sleep, NULL);
+        nanosleep(&sleep, NULL);
         clock_gettime(CLOCK_MONOTONIC_RAW, &now);
         runtime = timespec_delta(start, now);
         set_value(global_time_data.controller_runtime, runtime);
