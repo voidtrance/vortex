@@ -22,11 +22,13 @@ from collections import namedtuple
 from vortex.controllers.types import ModuleTypes
 import vortex.core
 import vortex.lib.ctypes_helpers
-from vortex.lib.utils import Counter
+from vortex.lib.utils import Counter, parse_frequency
+from vortex.lib.constants import hz_to_nsec
 import vortex.lib.logging as logging
 import vortex.controllers.timers as timers
 
 class PinError(Exception): pass
+
 class Pins:
     def __init__(self, name, start, end=None):
         self._name = name
@@ -119,6 +121,13 @@ class ObjectLookUp:
                 return Object(k, n, i)
         raise ObjectNotFound(f"Object '{name}' of klass '{klass}' not found")
 
+def get_host_cpu_frequency():
+    with open("/proc/cpuinfo", 'r') as fd:
+        for line in fd:
+            if line.startswith("model name"):
+                freq = line.strip().split()[-1]
+    return parse_frequency(freq)
+
 class Controller(core.VortexCore):
     PINS = []
     MOTOR_COUNT = 0
@@ -129,6 +138,8 @@ class Controller(core.VortexCore):
     PROBE_COUNT = 0
     HEATER_COUNT = 0
     FAN_COUNT = 0
+    FREQUENCY = 0
+    ARCH = 0
     _libc = ctypes.CDLL("libc.so.6")
     _Command = namedtuple("Command", ['id', 'name', 'opts', 'defaults'])
     def __init__(self, config):
@@ -141,7 +152,6 @@ class Controller(core.VortexCore):
         self._objects = _Objects()
         self.objects = ObjectLookUp(self._objects)
         self.object_defs = {x: None for x in ModuleTypes}
-        self.frequency = self.FREQUENCY
         self._virtual_objects = {}
         self._completion_callback = None
         self._event_handlers = {}
@@ -220,6 +230,10 @@ class Controller(core.VortexCore):
         return True, None
     def start(self, timer_frequency, update_frequency, completion_cb):
         self._completion_callback = completion_cb
+        cpu_freq = get_host_cpu_frequency()
+        logging.info(f"Controller frequency: {self.FREQUENCY}, Max CPU frequency: {cpu_freq}")
+        tick_ns = hz_to_nsec(self.FREQUENCY)
+        logging.info(f"Controller tick time is {tick_ns} ns")
         super().start(self.ARCH, self.FREQUENCY, timer_frequency, update_frequency,
                       self._completion_callback)
     def get_frequency(self):

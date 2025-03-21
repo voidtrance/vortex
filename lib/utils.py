@@ -38,11 +38,11 @@ class Counter():
 
 def parse_frequency(frequency):
     if isinstance(frequency, str):
-        i = search(r'\d*', frequency).end()
-        frequency, order = int(frequency[:i]), frequency[i:].upper()
+        i = search(r'[^\d\.]', frequency).end() - 1
+        frequency, order = float(frequency[:i]), frequency[i:].upper()
         if order and order != "HZ":
             logging.debug(f"{frequency} {order}, {order}2HZ, {eval(f"{order}2HZ")}")
-            frequency = frequency * eval(f"{order}2HZ")
+            frequency = int(frequency * eval(f"{order}2HZ"))
     elif not isinstance(frequency, (int, float)):
         logging.error("Invalid frequency format")
         raise ValueError("Invalid frequency format")
