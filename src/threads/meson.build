@@ -16,7 +16,7 @@
 core_threads_include = include_directories('.')
 core_threads = library('threads', ['threads.c'],
                      install: true,
-                     include_directories: core_utils_include,
+                     include_directories: [core_utils_include, core_include_general],
                      install_dir: py.get_install_dir(pure: false) / 'vortex/core/threads')
 core_threads_dep = declare_dependency(link_with: core_threads,
                                     include_directories: core_threads_include)

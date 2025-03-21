@@ -24,18 +24,19 @@ VENV ?=
 VENV_PYTHON := $(VENV)/bin/python3
 DEBUG_OPTS :=
 MESON_DEBUG_OPTS :=
+GCC_BUILD_OPTS :=
 
 PYTHON_VERSION=$(shell $(PYTHON) -c "import platform; print(platform.python_version())")
 PYTHON_VERSION_NUMS = $(subst ., ,$(PYTHON_VERSION))
 
 ifeq ($(DEBUG),1)
-	DEBUG_OPTS=CFLAGS=-DVORTEX_DEBUG
-	MESON_DEBUG_OPTS=--config-settings=setup-args="-Dbuildtype=debug"
+	GCC_BUILD_OPTS=CFLAGS='-DVORTEX_DEBUG -g'
+	MESON_BUILD_OPTS=--config-settings=setup-args="-Dbuildtype=debug"
 endif
 
 all:
-	$(DEBUG_OPTS) $(PYTHON) -m pip install --no-build-isolation \
-		--editable . $(MESON_DEBUG_OPTS)
+	$(GCC_BUILD_OPTS) $(PYTHON) -m pip install --no-build-isolation \
+		--editable . $(MESON_BUILD_OPTS)
 	@if [ ! -L compile_commands.json ]; then \
 		ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
 			compile_commands.json; \

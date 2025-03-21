@@ -15,9 +15,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 core_kinematics_inc = include_directories('.')
 core_kinematics = library('kinematics',
-                                ['cartesian.c', 'kinematics.c'],
-                                        install: true,
-                                        install_dir: py.get_install_dir(pure: false) / 'vortex/core/kinematics')
+                                ['cartesian.c', 'corexy.c', 'kinematics.c'],
+                                include_directories: [core_include_general],
+                                install: true,
+                                install_dir: py.get_install_dir(pure: false) / 'vortex/core/kinematics')
 core_kinematics_dep = declare_dependency(link_with: core_kinematics,
                                             include_directories: core_kinematics_inc)
 

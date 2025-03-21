@@ -24,6 +24,8 @@
 #define breakpoint() raise(SIGSEGV)
 #else
 #define breakpoint()
+#define printf(f, ...)
+#define fprintf(s, ...)
 #endif
 
 #endif
