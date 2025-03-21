@@ -318,13 +318,11 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
         if (steps > stepper->move_steps - stepper->steps)
             steps = stepper->move_steps - stepper->steps;
 
-        if (stepper->dir == MOVE_DIR_BACK)
-            stepper->current_step -= steps;
-        else
-            stepper->current_step += steps;
-
         stepper->steps += steps;
-        log_debug(stepper, "Current steps: %.15f, inc: %.15f, remaining: %.15f",
+        stepper->current_step += (stepper->steps * (-1 + (stepper->dir * 2))) -
+                                 stepper->current_step;
+
+        log_debug(stepper, "Current steps: %lu, inc: %.15f, remaining: %.15f",
                   stepper->current_step, steps,
                   stepper->move_steps - stepper->steps);
     } else if (stepper->current_cmd->object_cmd_id == STEPPER_COMMAND_MOVE) {
