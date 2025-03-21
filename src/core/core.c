@@ -676,7 +676,7 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
         pthread_mutex_unlock(&core->event_handlers[type].lock);
     }
 
-    Py_DECREF(core->python_complete_cb);
+    Py_XDECREF(core->python_complete_cb);
     Py_DECREF(self);
     Py_XINCREF(Py_None);
     return Py_None;
