@@ -270,7 +270,7 @@ class TestFramework:
 
     def _launch_emulator(self):
         path = os.path.dirname(os.path.dirname(__file__))
-        cmd = [os.path.join(path, "vortex_emulator.py"), "-C", self._config_file,
+        cmd = [os.path.join(path, "vortex.py"), "-C", self._config_file,
                "-f", self._frontend, "-c", self._controller, "-M", "-F",
                f"{self._emulation_frequency}Hz"]
         if self._logfile is not None:

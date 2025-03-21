@@ -59,7 +59,7 @@ wheel: venv
 	$(VENV_PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
 
 gdb:
-	$(GDB) $(PYTHON_DEBUG) -ex 'r ./vortex_emulator.py $(GDB_OPTS)'
+	$(GDB) $(PYTHON_DEBUG) -ex 'r ./vortex.py $(GDB_OPTS)'
 
 clean:
 	rm -rf build dist builddir

@@ -33,8 +33,8 @@ the emulator (including other HW objects) can subscribe to.
 The Vortex emulator executable supports the following command line options:
 
 ```
-usage: vortex_emulator.py [-h] [-f FRONTEND] [-s] -c CONTROLLER [-F FREQUENCY]
-                          [-d {CRITICAL,FATAL,ERROR,WARN,WARNING,INFO,DEBUG,NOTSET}] [-l LOGFILE] [-M] -C CONFIG
+usage: vortex.py [-h] [-f FRONTEND] [-s] -c CONTROLLER [-F FREQUENCY]
+                 [-d {CRITICAL,FATAL,ERROR,WARN,WARNING,INFO,DEBUG,NOTSET}] [-l LOGFILE] [-M] -C CONFIG
 
 options:
   -h, --help            show this help message and exit
