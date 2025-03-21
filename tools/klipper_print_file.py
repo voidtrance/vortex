@@ -99,8 +99,6 @@ if args.sequential:
             emulator.close()
 else:
     printer = open(args.pipe, 'a')
-    printer.write("M21\n")
-    printer.write(f"M23 {gcode_file}\n")
-    printer.write("M24\n")
+    printer.write(f"SDCARD_PRINT_FILE FILENAME={gcode_file}\n")
 
 sys.exit(0)
