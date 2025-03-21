@@ -95,8 +95,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    //CPU_SET(1, &mask);
-    //sched_setaffinity(0, sizeof(mask), &mask);
+    CPU_ZERO(&mask);
+    CPU_SET(1, &mask);
+    sched_setaffinity(getpid(), sizeof(mask), &mask);
 
     min_priority = sched_get_priority_min(SCHED_POLICY);
     max_priority = sched_get_priority_max(SCHED_POLICY);
