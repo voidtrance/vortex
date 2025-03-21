@@ -25,6 +25,7 @@
 #include <utils.h>
 #include "heater.h"
 #include <cache.h>
+#include <atomics.h>
 
 /*
  * Heater temperature is updated 25 times per second.
@@ -218,8 +219,8 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     uint64_t time_delta = timestep - heater->timestep;
     heater_temp_reached_event_data_t *data;
 
-    if (heater->temp_data.compute_start == 0)
-        heater->temp_data.compute_start = timestep;
+    /* Quickly set the compute_start value once. */
+    atomic64_compare_exchange(&heater->temp_data.compute_start, 0, timestep);
 
     if (time_delta < HEATER_UPDATE_FREQ)
         return;
