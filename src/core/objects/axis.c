@@ -240,7 +240,7 @@ static void axis_status(core_object_t *object, void *status) {
     s->type = axis->type;
     s->position = axis->position;
     if (axis->endstop_name)
-        strncpy(s->endstop, axis->endstop_name, sizeof(s->endstop));
+        strncpy(s->endstop, axis->endstop_name, sizeof(s->endstop) - 1);
     memset(s->motors, 0, sizeof(s->motors));
     for (i = 0; i < axis->n_motors; i++) {
         strncpy(s->motors[i], axis->motors[i].name, ARRAY_SIZE(s->motors[i]));
