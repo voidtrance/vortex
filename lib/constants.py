@@ -46,3 +46,12 @@ def hz_to_nsec(hz):
 
 def nsec_to_hz(ns):
     return 1 / (ns  / SEC2NSEC)
+
+def khz_to_hz(f):
+    return f * KHZ2HZ
+
+def mhz_to_hz(f):
+    return f * MHZ2HZ
+
+def ghz_to_hz(f):
+    return f * GHZ2HZ

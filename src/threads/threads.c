@@ -225,31 +225,15 @@ static int start_thread(struct core_control_data *thread_data) {
     pthread_attr_t attrs, *attrp;
     int min_prio, max_prio, prio_step;
     bool attempt_prio = true;
-    static bool warning_shown = false;
     cpu_set_t cpu_mask;
     int num_procs = get_nprocs();
     int ret;
 
-    if (num_procs > 1) {
-        min_prio = sched_get_priority_min(SCHED_RR);
-        max_prio = sched_get_priority_max(SCHED_RR);
-        if (getrlimit(RLIMIT_RTPRIO, &rlimit) == -1 || rlimit.rlim_max == 0 ||
-            max_prio - min_prio < 3) {
-            if (!warning_shown) {
-                fprintf(
-                    stderr,
-                    "WARNING: Process does not have permission to set thread priority.\n");
-                fprintf(stderr,
-                        "WARNING: Elevated RTPRIO rlimit is requires:\n");
-                fprintf(stderr,
-                        "WARNING: \tsudo prlimit --rtprio=99:99 --pid $$\n");
-                warning_shown = true;
-            }
-
-            attempt_prio = false;
-        } else {
-            attempt_prio = false;
-        }
+    min_prio = sched_get_priority_min(SCHED_RR);
+    max_prio = sched_get_priority_max(SCHED_RR);
+    if (getrlimit(RLIMIT_RTPRIO, &rlimit) == -1 || rlimit.rlim_max == 0 ||
+        max_prio - min_prio < 3) {
+        attempt_prio = false;
     }
 
     prio_step = (max_prio - min_prio) / 3;

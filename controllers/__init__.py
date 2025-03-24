@@ -18,12 +18,13 @@ import pathlib
 import ctypes
 import vortex.core as core
 import inspect
+from pathlib import PosixPath
 from collections import namedtuple
 from vortex.controllers.types import ModuleTypes
 import vortex.core
 import vortex.lib.ctypes_helpers
 from vortex.lib.utils import Counter, parse_frequency
-from vortex.lib.constants import hz_to_nsec
+from vortex.lib.constants import hz_to_nsec, khz_to_hz
 import vortex.lib.logging as logging
 import vortex.controllers.timers as timers
 
@@ -121,15 +122,37 @@ class ObjectLookUp:
                 return Object(k, n, i)
         raise ObjectNotFound(f"Object '{name}' of klass '{klass}' not found")
 
-def get_host_cpu_frequency():
-    with open("/proc/cpuinfo", 'r') as fd:
-        for line in fd:
-            if line.startswith("model name"):
-                freq = line.strip().split()[-1]
-    return parse_frequency(freq)
+def get_host_cpu_frequency(type="cur"):
+    if type not in ("cur", "min", "max"):
+        raise ValueError("CPU frequency type should be 'cur', 'min', or 'max'")
+    frequency = 0
+    path = PosixPath(f'/sys/devices/system/cpu/cpu0/cpufreq')
+    if type == "cur":
+        filename = path / "scaling_cur_freq"
+    else:
+        filename = path / f"cpuinfo_{type}_freq"
+    if filename.exists():
+        with open(filename, 'r') as fd:
+            frequency = int(fd.read().strip())
+        frequency = khz_to_hz(frequency)
+    if frequency == 0:
+        # Try getting the frequency from sysfs
+        filename = PosixPath('/proc/cpuinfo')
+        with open(filename, 'r') as fd:
+            for line in fd:
+                if line.startswith("cpu MHz"):
+                    freq = line.split(':')[-1].strip() + 'MHZ'
+                    try:
+                        frequency = parse_frequency(freq)
+                    except NameError:
+                        pass
+                    break
+    return frequency
+
 
 class Controller(core.VortexCore):
     PINS = []
+    SPI = []
     MOTOR_COUNT = 0
     THERMISTOR_COUNT = 0
     PWM_PIN_COUNT = 0
@@ -230,10 +253,12 @@ class Controller(core.VortexCore):
         return True, None
     def start(self, timer_frequency, update_frequency, completion_cb):
         self._completion_callback = completion_cb
-        cpu_freq = get_host_cpu_frequency()
-        logging.info(f"Controller frequency: {self.FREQUENCY}, Max CPU frequency: {cpu_freq}")
+        cur_freq = get_host_cpu_frequency()
+        max_freq = get_host_cpu_frequency("max")
         tick_ns = hz_to_nsec(self.FREQUENCY)
-        logging.info(f"Controller tick time is {tick_ns} ns")
+        self.log.info(f"Controller frequency: {self.FREQUENCY} Hz, tick is {round(tick_ns, 3)} ns")
+        self.log.info(f"Current CPU frequency: {cur_freq} Hz, max {max_freq} Hz")
+        self.log.info(f"Emulation running at {timer_frequency} Hz ({hz_to_nsec(timer_frequency)} ns / tick)")
         super().start(self.ARCH, self.FREQUENCY, timer_frequency, update_frequency,
                       self._completion_callback)
     def get_frequency(self):
