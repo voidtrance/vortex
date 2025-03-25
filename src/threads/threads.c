@@ -47,15 +47,16 @@ struct core_thread_args {
     int ret;
 };
 
-typedef struct core_control_data {
-    STAILQ_ENTRY(core_control_data) entry;
+typedef struct core_thread_data {
+    STAILQ_ENTRY(core_thread_data) entry;
     core_thread_type_t type;
     pthread_t thread_id;
+    pthread_attr_t attrs;
     struct core_thread_args args;
     void *(*thread_func)(void *);
-} core_control_data_t;
+} core_thread_data_t;
 
-typedef STAILQ_HEAD(core_threads_list, core_control_data) core_thread_list_t;
+typedef STAILQ_HEAD(core_threads_list, core_thread_data) core_thread_list_t;
 core_thread_list_t core_threads;
 static pthread_once_t initialized = PTHREAD_ONCE_INIT;
 
@@ -110,7 +111,7 @@ static long timer_update_wake(int32_t *flag) {
     return 0;
 }
 
-#define get_value(x) (*(volatile typeof((x)) *)&(x))
+#define get_value(x) (x)
 #define set_value(x, y) (*(volatile typeof((x)) *)&(x) = (y))
 
 static void *core_time_control_thread(void *arg) {
@@ -125,13 +126,18 @@ static void *core_time_control_thread(void *arg) {
     struct timespec start;
     struct timespec now;
     uint64_t runtime = 0;
+    int run_val = THREAD_CONTROL_RUN;
 
     data->ret = 0;
+    if (!__atomic_compare_exchange_n(&data->control, &run_val,
+                                     THREAD_CONTROL_RUNNING, false,
+                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+        pthread_exit(&data->ret);
+
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    set_value(data->control, THREAD_CONTROL_RUNNING);
-    while (likely(get_value(data->control))) {
+    while (likely(get_value(data->control)) != THREAD_CONTROL_STOP) {
         if (unlikely(get_value(data->control) == THREAD_CONTROL_PAUSED)) {
-            clock_nanosleep(CLOCK_MONOTONIC_RAW, 0, &pause, NULL);
+            nanosleep(&pause, NULL);
             continue;
         }
 
@@ -150,10 +156,14 @@ static void *core_time_control_thread(void *arg) {
 static void *core_timer_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
+    int run_val = THREAD_CONTROL_RUN;
 
     data->ret = 0;
-    set_value(data->control, THREAD_CONTROL_RUNNING);
-    while (get_value(data->control)) {
+    if (!__atomic_compare_exchange_n(&data->control, &run_val,
+                                     THREAD_CONTROL_RUNNING, false,
+                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+        pthread_exit(&data->ret);
+    while (get_value(data->control) != THREAD_CONTROL_STOP) {
         timer_update_wait(&global_time_data.trigger);
         args->timer.callback(get_value(global_time_data.controller_ticks),
                              args->timer.data);
@@ -167,13 +177,17 @@ static void *core_update_thread(void *arg) {
     core_thread_args_t *args = &data->args;
     float update = (1000.0 / ((float)args->update.update_frequency / 1000000));
     struct timespec sleep;
+    int run_val = THREAD_CONTROL_RUN;
 
     sleep.tv_sec = (uint64_t)update / SEC_TO_NSEC(1);
     sleep.tv_nsec = (uint64_t)update % SEC_TO_NSEC(1);
 
     data->ret = 0;
-    set_value(data->control, THREAD_CONTROL_RUNNING);
-    while (get_value(data->control)) {
+    if (!__atomic_compare_exchange_n(&data->control, &run_val,
+                                     THREAD_CONTROL_RUNNING, false,
+                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+        pthread_exit(&data->ret);
+    while (get_value(data->control) != THREAD_CONTROL_STOP) {
         //timer_update_wait(&global_time_data.trigger);
         args->object.callback(args->object.data,
                               get_value(global_time_data.controller_ticks),
@@ -189,6 +203,7 @@ static void *core_generic_thread(void *arg) {
     core_thread_args_t *args = &data->args;
     float step_duration = 0.0;
     struct timespec sleep_time;
+    int run_val = THREAD_CONTROL_RUN;
 
     data->ret = 0;
     if (args->worker.frequency)
@@ -197,8 +212,11 @@ static void *core_generic_thread(void *arg) {
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = step_duration;
 
-    set_value(data->control, THREAD_CONTROL_RUNNING);
-    while (get_value(data->control)) {
+    if (!__atomic_compare_exchange_n(&data->control, &run_val,
+                                     THREAD_CONTROL_RUNNING, false,
+                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+        pthread_exit(&data->ret);
+    while (get_value(data->control) != THREAD_CONTROL_STOP) {
         args->worker.callback(args->worker.data);
         nanosleep(&sleep_time, NULL);
     }
@@ -219,75 +237,62 @@ static void *core_generic_thread(void *arg) {
         }                                                       \
     } while (0)
 
-static int start_thread(struct core_control_data *thread_data) {
+static int start_thread(struct core_thread_data *thread) {
     struct sched_param sched_params;
     struct rlimit rlimit;
-    pthread_attr_t attrs, *attrp;
-    int min_prio, max_prio, prio_step;
-    bool attempt_prio = true;
+    int min_prio, max_prio;
     cpu_set_t cpu_mask;
     int num_procs = get_nprocs();
-    int ret;
+
+    if (thread->type == CORE_THREAD_TYPE_UPDATE &&
+        thread->args.args.update.set_priority) {
+        if (getrlimit(RLIMIT_RTPRIO, &rlimit) == -1)
+            return -errno;
+
+        if (rlimit.rlim_max == 0)
+            return -EPERM;
+    }
 
     min_prio = sched_get_priority_min(SCHED_RR);
     max_prio = sched_get_priority_max(SCHED_RR);
-    if (getrlimit(RLIMIT_RTPRIO, &rlimit) == -1 || rlimit.rlim_max == 0 ||
-        max_prio - min_prio < 3) {
-        attempt_prio = false;
-    }
-
-    prio_step = (max_prio - min_prio) / 3;
-
     CPU_ZERO(&cpu_mask);
 
-    switch (thread_data->type) {
+    switch (thread->type) {
     case CORE_THREAD_TYPE_UPDATE:
-    case CORE_THREAD_TYPE_TIMER:
         CPU_SET(0, &cpu_mask);
-        sched_params.sched_priority = min_prio;
+        if (thread->args.args.update.set_priority)
+            sched_params.sched_priority = min_prio;
         break;
-    case CORE_THREAD_TYPE_OBJECT:
+    case CORE_THREAD_TYPE_TIMER:
         if (num_procs > 1)
             CPU_SET(1, &cpu_mask);
-        sched_params.sched_priority = min_prio + prio_step;
         break;
     default:
-        if (num_procs > 2)
-            CPU_SET(2, &cpu_mask);
-        sched_params.sched_priority = min_prio + prio_step * 2;
+        if (num_procs > 2) {
+            int i;
+
+            for (i = 2; i < num_procs; i++)
+                CPU_SET(i, &cpu_mask);
+        }
     }
 
-    PTHREAD_CALL(pthread_attr_init, &attrs);
+    PTHREAD_CALL(pthread_attr_init, &thread->attrs);
 
     if (CPU_COUNT(&cpu_mask))
-        PTHREAD_CALL(pthread_attr_setaffinity_np, &attrs, sizeof(cpu_mask),
-                     &cpu_mask);
+        PTHREAD_CALL(pthread_attr_setaffinity_np, &thread->attrs,
+                     sizeof(cpu_mask), &cpu_mask);
 
-    if (attempt_prio) {
-        PTHREAD_CALL(pthread_attr_setinheritsched, &attrs,
+    if (thread->type == CORE_THREAD_TYPE_UPDATE &&
+        thread->args.args.update.set_priority) {
+        PTHREAD_CALL(pthread_attr_setinheritsched, &thread->attrs,
                      PTHREAD_EXPLICIT_SCHED);
-        PTHREAD_CALL(pthread_attr_setschedpolicy, &attrs, SCHED_RR);
-        PTHREAD_CALL(pthread_attr_setschedparam, &attrs, &sched_params);
+        PTHREAD_CALL(pthread_attr_setschedpolicy, &thread->attrs, SCHED_RR);
+        PTHREAD_CALL(pthread_attr_setschedparam, &thread->attrs, &sched_params);
     }
 
-    thread_data->args.control = THREAD_CONTROL_RUN;
-    attrp = &attrs;
-recreate:
-    ret = pthread_create(&thread_data->thread_id, attrp,
-                         thread_data->thread_func, &thread_data->args);
-    if (ret) {
-        if (ret == EPERM && attrp) {
-            fprintf(stderr, "ERROR: Failed to set thread scheduling policy.\n");
-            fprintf(stderr, "ERROR: Using default policy.\n");
-            attrp = NULL;
-            goto recreate;
-        }
-
-        return ret;
-    }
-
-    pthread_attr_destroy(&attrs);
-    return 0;
+    thread->args.control = THREAD_CONTROL_RUN;
+    return pthread_create(&thread->thread_id, &thread->attrs,
+                          thread->thread_func, &thread->args);
 }
 
 static void core_thread_list_init(void) {
@@ -295,45 +300,58 @@ static void core_thread_list_init(void) {
 }
 
 int core_thread_create(core_thread_type_t type, core_thread_args_t *args) {
-    core_control_data_t *data;
+    core_thread_data_t *thread;
 
     pthread_once(&initialized, core_thread_list_init);
 
-    data = calloc(1, sizeof(*data));
-    if (!data)
+    thread = calloc(1, sizeof(*thread));
+    if (!thread)
         return -ENOMEM;
 
-    memcpy(&data->args.args, args, sizeof(data->args));
-    data->type = type;
+    memcpy(&thread->args.args, args, sizeof(thread->args));
+    thread->type = type;
 
     switch (type) {
     case CORE_THREAD_TYPE_UPDATE:
-        data->thread_func = core_time_control_thread;
-        data->args.name = strdup("time_control");
+        thread->thread_func = core_time_control_thread;
+        thread->args.name = strdup("time_control");
         break;
     case CORE_THREAD_TYPE_TIMER:
-        data->thread_func = core_timer_thread;
-        data->args.name = strdup("timer");
+        thread->thread_func = core_timer_thread;
+        thread->args.name = strdup("timer");
         break;
     case CORE_THREAD_TYPE_OBJECT:
-        data->thread_func = core_update_thread;
-        data->args.name = strdup(args->object.name);
+        thread->thread_func = core_update_thread;
+        thread->args.name = strdup(args->object.name);
         break;
     case CORE_THREAD_TYPE_WORKER:
-        data->thread_func = core_generic_thread;
-        data->args.name = strdup("worker");
+        thread->thread_func = core_generic_thread;
+        thread->args.name = strdup("worker");
     }
 
-    STAILQ_INSERT_TAIL(&core_threads, data, entry);
+    STAILQ_INSERT_TAIL(&core_threads, thread, entry);
     return 0;
 }
 
 int core_threads_start(void) {
-    core_control_data_t *data;
+    core_thread_data_t *thread;
     int ret;
 
-    STAILQ_FOREACH(data, &core_threads, entry) {
-        ret = start_thread(data);
+    // Always start the control thread first so other threads
+    // don't get stuck in the futex call.
+    STAILQ_FOREACH(thread, &core_threads, entry) {
+        if (thread->type == CORE_THREAD_TYPE_UPDATE) {
+            ret = start_thread(thread);
+            if (ret)
+                return ret;
+            break;
+        }
+    }
+
+    STAILQ_FOREACH(thread, &core_threads, entry) {
+        if (thread->type == CORE_THREAD_TYPE_UPDATE)
+            continue;
+        ret = start_thread(thread);
         if (ret) {
             core_threads_stop();
             break;
@@ -344,7 +362,7 @@ int core_threads_start(void) {
 }
 
 void core_threads_stop(void) {
-    core_control_data_t *data;
+    core_thread_data_t *thread;
 
     /*
      * Stop all threads except the time control one.
@@ -352,24 +370,24 @@ void core_threads_stop(void) {
      * on the futex will be woken up and will be able to
      * exit cleanly.
      */
-    STAILQ_FOREACH(data, &core_threads, entry) {
-        if (data->type != CORE_THREAD_TYPE_UPDATE)
-            set_value(data->args.control, THREAD_CONTROL_STOP);
+    STAILQ_FOREACH(thread, &core_threads, entry) {
+        if (thread->type != CORE_THREAD_TYPE_UPDATE)
+            set_value(thread->args.control, THREAD_CONTROL_STOP);
     }
 
-    STAILQ_FOREACH(data, &core_threads, entry) {
-        if (data->type != CORE_THREAD_TYPE_UPDATE)
-            pthread_join(data->thread_id, NULL);
+    STAILQ_FOREACH(thread, &core_threads, entry) {
+        if (thread->type != CORE_THREAD_TYPE_UPDATE && thread->thread_id)
+            pthread_join(thread->thread_id, NULL);
     }
 
     /*
      * Now that all other threads have exited, stop the
      * time control thread.
      */
-    STAILQ_FOREACH(data, &core_threads, entry) {
-        if (data->type == CORE_THREAD_TYPE_UPDATE) {
-            set_value(data->args.control, THREAD_CONTROL_STOP);
-            pthread_join(data->thread_id, NULL);
+    STAILQ_FOREACH(thread, &core_threads, entry) {
+        if (thread->type == CORE_THREAD_TYPE_UPDATE && thread->thread_id) {
+            set_value(thread->args.control, THREAD_CONTROL_STOP);
+            pthread_join(thread->thread_id, NULL);
         }
     }
 }
@@ -383,32 +401,36 @@ uint64_t core_get_runtime(void) {
 }
 
 void core_threads_pause(void) {
-    core_control_data_t *data;
+    core_thread_data_t *thread;
 
-    STAILQ_FOREACH(data, &core_threads, entry)
-        set_value(data->args.control, THREAD_CONTROL_PAUSED);
+    STAILQ_FOREACH(thread, &core_threads, entry)
+        set_value(thread->args.control, THREAD_CONTROL_PAUSED);
 }
 
 void core_threads_resume(void) {
-    core_control_data_t *data;
+    core_thread_data_t *thread;
 
-    STAILQ_FOREACH(data, &core_threads, entry)
-        set_value(data->args.control, THREAD_CONTROL_RUNNING);
+    STAILQ_FOREACH(thread, &core_threads, entry)
+        set_value(thread->args.control, THREAD_CONTROL_RUNNING);
 }
 
 void core_threads_destroy(void) {
-    core_control_data_t *data, *next;
+    core_thread_data_t *thread, *next;
 
     if (STAILQ_EMPTY(&core_threads))
         return;
 
-    data = STAILQ_FIRST(&core_threads);
-    while (data) {
-        next = STAILQ_NEXT(data, entry);
-        free((char *)data->args.name);
-        if (data->type == CORE_THREAD_TYPE_OBJECT)
-            free((char *)data->args.args.object.name);
-        free(data);
-        data = next;
+    core_threads_stop();
+
+    thread = STAILQ_FIRST(&core_threads);
+    while (thread) {
+        next = STAILQ_NEXT(thread, entry);
+        STAILQ_REMOVE(&core_threads, thread, core_thread_data, entry);
+        free((char *)thread->args.name);
+        pthread_attr_destroy(&thread->attrs);
+        if (thread->type == CORE_THREAD_TYPE_OBJECT)
+            free((char *)thread->args.args.object.name);
+        free(thread);
+        thread = next;
     }
 }

@@ -33,7 +33,7 @@ the emulator (including other HW objects) can subscribe to.
 The Vortex emulator executable supports the following command line options:
 
 ```
-usage: vortex.py [-h] [-f FRONTEND] [-s] -c CONTROLLER [-F FREQUENCY]
+usage: vortex.py [-h] [-f FRONTEND] [-s] [-c CONTROLLER] [-F FREQUENCY] [-T TIMER_FREQUENCY] [-P]
                  [-d {CRITICAL,FATAL,ERROR,WARN,WARNING,INFO,DEBUG,NOTSET}] [-l LOGFILE] [-M] -C CONFIG
 
 options:
@@ -50,9 +50,15 @@ Frontend Options:
 Controller Options:
   -c CONTROLLER, --controller CONTROLLER
                         The HW controller to be used for the emulation. This argument is required. (default: None)
-  -F FREQUENCY, --frequency FREQUENCY
-                        Custom frequency that the HW controller should use. By default, each HW controller sets their own frequency.
-                        This option can be used to override that value. (default: 0)
+  -F, --frequency FREQUENCY
+                        This is the frequency with which the object updates will run. (default: 100kHZ)
+  -T, --timer-frequency TIMER_FREQUENCY
+                        Frequency of time control loop. The time control loop is the main emulator control loop. It's the on
+                        that updates controller clock and emulation runtime. Higher values provide more precise emulation but at
+                        the cost of CPU load. (default: 1MHz)
+  -P, --set-priority    Set the priority of the emulator to real-time. This will make the emulator run with higher priority than
+                        other processes on the system. This is useful for more precise emulation but may affect system
+                        performance as the emulator will take up more CPU cycles. (default: False)
 
 Debug Options:
   -d {CRITICAL,FATAL,ERROR,WARN,WARNING,INFO,DEBUG,NOTSET}, --debug {CRITICAL,FATAL,ERROR,WARN,WARNING,INFO,DEBUG,NOTSET}

@@ -530,11 +530,12 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     uint64_t ctlr_frequency;
     uint64_t timer_frequency;
     uint64_t update_frequency;
+    int set_priority = 0;
     int ret;
 
-    if (PyArg_ParseTuple(args, "HKKKO", &arch, &ctlr_frequency,
-                         &timer_frequency, &update_frequency,
-                         &core->python_complete_cb) == -1)
+    if (!PyArg_ParseTuple(args, "HKKKO|p", &arch, &ctlr_frequency,
+                          &timer_frequency, &update_frequency,
+                          &core->python_complete_cb, &set_priority))
         return NULL;
 
     if (!PyCallable_Check(core->python_complete_cb)) {
@@ -542,8 +543,9 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    if (core_timers_init(arch)) {
-        PyErr_Format(VortexCoreError, "Failed to initialize core timers");
+    if (arch == 0 || ctlr_frequency == 0 || timer_frequency == 0 ||
+        update_frequency == 0) {
+        PyErr_Format(VortexCoreError, "Invalid frequency or width");
         return NULL;
     }
 
@@ -552,8 +554,15 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     thread_args.update.tick_frequency = ctlr_frequency;
     thread_args.update.update_frequency = timer_frequency;
     thread_args.update.width = arch;
+    thread_args.update.set_priority = (bool)set_priority;
     if (core_thread_create(CORE_THREAD_TYPE_UPDATE, &thread_args)) {
+        core_threads_destroy();
         PyErr_Format(VortexCoreError, "Failed to create timer thread");
+        return NULL;
+    }
+
+    if (core_timers_init(arch)) {
+        PyErr_Format(VortexCoreError, "Failed to initialize core timers");
         return NULL;
     }
 
@@ -595,11 +604,10 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     if (ret) {
         core_threads_destroy();
         PyErr_Format(VortexCoreError, "Failed to start core threads: %s",
-                     strerror(ret));
+                     strerror(-ret));
         return NULL;
     }
 
-    Py_INCREF(self);
     Py_XINCREF(Py_None);
     return Py_None;
 }
@@ -677,7 +685,6 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
     }
 
     Py_XDECREF(core->python_complete_cb);
-    Py_DECREF(self);
     Py_XINCREF(Py_None);
     return Py_None;
 }

@@ -69,11 +69,15 @@ class Emulator:
         self._run_emulation = True
         self._timer_frequency = 0
         self._update_frequency = 0
+        self._controller_thread_priority = False
         self._monitor = None
 
     def set_frequency(self, timer_frequency=0, update_frequency=0):
         self._timer_frequency = parse_frequency(timer_frequency)
         self._update_frequency = parse_frequency(update_frequency)
+
+    def set_thread_priority_change(self, priority):
+        self._controller_thread_priority = priority
 
     def start_monitor(self):
         self._monitor = monitor.MonitorServer(self._controller, self._command_queue)
@@ -89,9 +93,10 @@ class Emulator:
     def run(self):
         try:
            self._controller.start(self._timer_frequency, self._update_frequency,
+                                  self._controller_thread_priority,
                                   self._command_complete)
         except VortexCoreError as e:
-            print(str(e))
+            logging.error(str(e))
             self._controller.stop()
             return
         self._frontend.set_emulation_frequency(self._timer_frequency)

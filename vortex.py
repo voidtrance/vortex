@@ -49,6 +49,14 @@ def create_arg_parser():
                             the on that updates controller clock and emulation
                             runtime. Higher values provide more precise
                             emulation but at the cost of CPU load.""")
+    controller.add_argument("-P", "--set-priority", action="store_true",
+                            help="""Set the priority of the emulator to
+                            real-time. This will make the emulator run
+                            with higher priority than other processes
+                            on the system. This is useful for more
+                            precise emulation but may affect system
+                            performance as the emulator will take up more
+                            CPU cycles.""")
     debug = parser.add_argument_group("Debug Options")
     debug_levels = [logging._levelToName[x] for x in sorted(logging._levelToName.keys())]
     debug.add_argument("-d", "--debug", choices=debug_levels,
@@ -102,6 +110,7 @@ def main():
         return errno.ENOENT
     
     emulation.set_frequency(opts.timer_frequency, opts.frequency)
+    emulation.set_thread_priority_change(opts.set_priority)
     if opts.monitor:
         emulation.start_monitor()
 

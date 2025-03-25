@@ -251,7 +251,7 @@ class Controller(core.VortexCore):
                 if not pin_set:
                     return False, value
         return True, None
-    def start(self, timer_frequency, update_frequency, completion_cb):
+    def start(self, timer_frequency, update_frequency, set_priority, completion_cb):
         self._completion_callback = completion_cb
         cur_freq = get_host_cpu_frequency()
         max_freq = get_host_cpu_frequency("max")
@@ -260,7 +260,7 @@ class Controller(core.VortexCore):
         self.log.info(f"Current CPU frequency: {cur_freq} Hz, max {max_freq} Hz")
         self.log.info(f"Emulation running at {timer_frequency} Hz ({hz_to_nsec(timer_frequency)} ns / tick)")
         super().start(self.ARCH, self.FREQUENCY, timer_frequency, update_frequency,
-                      self._completion_callback)
+                      self._completion_callback, set_priority)
     def get_frequency(self):
         return self.FREQUENCY
     def virtual_command_complete(self, cmd_id, status):

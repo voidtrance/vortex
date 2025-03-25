@@ -18,6 +18,7 @@
 #ifndef __THREAD_CONTROL_H__
 #define __THREAD_CONTROL_H__
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum {
     CORE_THREAD_TYPE_UPDATE,
@@ -36,6 +37,7 @@ typedef struct {
             uint64_t tick_frequency;
             uint64_t update_frequency;
             uint16_t width;
+            bool set_priority;
         } update;
         struct {
             timer_callback_t callback;
