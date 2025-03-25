@@ -40,7 +40,6 @@ typedef struct {
 } heater_config_params_t;
 
 typedef struct {
-    uint64_t compute_start; /* nanoseconds */
     double power; /* watts */
     double max_temp;
     double current; /* celsius */
@@ -88,7 +87,6 @@ heater_t *object_create(const char *name, void *config_ptr) {
     heater->object.exec_command = heater_exec_cmd;
     heater->object.get_state = heater_status;
     heater->object.name = strdup(name);
-    heater->temp_data.compute_start = 0;
     heater->temp_data.power = config->power;
     heater->temp_data.max_temp = config->max_temp;
     strncpy(heater->pin, config->pin, sizeof(heater->pin));
@@ -116,7 +114,6 @@ static void heater_reset(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
 
     heater->temp_data.current = AMBIENT_TEMP;
-    heater->temp_data.compute_start = 0;
     heater_compute_clear(heater->temp_data.compute);
 }
 
@@ -139,7 +136,6 @@ static int heater_set_temp(heater_t *heater,
     else
         heater_compute_set_power(heater->temp_data.compute, 0);
 
-    heater->temp_data.compute_start = 0;
     return 0;
 }
 
@@ -219,9 +215,6 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     uint64_t time_delta = timestep - heater->timestep;
     heater_temp_reached_event_data_t *data;
 
-    /* Quickly set the compute_start value once. */
-    atomic64_compare_exchange(&heater->temp_data.compute_start, 0, timestep);
-
     if (time_delta < HEATER_UPDATE_FREQ)
         return;
 
@@ -231,8 +224,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
      * Use interpolation function to approximate temperature
      * ramp.
      */
-    heater_compute_iterate(heater->temp_data.compute, time_delta,
-                           timestep - heater->temp_data.compute_start);
+    heater_compute_iterate(heater->temp_data.compute, time_delta, 0);
     heater->temp_data.current =
         heater_compute_get_temperature(heater->temp_data.compute);
 
