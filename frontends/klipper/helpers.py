@@ -367,7 +367,6 @@ class Stepper:
         self.move.count = 0
         self.move.active = False
         self.move_queue.clear()
-        self.pin_word &= ~StepperPins.DIR
     def _change_direction(self, dir):
         # Only switch direction if the current set of
         # steps have been finished by the stepper.

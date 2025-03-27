@@ -15,11 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __CARTESIAN_H__
-#define __CARTESIAN_H__
+#ifndef __COREXY_H__
+#define __COREXY_H__
 #include "kinematics.h"
 
-int cartesian_motor_movement(coordinates_t *delta, coordinates_t *movement);
-int cartesian_axis_movement(coordinates_t *delta, coordinates_t *movement);
+int corexy_motor_movement(coordinates_t *delta, coordinates_t *movement);
+int corexy_axis_movement(coordinates_t *delta, coordinates_t *movement);
 
 #endif

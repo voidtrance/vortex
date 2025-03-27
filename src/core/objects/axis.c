@@ -121,8 +121,11 @@ static int axis_init(core_object_t *object) {
     for (i = 0; i < axis->n_motors; i++) {
         axis->motors[i].obj = CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_STEPPER,
                                                  axis->motors[i].name);
-        if (!axis->motors[i].obj)
+        if (!axis->motors[i].obj) {
+            log_error(axis, "Failed to find stepper motor %s",
+                      axis->motors[i].name);
             return -ENODEV;
+        }
 
         axis->motors[i].obj->get_state(axis->motors[i].obj,
                                        &axis->stepper_status);
@@ -136,8 +139,10 @@ static int axis_init(core_object_t *object) {
         endstop_status_t status;
         axis->endstop =
             CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_ENDSTOP, axis->endstop_name);
-        if (!axis->endstop)
+        if (!axis->endstop) {
+            log_error(axis, "Failed to find endstop %s", axis->endstop_name);
             return -ENODEV;
+        }
 
         axis->endstop->get_state(axis->endstop, &status);
         if (!strncmp(status.type, "max", 3))
@@ -166,6 +171,67 @@ static void axis_event_handler(core_object_t *object, const char *name,
 
 #define step_distance(motor)                                          \
     ((double)(motor.steps - motor.initial_step) / motor.steps_per_mm)
+
+static inline void set_axis_distance(coordinates_t *coords, double distance,
+                                     axis_type_t type) {
+    switch (type) {
+    case AXIS_TYPE_X:
+        coords->x = distance;
+        break;
+    case AXIS_TYPE_Y:
+        coords->y = distance;
+        break;
+    case AXIS_TYPE_Z:
+        coords->z = distance;
+        break;
+    case AXIS_TYPE_E:
+        coords->e = distance;
+        break;
+    case AXIS_TYPE_A:
+        coords->a = distance;
+        break;
+    case AXIS_TYPE_B:
+        coords->b = distance;
+        break;
+    case AXIS_TYPE_C:
+        coords->c = distance;
+        break;
+    default:
+        break;
+    }
+}
+
+static inline double get_axis_distance(axis_t *axis, coordinates_t *coords) {
+    double distance;
+
+    switch (axis->type) {
+    case AXIS_TYPE_X:
+        distance = coords->x;
+        break;
+    case AXIS_TYPE_Y:
+        distance = coords->y;
+        break;
+    case AXIS_TYPE_Z:
+        distance = coords->z;
+        break;
+    case AXIS_TYPE_E:
+        distance = coords->e;
+        break;
+    case AXIS_TYPE_A:
+        distance = coords->a;
+        break;
+    case AXIS_TYPE_B:
+        distance = coords->b;
+        break;
+    case AXIS_TYPE_C:
+        distance = coords->c;
+        break;
+    default:
+        distance = 0.0;
+    }
+
+    return axis->start_position + distance;
+}
 
 static void axis_update(core_object_t *object, uint64_t ticks,
                         uint64_t runtime) {
@@ -204,29 +270,12 @@ static void axis_update(core_object_t *object, uint64_t ticks,
         for (i = 0; i < axis->n_motors; i++)
             average_distance += step_distance(axis->motors[i]);
 
-        coords.x = average_distance / axis->n_motors;
+        set_axis_distance(&coords, average_distance / axis->n_motors,
+                          axis->type);
     }
 
     compute_axis_movement(&coords, &distance);
-
-    switch (kinematics) {
-    case KINEMATICS_COREXY:
-        if (axis->type != AXIS_TYPE_Y)
-            axis->position = axis->start_position + distance.x;
-        else
-            axis->position = axis->start_position + distance.y;
-        break;
-    case KINEMATICS_COREXZ:
-        if (axis->type != AXIS_TYPE_Z)
-            axis->position = axis->start_position + distance.x;
-        else
-            axis->position = axis->start_position + distance.y;
-        break;
-    default:
-        axis->position = axis->start_position + distance.x;
-        break;
-    }
-
+    axis->position = get_axis_distance(axis, &distance);
     log_debug(axis, "position: %.15f, homed: %u", axis->position, axis->homed);
 }
 

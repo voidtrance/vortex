@@ -34,6 +34,10 @@ int kinematics_type_set(kinematics_type_t type) {
         motor_movement_func = cartesian_motor_movement;
         axis_movement_func = cartesian_axis_movement;
         break;
+    case KINEMATICS_COREXY:
+        motor_movement_func = corexy_motor_movement;
+        axis_movement_func = corexy_axis_movement;
+        break;
     default:
         return -EINVAL;
     }
