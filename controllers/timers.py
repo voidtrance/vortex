@@ -51,6 +51,10 @@ class Timer:
         self._timeout = timeout
         self._schedule(self._handle, self._timeout)
 
+    def remove(self):
+        if self._handle:
+            self._unregister(self._handle)
+
     def is_before(self, other):
         return self < other
 
@@ -76,8 +80,8 @@ class Timer:
         return not self == timer
 
     def __del__(self):
-        if self._handle:
-            self._unregister(self._handle)
+        self.remove()
+        super().__del__()
 
 class Factory:
     def __init__(self, controller):

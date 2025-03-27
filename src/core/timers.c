@@ -17,6 +17,9 @@
  */
 
 #define TIMER_DEBUG 0
+#if TIMER_DEBUG
+#include <stdio.h>
+#endif
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -24,20 +27,29 @@
 #include <threads.h>
 #include <debug.h>
 #include <utils.h>
+#include <atomics.h>
 #include "timers.h"
 
 #define CHECK_TIMER 0
+
+typedef enum {
+    EXECUTE_STATE_NONE = 0,
+    EXECUTE_STATE_EXECUTING,
+    EXECUTE_STATE_TO_REMOVE,
+    EXECUTE_STATE_REMOVED,
+} execute_state_t;
 
 typedef struct core_timers_entry_struct {
     CIRCLEQ_ENTRY(core_timers_entry_struct) entry;
     core_timer_t timer;
     uint64_t timestamp;
     bool armed;
+    execute_state_t state;
 } core_timers_entry_t;
 
 /* Some useful CIRCLEQ macros which are aren't provided. */
 #define CIRCLEQ_FOREACH_SAFE(elm, next, head, field)                  \
-    for ((elm) = ((head)->cqh_first), (next) = (elm)->field.cqe_next;	\
+    for ((elm) = ((head)->cqh_first), (next) = (elm)->field.cqe_next; \
          (elm) != (const void *)(head);                               \
          (elm) = (next), (next) = (next)->field.cqe_next)
 
@@ -81,6 +93,7 @@ FILE *__timer_fd;
             fprintf(__timer_fd, "0x%lx,%lu:", (unsigned long)__entry,     \
                     __entry->timestamp);                                  \
         fprintf(__timer_fd, "\n");                                        \
+        fflush(__timer_fd);                                               \
     } while (0)
 #endif
 
@@ -93,6 +106,10 @@ int core_timers_init(uint16_t width) {
 
 #if TIMER_DEBUG
     __timer_fd = fopen("timer.debug", "w");
+    if (!__timer_fd) {
+        perror("Failed to open timer.debug");
+        return -1;
+    }
 #endif
 
     return core_thread_create(CORE_THREAD_TYPE_TIMER, &args);
@@ -171,6 +188,7 @@ core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout) {
 
     new_timer->timer = timer;
     new_timer->timestamp = timeout;
+    new_timer->state = EXECUTE_STATE_NONE;
 
     if (timeout)
         timer_arm(new_timer);
@@ -204,9 +222,17 @@ int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout) {
 
 void core_timer_unregister(core_timer_handle_t handle) {
     core_timers_entry_t *timer = (core_timers_entry_t *)handle;
+    execute_state_t state;
 
-    timer_remove(timer);
-    free(timer);
+    pthread_mutex_lock(&timers.lock);
+    state = atomic32_exchange(&timer->state, EXECUTE_STATE_TO_REMOVE);
+    if (state == EXECUTE_STATE_NONE) {
+        atomic32_store(&timer->state, EXECUTE_STATE_REMOVED);
+        timer_remove_locked(timer);
+        free(timer);
+    }
+
+    pthread_mutex_unlock(&timers.lock);
 }
 
 int core_timers_compare(uint64_t timeout1, uint64_t timeout2) {
@@ -217,7 +243,7 @@ static void core_timers_update(uint64_t ticks, void *data) {
     core_timers_t *timers = (core_timers_t *)data;
     core_timers_entry_t *timer;
     core_timers_entry_t *next;
-    uint64_t reschedule;
+    uint64_t reschedule = 0;
 
     set_now(ticks);
     pthread_mutex_lock(&timers->lock);
@@ -226,8 +252,20 @@ static void core_timers_update(uint64_t ticks, void *data) {
             break;
 
         pthread_mutex_unlock(&timers->lock);
-        reschedule = timer->timer.callback(ticks, timer->timer.data);
+        if (atomic32_compare_exchange(&timer->state, EXECUTE_STATE_NONE,
+                                      EXECUTE_STATE_EXECUTING))
+            reschedule = timer->timer.callback(ticks, timer->timer.data);
         pthread_mutex_lock(&timers->lock);
+        if (!atomic32_compare_exchange(&timer->state, EXECUTE_STATE_EXECUTING,
+                                       EXECUTE_STATE_NONE)) {
+            if (atomic32_load(&timer->state) == EXECUTE_STATE_TO_REMOVE) {
+                timer_remove_locked(timer);
+                free(timer);
+            }
+
+            continue;
+        }
+
         timer_remove_locked(timer);
         timer->timestamp = reschedule & timers->mask;
         if (timer->timestamp) {
@@ -244,13 +282,12 @@ static void core_timers_update(uint64_t ticks, void *data) {
          * that needs special handling:
          *   1. At iterations N, both timer and next are timers
          *      on the armed list.
-         *   2. The armed list lock is released above before
-         *      calling timer's callback.
+         *   2. The timers lock is released above before calling
+         *      timer's callback.
          *   3. During the callback's execution, next gets disarmed.
          *      This can happen because during the callback's
-         *      execution, both the armed and disarmed locks are
-         *      unlocked.
-         *   4. When the callback completes, the armed lock is
+         *      execution, the timers locks is unlocked.
+         *   4. When the callback completes, the timers lock is
          *      locked and timer is assigned to next. (next is now
          *      on the disarmed list.)
          *   5. The new next is now the head of the disarmed list.
@@ -283,7 +320,8 @@ void core_timers_free(void) {
     core_timers_entry_t *next;
 
 #if TIMER_DEBUG
-    fclose(__timer_fd);
+    if (__timer_fd)
+        fclose(__timer_fd);
 #endif
 
     pthread_mutex_lock(&timers.lock);
