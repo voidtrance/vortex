@@ -100,6 +100,7 @@ stepper_t *object_create(const char *name, void *config_ptr) {
 
     stepper->object.type = OBJECT_TYPE_STEPPER;
     stepper->object.update = stepper_update;
+    stepper->object.update_frequency = 1000; /* 1 kHz */
     stepper->object.get_state = stepper_status;
     stepper->object.reset = stepper_reset;
     stepper->object.destroy = stepper_destroy;

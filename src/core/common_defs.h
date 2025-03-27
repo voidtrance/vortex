@@ -60,6 +60,7 @@ struct core_object {
     core_object_type_t type;
     const char *name;
     LIST_ENTRY(core_object) entry;
+    uint64_t update_frequency;
 
     int (*init)(core_object_t *object);
     void (*reset)(core_object_t *object);

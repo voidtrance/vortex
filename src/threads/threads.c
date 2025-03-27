@@ -21,6 +21,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <linux/futex.h>
@@ -175,12 +176,12 @@ static void *core_timer_thread(void *arg) {
 static void *core_update_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
-    float update = (1000.0 / ((float)args->update.update_frequency / 1000000));
+    float update = (1000.0 / ((float)args->object.frequency / 1000000));
     struct timespec sleep;
     int run_val = THREAD_CONTROL_RUN;
 
-    sleep.tv_sec = (uint64_t)update / SEC_TO_NSEC(1);
-    sleep.tv_nsec = (uint64_t)update % SEC_TO_NSEC(1);
+    sleep.tv_sec = (uint64_t)round(update) / SEC_TO_NSEC(1);
+    sleep.tv_nsec = (uint64_t)round(update) % SEC_TO_NSEC(1);
 
     data->ret = 0;
     if (!__atomic_compare_exchange_n(&data->control, &run_val,
@@ -188,7 +189,7 @@ static void *core_update_thread(void *arg) {
                                      __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
         pthread_exit(&data->ret);
     while (get_value(data->control) != THREAD_CONTROL_STOP) {
-        //timer_update_wait(&global_time_data.trigger);
+        timer_update_wait(&global_time_data.trigger);
         args->object.callback(args->object.data,
                               get_value(global_time_data.controller_ticks),
                               get_value(global_time_data.controller_runtime));
@@ -224,17 +225,11 @@ static void *core_generic_thread(void *arg) {
     pthread_exit(&data->ret);
 }
 
-#define __stringify(x) #x
-#define stringify(x) __stringify(x)
-
-#define PTHREAD_CALL(func, ...)                                 \
-    do {                                                        \
-        int __ret = func(__VA_ARGS__);                          \
-        if (__ret) {                                            \
-            fprintf(stderr, "ERROR: " stringify(func) ": %s\n", \
-                    strerror(__ret));                           \
-            return __ret;                                       \
-        }                                                       \
+#define PTHREAD_CALL(func, ...)        \
+    do {                               \
+        int __ret = func(__VA_ARGS__); \
+        if (__ret)                     \
+            return __ret;              \
     } while (0)
 
 static int start_thread(struct core_thread_data *thread) {

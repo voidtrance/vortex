@@ -27,11 +27,6 @@
 #include <cache.h>
 #include <atomics.h>
 
-/*
- * Heater temperature is updated 25 times per second.
- */
-#define HEATER_UPDATE_FREQ (HZ_TO_NSEC(25))
-
 typedef struct {
     uint16_t power;
     char pin[8];
@@ -82,6 +77,7 @@ heater_t *object_create(const char *name, void *config_ptr) {
 
     heater->object.type = OBJECT_TYPE_HEATER;
     heater->object.update = heater_update;
+    heater->object.update_frequency = 25; /* 25 Hz */
     heater->object.reset = heater_reset;
     heater->object.destroy = heater_destroy;
     heater->object.exec_command = heater_exec_cmd;
@@ -214,9 +210,6 @@ static void heater_update(core_object_t *object, uint64_t ticks,
     heater_t *heater = (heater_t *)object;
     uint64_t time_delta = timestep - heater->timestep;
     heater_temp_reached_event_data_t *data;
-
-    if (time_delta < HEATER_UPDATE_FREQ)
-        return;
 
     heater->timestep = timestep;
 

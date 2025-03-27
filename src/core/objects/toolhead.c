@@ -157,6 +157,7 @@ toolhead_t *object_create(const char *name, void *config_ptr) {
     toolhead->object.name = strdup(name);
     toolhead->object.init = toolhead_init;
     toolhead->object.update = toolhead_update;
+    toolhead->object.update_frequency = 1000; /* 1kHz */
     toolhead->object.get_state = toolhead_status;
     toolhead->object.destroy = toolhead_destroy;
 

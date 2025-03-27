@@ -166,6 +166,7 @@ thermistor_t *object_create(const char *name, void *config_ptr) {
     thermistor->object.type = OBJECT_TYPE_THERMISTOR;
     thermistor->object.init = thermistor_init;
     thermistor->object.update = thermistor_update;
+    thermistor->object.update_frequency = 1000; /* 1kHz */
     thermistor->object.destroy = thermistor_destroy;
     thermistor->object.get_state = thermistor_status;
     thermistor->object.name = strdup(name);

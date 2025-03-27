@@ -590,7 +590,7 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
             snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
                      object->name);
             thread_args.object.name = strdup(name);
-            thread_args.object.frequency = update_frequency;
+            thread_args.object.frequency = object->update_frequency;
             thread_args.object.callback = (object_callback_t)object->update;
             thread_args.object.data = object;
             if (core_thread_create(CORE_THREAD_TYPE_OBJECT, &thread_args)) {
