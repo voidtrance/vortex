@@ -14,10 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import errno
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 
 class VirtualObjectBase:
-    type = ModuleTypes.NONE
+    type = ObjectTypes.NONE
     commands = []
     # Virtual objects don't have events
     events = []

@@ -18,7 +18,7 @@ import argparse
 import configparser
 from typing import Type
 from time import strftime
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 from vortex.emulator.kinematics import AxisType
 
 def parse_pin(pin_name : str):

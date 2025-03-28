@@ -19,7 +19,7 @@ from threading import Lock
 import vortex.lib.logging as logging
 import vortex.core.lib.atomics as atomics
 from collections import namedtuple
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
@@ -138,7 +138,7 @@ class DigitalPin:
         self._log = Logger(name, oid)
         self._cycles = []
     def _set_pin(self, value):
-        self.frontend.queue_command(ModuleTypes.DIGITAL_PIN,
+        self.frontend.queue_command(ObjectTypes.DIGITAL_PIN,
                                     self.name, "set", {"state": int(value)})
     def set_initial_value(self, value, default):
         #self._log.debug(f"value: {value}, default: {default}")
@@ -253,7 +253,7 @@ class HeaterPin(DigitalPin):
         super().__init__(frontend, oid, obj_id, name)
         status = frontend.query([obj_id])[obj_id]
         self.heater_max_temp = status["max_temp"]
-        cmd_id = self.frontend.queue_command(ModuleTypes.HEATER,
+        cmd_id = self.frontend.queue_command(ObjectTypes.HEATER,
                                              self.name, "use_pins",
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)[0]
@@ -322,7 +322,7 @@ class Stepper:
         self.timer.callback = self.send_step
         self._needs_reset = False
         self.move = CurrentMove(0, 0, 0, 0)
-        cmd_id = self.frontend.queue_command(ModuleTypes.STEPPER,
+        cmd_id = self.frontend.queue_command(ObjectTypes.STEPPER,
                                              self.name, "use_pins",
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)[0]

@@ -1347,6 +1347,74 @@ void core_log(core_log_level_t level, core_object_type_t type, const char *name,
     PyGILState_Release(state);
 }
 
+void upper(char *str, const char *name) {
+    size_t len = strlen(name);
+    size_t i;
+
+    for (i = 0; i < len; i++)
+        str[i] = toupper(name[i]);
+    str[len] = '\0';
+}
+
+static char *core_create_object_enum(void) {
+    const char *def_prefix = "from vortex.lib.ext_enum import ExtIntEnum\n"
+                             "class ObjectTypes(ExtIntEnum):\n";
+    char *def_string;
+    size_t obj_def_size = 4 + /* '    ' */ +32 /* name */ + 3 /* ' = ' */ +
+                          floor(log10(OBJECT_TYPE_MAX)) + 1 /* value */ +
+                          1 /* \n */;
+    size_t offset;
+    size_t string_size =
+        strlen(def_prefix) + OBJECT_TYPE_MAX * obj_def_size + 1;
+    size_t i;
+
+    def_string = calloc(string_size, sizeof(char));
+    if (!def_string)
+        return NULL;
+
+    strcpy(def_string, def_prefix);
+    offset = strlen(def_prefix);
+    for (i = 0; i < OBJECT_TYPE_MAX; i++) {
+        char name[strlen(ObjectTypeNames[i]) + 1];
+
+        upper(name, ObjectTypeNames[i]);
+        offset += snprintf(def_string + offset, string_size - offset,
+                           "    %s = %lu\n", name, i);
+    }
+
+    def_string[offset] = '\0';
+    return def_string;
+}
+
+static char *core_create_event_enum(void) {
+    const char *def_prefix = "class ObjectEvents(ExtIntEnum):\n";
+    char *def_string;
+    size_t obj_def_size = 4 + /* '    ' */ +32 /* name */ + 3 /* ' = ' */ +
+                          floor(log10(OBJECT_EVENT_MAX)) + 1 /* value */ +
+                          1 /* \n */;
+    size_t offset;
+    size_t string_size =
+        strlen(def_prefix) + OBJECT_EVENT_MAX * obj_def_size + 1;
+    size_t i;
+
+    def_string = calloc(string_size, sizeof(char));
+    if (!def_string)
+        return NULL;
+
+    strcpy(def_string, def_prefix);
+    offset = strlen(def_prefix);
+    for (i = 0; i < OBJECT_EVENT_MAX; i++) {
+        char name[strlen(OBJECT_EVENT_NAMES[i]) + 1];
+
+        upper(name, OBJECT_EVENT_NAMES[i]);
+        offset += snprintf(def_string + offset, string_size - offset,
+                           "    %s = %lu\n", name, i);
+    }
+
+    def_string[offset] = '\0';
+    return def_string;
+}
+
 static PyMethodDef VortexCoreMethods[] = {
     { "init_objects", vortex_core_initialize_object, METH_NOARGS,
       "Initialize objects" },
@@ -1398,11 +1466,10 @@ static PyTypeObject Vortex_Core_Type = {
 };
 
 static int vortex_core_module_exec(PyObject *module) {
-    core_object_type_t type;
-    core_object_event_type_t event;
-    PyObject *value_dict;
     PyObject *path;
     PyObject *logging_module = NULL;
+    PyObject *ns;
+    char *enum_str;
 
     path = PyModule_GetFilenameObject(module);
     module_path = PyUnicode_AsUTF8(path);
@@ -1424,75 +1491,24 @@ static int vortex_core_module_exec(PyObject *module) {
     if (PyModule_AddObject(module, "VortexCoreError", VortexCoreError) < 0)
         goto fail;
 
-    value_dict = PyDict_New();
-    if (!value_dict)
-        goto fail;
-
-    for (type = 0; type < OBJECT_TYPE_MAX; type++) {
-        PyObject *key;
-        PyObject *value;
-        int ret;
-
-        if (PyModule_AddIntConstant(module, ObjectTypeExportNames[type],
-                                    type) == -1)
-            goto fail;
-
-        key = PyLong_FromLong((long)type);
-        if (!key)
-            goto fail;
-
-        value = PyUnicode_FromString(ObjectTypeNames[type]);
-        if (!value) {
-            Py_XDECREF(key);
-            goto fail;
-        }
-
-        ret = PyDict_SetItem(value_dict, key, value);
-        Py_XDECREF(key);
-        Py_XDECREF(value);
-        if (ret == -1)
-            goto fail;
-    }
-
-    if (PyModule_AddObject(module, "OBJECT_TYPE_NAMES", value_dict) == -1) {
-        Py_XDECREF(value_dict);
+    ns = PyObject_GetAttrString(module, "__dict__");
+    enum_str = core_create_object_enum();
+    if (!enum_str) {
+        PyErr_SetString(VortexCoreError, "Failed to create object enum");
         goto fail;
     }
 
-    value_dict = PyDict_New();
-    if (!value_dict)
-        goto fail;
+    PyRun_String(enum_str, Py_file_input, ns, ns);
+    free(enum_str);
 
-    for (event = 0; event < OBJECT_EVENT_MAX; event++) {
-        PyObject *key;
-        PyObject *value;
-        int ret;
-
-        if (PyModule_AddIntConstant(module, OBJECT_EVENT_NAMES[event], event) ==
-            -1)
-            goto fail;
-
-        key = PyLong_FromLong((long)event);
-        if (!key)
-            goto fail;
-
-        value = PyUnicode_FromString(OBJECT_EVENT_NAMES[event]);
-        if (!value) {
-            Py_XDECREF(key);
-            goto fail;
-        }
-
-        ret = PyDict_SetItem(value_dict, key, value);
-        Py_XDECREF(key);
-        Py_XDECREF(value);
-        if (ret == -1)
-            goto fail;
-    }
-
-    if (PyModule_AddObject(module, "OBJECT_EVENT_NAMES", value_dict) == -1) {
-        Py_XDECREF(value_dict);
+    enum_str = core_create_event_enum();
+    if (!enum_str) {
+        PyErr_SetString(VortexCoreError, "Failed to create event enum");
         goto fail;
     }
+    PyRun_String(enum_str, Py_file_input, ns, ns);
+    free(enum_str);
+    Py_DECREF(ns);
 
     logging_module = PyImport_ImportModule("vortex.lib.logging");
     if (!logging_module)

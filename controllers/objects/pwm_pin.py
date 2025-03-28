@@ -14,11 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 from errno import *
 
 class PWMPin(vobj.VirtualObjectBase):
-    type = ModuleTypes.PWM_PIN
+    type = ObjectTypes.PWM_PIN
     commands = [(0, "set_cycle", ["cycle"], None)]
     def __init__(self, *args):
         super().__init__(*args)

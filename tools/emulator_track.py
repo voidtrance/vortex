@@ -24,7 +24,7 @@ import threading
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, set_props
 from dash.dependencies import Input, Output
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 import collections
 from weakref import proxy
 
@@ -116,14 +116,14 @@ def get(conn, request):
 
 def get_toolhead_id(conn):
     response = get(conn, {"request" : "object_list"})
-    toolheads = response["objects"][ModuleTypes.TOOLHEAD]
+    toolheads = response["objects"][ObjectTypes.TOOLHEAD]
     if len(toolheads) > 1:
         return 0
     return toolheads[0]["id"]
 
 def get_heaters_id(conn):
     response = get(conn, {"request" : "object_list"})
-    heaters = response["objects"][ModuleTypes.HEATER]
+    heaters = response["objects"][ObjectTypes.HEATER]
     return [x["id"] for x in heaters]
 
 def get_objects(conn, *args):

@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.lib.logging as logging
 from vortex.frontends import BaseFrontend
-from vortex.controllers.types import ModuleTypes
+from vortex.controllers import ObjectTypes
 from vortex.frontends.proto import CommandStatus, Completion
 
 class DirectFrontend(BaseFrontend):
@@ -45,7 +45,7 @@ class DirectFrontend(BaseFrontend):
                 logging.error(f"Unable to parse command: {e}")
             return
 
-        klass = ModuleTypes[klass]
+        klass = ObjectTypes[klass]
         cmd_id = self.queue_command(klass, object, cmd, opts)
         if cmd_id is False:
             logging.error("Failed to queue command")

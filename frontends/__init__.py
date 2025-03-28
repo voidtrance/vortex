@@ -21,7 +21,7 @@ import time
 import pickle
 import threading
 import vortex.lib.logging as logging
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 from vortex.frontends.lib import create_pty
 from vortex.frontends.queues import CommandQueue
 from vortex.frontends.proto import *
@@ -30,10 +30,10 @@ class BaseFrontend:
     PIPE_PATH = "/tmp/vortex"
     def __init__(self, queue_size=0):
         self._raw_controller_params = {}
-        self._cmd_id_2_cmd = {x: {} for x in ModuleTypes}
-        self._cmd_name_2_id = {x: {} for x in ModuleTypes}
-        self._obj_name_2_id = {x: {} for x in ModuleTypes}
-        self._obj_id_2_name = {x: {} for x in ModuleTypes}
+        self._cmd_id_2_cmd = {x: {} for x in ObjectTypes}
+        self._cmd_name_2_id = {x: {} for x in ObjectTypes}
+        self._obj_name_2_id = {x: {} for x in ObjectTypes}
+        self._obj_id_2_name = {x: {} for x in ObjectTypes}
         self._command_completion = {}
         self._command_completion_lock = threading.Lock()
         self._command_results = {}

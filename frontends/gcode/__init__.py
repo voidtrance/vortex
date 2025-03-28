@@ -20,7 +20,7 @@ import vortex.frontends.gcode.gcmd as gcmd
 import vortex.lib.constants as constants
 import vortex.lib.ext_enum as enum
 from vortex.frontends import BaseFrontend
-from vortex.controllers.types import ModuleTypes, ModuleEvents
+from vortex.controllers import ObjectTypes, EventTypes
 from vortex.emulator.kinematics import AxisType
 from vortex.frontends.proto import CommandStatus, Completion
 
@@ -59,13 +59,13 @@ class GCodeFrontend(BaseFrontend):
 
     def event_handler(self, klass, event, owner, data):
         print("gcode handler:", klass, event, owner, data)
-        if event == ModuleEvents.HEATER_TEMP_REACHED:
+        if event == ObjectEvents.HEATER_TEMP_REACHED:
             print("gcode handler: ", data["temp"])
 
     def move_to_position(self, axis_id, position):
         status = self.query_object([axis_id])
         axis_distance = position - status[axis_id]["position"]
-        motor_ids = [self.get_object_id(ModuleTypes.STEPPER, x) \
+        motor_ids = [self.get_object_id(ObjectTypes.STEPPER, x) \
                       for x in status[axis_id]["motors"] if x]
         motor_status = self.query_object(motor_ids)
         current_positions = [motor_status[x]["steps"] for x in motor_ids]
@@ -76,7 +76,7 @@ class GCodeFrontend(BaseFrontend):
         for idx in range(len(movement)):
             distance = int(movement[idx])
             direction = int(distance > 0.)
-            cmd_id = self.queue_command(ModuleTypes.STEPPER,
+            cmd_id = self.queue_command(ObjectTypes.STEPPER,
                                         status[axis_id]["motors"][idx],
                                         "move",
                                         f"steps={abs(distance)},direction={direction}")
@@ -87,12 +87,12 @@ class GCodeFrontend(BaseFrontend):
         return move_cmds
     # GCode command implementation
     def G0(self, cmd):
-        axes_names = self.get_object_name_set(ModuleTypes.AXIS)
-        axes = {x: self.get_object_id(ModuleTypes.AXIS, x) for x in axes_names}
+        axes_names = self.get_object_name_set(ObjectTypes.AXIS)
+        axes = {x: self.get_object_id(ObjectTypes.AXIS, x) for x in axes_names}
         axes_status = self.query_object(axes.values())
         motor_set = []
         for axis in axes.values():
-            motor_set += [self.get_object_id(ModuleTypes.STEPPER, x) \
+            motor_set += [self.get_object_id(ObjectTypes.STEPPER, x) \
                           for x in axes_status[axis]["motors"] if x]
         motor_status = self.query_object(motor_set)
         if cmd.has_param("F"):
@@ -102,9 +102,9 @@ class GCodeFrontend(BaseFrontend):
                 for motor in axes_status[axis]["motors"]:
                     if not motor:
                         continue
-                    motor_id = self.get_object_id(ModuleTypes.STEPPER, motor)
+                    motor_id = self.get_object_id(ObjectTypes.STEPPER, motor)
                     steps_per_mm = motor_status[motor_id]["stepr_per_mm"]
-                    self.queue_command(ModuleTypes.STEPPER, motor, "set_speed",
+                    self.queue_command(ObjectTypes.STEPPER, motor, "set_speed",
                                        f"steps_per_second={speed * steps_per_mm}")
         for axis in cmd.get_params(exclude=["F"]):
             if axis.name.lower() == "e":
@@ -135,16 +135,16 @@ class GCodeFrontend(BaseFrontend):
             time.sleep(dwell / constants.SEC2MSEC)
         return CommandStatus.SUCCESS
     def G28(self, cmd):
-        klass = ModuleTypes.AXIS
+        klass = ObjectTypes.AXIS
         if not cmd.has_params():
             axes_types = [AxisType.X, AxisType.Y, AxisType.Z,
                           AxisType.A, AxisType.B, AxisType.C]
         else:
             axes_types = [AxisType[x.name.upper()] for x in cmd.iter_params()]
-        axes_ids = self.get_object_id_set(ModuleTypes.AXIS)
+        axes_ids = self.get_object_id_set(ObjectTypes.AXIS)
         status = self.query_object(axes_ids)
         axes_ids = [x for x in axes_ids if status[x]["type"] in axes_types]
-        axis_endstop_ids = {x: self.get_object_id(ModuleTypes.ENDSTOP,
+        axis_endstop_ids = {x: self.get_object_id(ObjectTypes.ENDSTOP,
                                                status[x]["endstop"]) \
                                                 for x in axes_ids}
         endstop_status = self.query_object(axis_endstop_ids.values())
@@ -152,11 +152,11 @@ class GCodeFrontend(BaseFrontend):
             logging.debug(f"Homing axis {AxisType(status[axis]["type"])}")
             motor_ids = {}
             for motor in [x for x in status[axis]["motors"] if x]:
-                motor_ids[motor] = self.get_object_id(ModuleTypes.STEPPER, motor)
+                motor_ids[motor] = self.get_object_id(ObjectTypes.STEPPER, motor)
             motor_status = self.query_object(motor_ids.values())
             for motor in motor_ids:
                 if not motor_status[motor_ids[motor]]["enabled"]:
-                    cmd_id = self.queue_command(ModuleTypes.STEPPER, motor, "enable",
+                    cmd_id = self.queue_command(ObjectTypes.STEPPER, motor, "enable",
                                               "enable=1")
                     if cmd_id is False:
                         logging.error("Failed to enable motor")
@@ -188,8 +188,8 @@ class GCodeFrontend(BaseFrontend):
     def M1(self, cmd):
         self.M400(None)
         reset_objects = []
-        for object_id in self._obj_id_2_name[ModuleTypes.STEPPERS] + \
-            self._obj_id_2_name[ModuleTypes.HEATER]:
+        for object_id in self._obj_id_2_name[ObjectTypes.STEPPERS] + \
+            self._obj_id_2_name[ObjectTypes.HEATER]:
             reset_objects.append(object_id)
         wait_time = 0.
         if cmd.has_param("P"):
@@ -207,10 +207,10 @@ class GCodeFrontend(BaseFrontend):
         self.extruder_coordinates = CoordinateType.RELATIVE
         return CommandStatus.SUCCESS
     def M104(self, cmd):
-        object = self.find_object(ModuleTypes.HEATER, "extruder", "hotend")
+        object = self.find_object(ObjectTypes.HEATER, "extruder", "hotend")
         if object:
             temp = cmd.get_param("S")
-            cmd_id = self.queue_command(ModuleTypes.HEATER, object,
+            cmd_id = self.queue_command(ObjectTypes.HEATER, object,
                                         "set_temperature",
                                         f"temperature={temp.value}")
             if cmd_id is False:
@@ -222,10 +222,10 @@ class GCodeFrontend(BaseFrontend):
             return cmd_id
         return CommandStatus.FAIL
     def M106(self, cmd):
-        object = self.find_object(ModuleTypes.FAN, "fan1", "fan", "extruder", "hostend")
+        object = self.find_object(ObjectTypes.FAN, "fan1", "fan", "extruder", "hostend")
         if object:
             speed = cmd.get_param("S")
-            if self.queue_command(ModuleTypes.FAN, object,
+            if self.queue_command(ObjectTypes.FAN, object,
                                   "set_speed", f"speed={speed.value}") is False:
                 logging.error("Failed to queue command")
                 return CommandStatus.FAIL
@@ -241,11 +241,11 @@ class GCodeFrontend(BaseFrontend):
         self.is_reset = True
         return CommandStatus.SUCCESS
     def M140(self, cmd):
-        object = self.find_object(ModuleTypes.HEATER, "bed", "surface")
+        object = self.find_object(ObjectTypes.HEATER, "bed", "surface")
         if object:
             #index = cmd.get_param("I")
             temp = cmd.get_param("S")
-            cmd_id = self.queue_command(ModuleTypes.HEATER, object,
+            cmd_id = self.queue_command(ObjectTypes.HEATER, object,
                                         "set_temperature",
                                         f"temperature={temp.value}")
             if cmd_id is False:
@@ -260,17 +260,17 @@ class GCodeFrontend(BaseFrontend):
         return self.M140(cmd)
     def M204(self, cmd):
         accel = cmd.get_param("S")
-        axes = self.get_object_set(ModuleTypes.AXIS)
+        axes = self.get_object_set(ObjectTypes.AXIS)
         if "e" in axes:
             axes.remove("e")
-        axes_ids = [self.get_object_id(ModuleTypes.AXIS, x) for x in axes]
+        axes_ids = [self.get_object_id(ObjectTypes.AXIS, x) for x in axes]
         status = self.query_object(axes_ids)
         cmds = []
         for axis in status:
             for motor in status[axis]["motors"]:
                 if not motor:
                     continue
-                cmd_id = self.queue_command(ModuleTypes.STEPPER, motor,
+                cmd_id = self.queue_command(ObjectTypes.STEPPER, motor,
                                       "set_accel",
                                       f"accel={accel.value},decel=0")
                 if cmd_id is False:
@@ -284,7 +284,7 @@ class GCodeFrontend(BaseFrontend):
             time.sleep(0.1)
         return CommandStatus.SUCCESS
     def M999(self, cmd):
-        object = self._obj_name_2_id[ModuleTypes.TOOLHEAD]['tool1']
+        object = self._obj_name_2_id[ObjectTypes.TOOLHEAD]['tool1']
         print(self.query_object([object]))
         return CommandStatus.SUCCESS
 

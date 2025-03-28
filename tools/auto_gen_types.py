@@ -54,7 +54,7 @@ def find_new_types(object_list):
                     if not isinstance(cnode, ast.Assign):
                         continue
                     if cnode.targets[0].id == "type":
-                        if cnode.value.value.id != "ModuleTypes":
+                        if cnode.value.value.id != "ObjectTypes":
                             continue
                         new_types.append(cnode.value.attr)
                     elif cnode.targets[0].id == "events":
@@ -62,7 +62,7 @@ def find_new_types(object_list):
                             continue
                         lnode = cnode.value
                         for elnt in lnode.elts:
-                            if elnt.value.id != "ModuleEvents":
+                            if elnt.value.id != "ObjectEvents":
                                 continue
                             new_events.append(elnt.attr)
     return new_types, new_events

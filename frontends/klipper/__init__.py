@@ -16,7 +16,7 @@
 import zlib
 import json
 import vortex.lib.logging as logging
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 from vortex.frontends import BaseFrontend
 from vortex.frontends.klipper.helpers import *
 from vortex.lib.utils import Counter, parse_frequency
@@ -151,7 +151,7 @@ class KlipperFrontend(BaseFrontend):
 
     def _create_object_pin_map(self):
         pmap = {}
-        for klass in ModuleTypes:
+        for klass in ObjectTypes:
             pmap[klass] = {}
             objects = self.get_object_id_set(klass)
             object_status = self.query_object(objects)
@@ -209,7 +209,7 @@ class KlipperFrontend(BaseFrontend):
 
     def _find_object(self, pin, *klasses):
         if not klasses:
-            klasses = ModuleTypes
+            klasses = ObjectTypes
         for klass in klasses:
             if pin in self._object_pin_map[klass]:
                 return self._object_pin_map[klass][pin], klass
@@ -286,7 +286,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_analog_in(self, cmd, oid, pin):
-        obj_id, klass = self._find_object(pin, ModuleTypes.THERMISTOR)
+        obj_id, klass = self._find_object(pin, ObjectTypes.THERMISTOR)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -306,9 +306,9 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        if klass == ModuleTypes.HEATER:
+        if klass == ObjectTypes.HEATER:
             pin = HeaterPin(self, oid, obj_id, name)
-        elif klass == ModuleTypes.STEPPER:
+        elif klass == ObjectTypes.STEPPER:
             stepper = self.find_existing_object(obj_id)
             if stepper is None or not stepper.owns_pin(pin):
                 return False
@@ -337,7 +337,7 @@ class KlipperFrontend(BaseFrontend):
 
     def config_stepper(self, cmd, oid, step_pin, dir_pin, invert_step,
                        step_pulse_ticks):
-        obj_id, klass = self._find_object(step_pin, ModuleTypes.STEPPER)
+        obj_id, klass = self._find_object(step_pin, ObjectTypes.STEPPER)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -374,8 +374,8 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_endstop(self, cmd, oid, pin, pull_up):
-        obj_id, klass = self._find_object(pin, ModuleTypes.ENDSTOP,
-                                          ModuleTypes.PROBE)
+        obj_id, klass = self._find_object(pin, ObjectTypes.ENDSTOP,
+                                          ObjectTypes.PROBE)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)

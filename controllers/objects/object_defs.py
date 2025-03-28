@@ -14,13 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from argparse import Namespace
-from ..types import ModuleTypes, ModuleEvents
+from vortex.core import ObjectTypes, ObjectEvents
 from vortex.emulator.kinematics import AxisType
 import ctypes
 
 class ObjectDef(Namespace):
     virtual = False
-    def __init__(self, type=ModuleTypes.NONE):
+    def __init__(self, type=ObjectTypes.NONE):
         self.type = type
         self.config = getattr(self, str(type).capitalize() + "Config", None)
         self.state = getattr(self, str(type).capitalize() + "Status", None)
@@ -66,13 +66,13 @@ class Stepper(ObjectDef):
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
-        super().__init__(ModuleTypes.STEPPER)
+        super().__init__(ObjectTypes.STEPPER)
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
                          (1, "set_speed", self.StepperSetSpeedCommandOpts, (0.,)),
                          (2, "set_accel", self.StepperSetAccelCommandOpts, (0.,)),
                          (3, "move", self.StepperMoveCommandOpts, (0, 0)),
                          (4, "use_pins", self.StepperUsePinsCommandOpts, (False,))]
-        self.events = {ModuleEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
+        self.events = {ObjectEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
 
 class ThermistorValueBeta(ctypes.Structure):
     _fields_ = [("beta", ctypes.c_uint16)]
@@ -99,7 +99,7 @@ class Thermistor(ObjectDef):
                     ("adc", ctypes.c_uint16),
                     ("pin", ctypes.c_char * 8)]
     def __init__(self):
-        super().__init__(ModuleTypes.THERMISTOR)
+        super().__init__(ObjectTypes.THERMISTOR)
 
 class HeaterLayer(ctypes.Structure):
     _fields_ = [("type", ctypes.c_int),
@@ -128,10 +128,10 @@ class Heater(ObjectDef):
     class HeaterEventTempReached(ctypes.Structure):
         _fields_ = [("temp", ctypes.c_float)]
     def __init__(self):
-        super().__init__(ModuleTypes.HEATER)
+        super().__init__(ObjectTypes.HEATER)
         self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,)),
                          (1, "use_pins", self.HeaterUsePinsCommandOpts, (False,))]
-        self.events = {ModuleEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
+        self.events = {ObjectEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
 
 class Endstop(ObjectDef):
     class EndstopConfig(ctypes.Structure):
@@ -148,9 +148,9 @@ class Endstop(ObjectDef):
         _fields_ = [("triggered", ctypes.c_bool)]
     def __init__(self):
         super().__init__()
-        self.type = ModuleTypes.ENDSTOP
+        self.type = ObjectTypes.ENDSTOP
         self.config = self.EndstopConfig
-        self.events = {ModuleEvents.ENDSTOP_TRIGGER: self.EndstopTriggerEvent}
+        self.events = {ObjectEvents.ENDSTOP_TRIGGER: self.EndstopTriggerEvent}
         self.state = self.EndstopStatus
 
 class Axis(ObjectDef):
@@ -171,10 +171,10 @@ class Axis(ObjectDef):
     class AxisEventHomed(ctypes.Structure):
         _fields_ = [("axis", ctypes.c_char_p)]
     def __init__(self):
-        super().__init__(ModuleTypes.AXIS)
+        super().__init__(ObjectTypes.AXIS)
         self.commands = [(0, "move", self.AxisMoveCommandOpts, (0., )),
                          (1, "home", None, None)]
-        self.events = {ModuleEvents.AXIS_HOMED : self.AxisEventHomed}
+        self.events = {ObjectEvents.AXIS_HOMED : self.AxisEventHomed}
 
 class Probe(ObjectDef):
     class ProbeConfig(ctypes.Structure):
@@ -192,8 +192,8 @@ class Probe(ObjectDef):
     class ProbeEventTriggered(ctypes.Structure):
         _fields_ = [("position", ctypes.c_double * len(AxisType))]
     def __init__(self):
-        super().__init__(ModuleTypes.PROBE)
-        self.events = {ModuleEvents.PROBE_TRIGGERED: self.ProbeEventTriggered}
+        super().__init__(ObjectTypes.PROBE)
+        self.events = {ObjectEvents.PROBE_TRIGGERED: self.ProbeEventTriggered}
 
 class Toolhead(ObjectDef):
     class ToolheadConfig(ctypes.Structure):
@@ -204,5 +204,5 @@ class Toolhead(ObjectDef):
     class ToolheadEventOrigin(ctypes.Structure):
         _fields_ = [("position", ctypes.c_double * len(AxisType))]
     def __init__(self):
-        super().__init__(ModuleTypes.TOOLHEAD)
-        self.events = {ModuleEvents.TOOLHEAD_ORIGIN: self.ToolheadEventOrigin}
+        super().__init__(ObjectTypes.TOOLHEAD)
+        self.events = {ObjectEvents.TOOLHEAD_ORIGIN: self.ToolheadEventOrigin}

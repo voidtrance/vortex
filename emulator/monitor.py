@@ -17,7 +17,7 @@ import threading
 import socket
 import pickle
 import os
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 
 class MonitorThread(threading.Thread):
     def __init__(self, index, connection, controller):
@@ -25,7 +25,7 @@ class MonitorThread(threading.Thread):
         self._controller = controller
         self._do_run = False
         self._objects = {}
-        self._klasses = {x: str(x) for x in ModuleTypes}
+        self._klasses = {x: str(x) for x in ObjectTypes}
         for klass, name, id in self._controller.objects:
             if klass not in self._objects:
                 self._objects[klass] = []
@@ -70,7 +70,7 @@ class MonitorThread(threading.Thread):
         commands = {}
         params = self._controller.get_params()
         if klass is None:
-            klass_set = ModuleTypes
+            klass_set = ObjectTypes
         else:
             klass_set = [klass]
         for klass in klass_set:
@@ -95,7 +95,7 @@ class MonitorThread(threading.Thread):
         events = {}
         params = self._controller.get_params()
         if klass is None:
-            klass_set = ModuleTypes
+            klass_set = ObjectTypes
         else:
             klass_set = [klass]
         for klass in klass_set:

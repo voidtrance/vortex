@@ -14,10 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 
 class DigitalPin(vobj.VirtualObjectBase):
-    type = ModuleTypes.DIGITAL_PIN
+    type = ObjectTypes.DIGITAL_PIN
     commands = [(0, "set", ["state"], None)]
     def __init__(self, *args):
         super().__init__(*args)

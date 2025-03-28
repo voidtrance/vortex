@@ -18,7 +18,7 @@ import sys
 import socket
 import pickle
 import gi
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
 gi.require_version("Gtk", "3.0")
 gi.require_version('GLib', '2.0')
 from gi.repository import Gtk
@@ -49,8 +49,8 @@ class MainWindow(Gtk.Window):
 
         object_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.set_widget_margin(object_box, 5)
-        for klass in ModuleTypes:
-            if klass is ModuleTypes.NONE:
+        for klass in ObjectTypes:
+            if klass is ObjectTypes.NONE:
                 continue
             label = str(klass).replace('_', " ")
             self.klass_frames[klass] = Gtk.Frame(label=label.title())
@@ -178,7 +178,7 @@ class MainWindow(Gtk.Window):
     
     def get_status(self, klass=None):
         obj_ids = []
-        klass_set = [klass] if klass is not None else [x for x in ModuleTypes]
+        klass_set = [klass] if klass is not None else [x for x in ObjectTypes]
         for klass in klass_set:
             if klass not in self.objects:
                 continue                
@@ -189,7 +189,7 @@ class MainWindow(Gtk.Window):
             return self.get_response()
         except (BrokenPipeError, EOFError):
             self.connection = None
-            for klass in ModuleTypes:
+            for klass in ObjectTypes:
                 if klass in self.klass_frames and klass in self.klass_boxes:
                     self.klass_frames[klass].remove(self.klass_boxes[klass])
             self.klass_boxes.clear()
