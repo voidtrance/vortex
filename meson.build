@@ -14,6 +14,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 project('vortex', 'c')
+add_global_arguments('-Wall', language: 'c')
+add_global_arguments('-Werror', language: 'c')
+add_global_arguments('-Wunused', language: 'c')
 
 py = import('python').find_installation(pure: false)
 root = meson.project_source_root()

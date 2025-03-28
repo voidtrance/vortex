@@ -235,7 +235,7 @@ static void *core_generic_thread(void *arg) {
 static int start_thread(struct core_thread_data *thread) {
     struct sched_param sched_params;
     struct rlimit rlimit;
-    int min_prio, max_prio;
+    int min_prio;
     cpu_set_t cpu_mask;
     int num_procs = get_nprocs();
 
@@ -249,7 +249,6 @@ static int start_thread(struct core_thread_data *thread) {
     }
 
     min_prio = sched_get_priority_min(SCHED_RR);
-    max_prio = sched_get_priority_max(SCHED_RR);
     CPU_ZERO(&cpu_mask);
 
     switch (thread->type) {

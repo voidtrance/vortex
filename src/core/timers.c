@@ -164,11 +164,13 @@ static void timer_remove_locked(core_timers_entry_t *timer) {
     }
 }
 
+#if 0
 static void timer_remove(core_timers_entry_t *timer) {
     pthread_mutex_lock(&timers.lock);
     timer_remove_locked(timer);
     pthread_mutex_unlock(&timers.lock);
 }
+#endif
 
 core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout) {
     core_timers_entry_t *new_timer;

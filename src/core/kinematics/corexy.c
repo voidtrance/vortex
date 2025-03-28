@@ -25,10 +25,12 @@ int corexy_motor_movement(coordinates_t *delta, coordinates_t *movement) {
     *movement = *delta;
     movement->x = delta->x + delta->y;
     movement->y = delta->x - delta->y;
+    return 0;
 }
 
 int corexy_axis_movement(coordinates_t *delta, coordinates_t *movement) {
     *movement = *delta;
     movement->x = (delta->x + delta->y) * 0.5;
     movement->y = (delta->x - delta->y) * 0.5;
+    return 0;
 }
