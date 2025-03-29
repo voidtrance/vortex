@@ -34,7 +34,8 @@ The Vortex emulator executable supports the following command line options:
 
 ```
 usage: vortex.py [-h] [-f FRONTEND] [-s] [-c CONTROLLER] [-F FREQUENCY] [-T TIMER_FREQUENCY] [-P]
-                 [-d {CRITICAL,FATAL,ERROR,WARN,WARNING,INFO,DEBUG,NOTSET}] [-l LOGFILE] [-M] -C CONFIG
+                 [-d {NOTSET,DEBUG,VERBOSE,INFO,WARNING,ERROR,CRITICAL}] [--filter FILTER] [-l LOGFILE] [--extended-logging]
+                 [-M] -C CONFIG
 
 options:
   -h, --help            show this help message and exit
@@ -61,13 +62,20 @@ Controller Options:
                         performance as the emulator will take up more CPU cycles. (default: False)
 
 Debug Options:
-  -d {CRITICAL,FATAL,ERROR,WARN,WARNING,INFO,DEBUG,NOTSET}, --debug {CRITICAL,FATAL,ERROR,WARN,WARNING,INFO,DEBUG,NOTSET}
-                        Set logging level. Higher logging levels will provide more information but will also affect conroller timing
-                        more. (default: INFO)
-  -l LOGFILE, --logfile LOGFILE
+  -d, --debug {NOTSET,DEBUG,VERBOSE,INFO,WARNING,ERROR,CRITICAL}
+                        Set logging level. Higher logging levels will provide more information but will also affect conroller
+                        timing more. (default: INFO)
+  --filter FILTER       Filter log messages by the specified module/object. Filter format is a dot-separated hierarchy of
+                        modules/objects. For example, the filter 'core.stepper.X' will only show log messages from the core HW
+                        stepper object with name 'X'. '*' can be used to match all modules/objects at the particular level. This
+                        option can be used multiple times to filter multiple modules. The filter is applied to the module name
+                        and not the logger name. (default: [])
+  -l, --logfile LOGFILE
                         Log messages are sent to the file specified by this option. (default: None)
-  -M, --monitor         Start monitoring server thread. This thread processes requests from the monitoring application. (default:
-                        False)
+  --extended-logging    Enable extended debugging. When enabled, log messages will also contain the source of the message
+                        (filename and line number). (default: False)
+  -M, --monitor         Start monitoring server thread. This thread processes requests from the monitoring application.
+                        (default: False)
 ```
 
 ## How To Use The Emulator

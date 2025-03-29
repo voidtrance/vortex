@@ -50,7 +50,6 @@ class KlipperFrontend(BaseFrontend):
     STATS_SUMSQ_BASE = 256
     def __init__(self):
         super().__init__(1024)
-        self._log = Logger("klipper", -1)
         self.next_sequence = 1
         self.serial_data = bytes()
         self.mp = msgproto.MessageParser()
@@ -173,9 +172,14 @@ class KlipperFrontend(BaseFrontend):
         return ticks + self.timers.from_us(100000)
 
     def run(self):
+        if self.log.getEffectiveLevel() >= logging.DEBUG:
+            self.log.warning("Klipper host is very dependent on controller")
+            self.log.warning("timing, High levels of debug output will affect")
+            self.log.warning("controller timer performance and as a result,")
+            self.log.warning("Klipper host may encounter timing errors.")
         if self.emulation_frequency < parse_frequency("600KHz"):
-            logging.warning("Using frequency of less than 600KHz may result")
-            logging.warning("in Klipper failures due to timing granularity.")
+            self.log.warning("Using frequency of less than 600KHz may result")
+            self.log.warning("in Klipper failures due to timing granularity.")
         self._create_identity()
         self._object_pin_map = self._create_object_pin_map()
         self.start_tick = self.get_controller_clock_ticks()
@@ -195,7 +199,7 @@ class KlipperFrontend(BaseFrontend):
             if not cmd.response:
                 return
             msg = self.mp.lookup_command(cmd.response)
-            self._log.debug("response: {}", msg.format_params(kwargs))
+            self.log.debug("response: %s", msg.format_params(kwargs))
             data = msg.encode_by_name(**kwargs)
         else:
             data = []
@@ -435,7 +439,7 @@ class KlipperFrontend(BaseFrontend):
                     msgid, param_pos = self.mp.msgid_parser.parse(block, pos)
                     mid = self.mp.messages_by_id.get(msgid, self.mp.unknown)
                     msg_params, pos = mid.parse(block, pos)
-                    self._log.debug("request: {} {}", mid.name, msg_params)
+                    self.log.debug("request: %s %s", mid.name, msg_params)
                     cmd = self.all_commands[mid.name]
                     if self._shutdown and \
                         proto.KlipperProtoFlags.HF_IN_SHUTDOWN not in cmd.flags:

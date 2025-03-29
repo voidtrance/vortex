@@ -54,6 +54,7 @@ class BaseFrontend:
         self._poll = select.poll()
         self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
         self._command_id_queue = []
+        self.log = logging.getLogger("vortex.frontend")
 
     def set_controller_interface(self, interface):
         self._query = interface.query
@@ -200,10 +201,10 @@ class BaseFrontend:
             opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
         elif not isinstance(opts, dict):
             return False
-        logging.debug(f"Submitting command: {self.get_object_name(klass, obj_id)} {cmd_id} {opts}")
+        self.log.debug(f"Submitting command: {self.get_object_name(klass, obj_id)} {cmd_id} {opts}")
         with self._command_completion_lock:
             cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts)
-            logging.debug(f"Command ID:{cmd_id}")
+            self.log.debug(f"Command ID:{cmd_id}")
             self._command_completion[cmd_id] = cmd
         if self._run_sequential:
             self.wait_for_command(cmd_id)

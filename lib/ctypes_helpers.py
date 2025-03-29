@@ -173,17 +173,17 @@ def expand_substruct_config(options, obj_conf):
     fill_namespace_from_opts(opt_space, options, anonymous)
     return opt_space
 
-def show_struct(struct, indent=0):
-    print(" " * indent, struct)
+def show_struct(struct, printer, indent=0):
+    printer(" " * indent + "%s", struct)
     indent += 2
     for fname, ftype in struct._fields_:
         if issubclass(ftype, ctypes.Structure):
-            show_struct(getattr(struct, fname), indent)
+            show_struct(getattr(struct, fname), printer, indent)
         elif issubclass(ftype, ctypes.Array):
             if issubclass(ftype._type_, ctypes.Structure):
                 for idx in range(ftype._length_):
-                    show_struct(getattr(struct, fname)[idx], indent + 2)
+                    show_struct(getattr(struct, fname)[idx], printer, indent + 2)
             elif is_simple_char_array(ftype):
-                print(" " * indent, f"{fname}:", getattr(struct, fname))
+                printer(" " * indent + f"{fname}: %s", getattr(struct, fname))
         else:
-            print(" " * indent, f"{fname}:", getattr(struct, fname))
+            printer(" " * indent + f"{fname}: %s", getattr(struct, fname))

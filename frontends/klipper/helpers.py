@@ -23,19 +23,7 @@ from vortex.core import ObjectTypes
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
-           "Stepper", "TRSync", "Logger"]
-
-class Logger:
-    def __init__(self, name, oid):
-        self._name, self._oid = name, oid
-    def __getattr__(self, name):
-        if name not in ("debug", "info", "warning", "error",
-                        "error", "critical"):
-            return getattr(self, name)
-        func = getattr(logging, name)
-        prefix = f"{self._name}[{self._oid}] "
-        return lambda f, *a, **k: func(prefix + f.format(*a, **k))
-        #return lambda f, *a, **k: print(prefix + f.format(*a, **k), flush=True)
+           "Stepper", "TRSync"]
 
 class MoveQueue:
     def __init__(self, size):
@@ -62,7 +50,8 @@ class AnalogPin:
         self.klass = klass
         self.name = name
         self.timer = None
-        self._log = Logger(name, oid)
+        self._log = logging.getLogger(f"vortex.frontend.analog.{name}")
+        self._log.add_prefix(f"[{oid}]")
         self.timer = self.frontend.timers.new()
         self.timer.callback = self.handler
     def schedule_query(self, cmd, clock, sample_ticks,
@@ -135,7 +124,8 @@ class DigitalPin:
         self.timer.callback = self.timer_handler
         self.waketime = 0
         self.cycle_ticks = 0
-        self._log = Logger(name, oid)
+        self._log = logging.getLogger(f"vortex.frontend.digital.{name}")
+        self._log.add_prefix(f"[{oid}]")
         self._cycles = []
     def _set_pin(self, value):
         self.frontend.queue_command(ObjectTypes.DIGITAL_PIN,
@@ -309,7 +299,8 @@ class Stepper:
         self.oid = oid
         self.id = obj_id
         self.name = name
-        self._log = Logger(name, oid)
+        self._log = logging.getLogger(f"vortex.frontend.stepper.{name}")
+        self._log.add_prefix(f"[{oid}]")
         status = self.frontend.query([obj_id])[obj_id]
         self.pins = {"enable": status.get("enable_pin"),
                      "dir": status.get("dir_pin"),
@@ -454,7 +445,8 @@ class EndstopPin:
         self.is_homing = False
         status = frontend.query_object([self.id])[self.id]
         self.pin_word = atomics.Atomic(8, var=status["pin_addr"])
-        self._log = Logger(name, oid)
+        self._log = logging.getLogger(f"vortex.frontend.endstop.{name}")
+        self._log.add_prefix(f"[{oid}]")
         self.timer = self.frontend.timers.new()
         self.timer.callback = self._event
     def home(self, clock, sample_ticks, sample_count, rest_ticks,
@@ -518,7 +510,7 @@ class TRSync:
         self.report_ticks = 0
         self.signals = []
         self.flags = TRSyncFlags.ZERO
-        self._log = Logger("TRSync", oid)
+        self._log = logging.getLogger(f"vortex.frontend.trsync.{oid}")
         self.report_timer = self.frontend.timers.new()
         self.report_timer.callback = self.report_handler
         self.expire_timer = self.frontend.timers.new()

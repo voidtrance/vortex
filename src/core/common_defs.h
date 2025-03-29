@@ -31,8 +31,7 @@ typedef core_object_t **(*object_list_cb_t)(const core_object_type_t, void *);
 typedef void (*complete_cb_t)(uint64_t, int64_t, void *);
 typedef uint64_t (*cmd_submit_cb_t)(core_object_t *, core_object_id_t, uint16_t,
 				    void *, complete_cb_t, void *);
-typedef void (*log_cb_t)(core_log_level_t, core_object_type_t, const char *,
-			 const char *, ...);
+typedef void (*log_cb_t)(void *logger, core_log_level_t, const char *, ...);
 /*
  * Data structure given to all the objects.
  */
@@ -44,6 +43,7 @@ typedef struct {
     event_register_t event_unregister;
     event_submit_t event_submit;
     cmd_submit_cb_t cmd_submit;
+    void *logger;
     log_cb_t log;
     void *cb_data;
 } core_call_data_t;

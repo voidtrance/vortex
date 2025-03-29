@@ -58,12 +58,22 @@ def create_arg_parser():
                             performance as the emulator will take up more
                             CPU cycles.""")
     debug = parser.add_argument_group("Debug Options")
-    debug_levels = [logging._levelToName[x] for x in sorted(logging._levelToName.keys())]
+    debug_levels = [logging.get_logging_level_names()[x] for x in sorted(logging.get_logging_level_names().keys())]
     debug.add_argument("-d", "--debug", choices=debug_levels,
                         default="INFO",
                         help="""Set logging level. Higher logging levels will
                         provide more information but will also affect
                         conroller timing more.""")
+    debug.add_argument("--filter", type=str, action="append", default=[],
+                       help="""Filter log messages by the specified
+                       module/object. Filter format is a dot-separated
+                       hierarchy of modules/objects. For example, the filter
+                       'core.stepper.X' will only show log messages from
+                       the core HW stepper object with name 'X'. '*' can
+                       be used to match all modules/objects at the particular
+                       level. This option can be used multiple times to
+                       filter multiple modules. The filter is applied to
+                       the module name and not the logger name.""")
     debug.add_argument("-l", "--logfile", type=str, default=None,
                        help="""Log messages are sent to the file specified
                        by this option.""")
@@ -84,7 +94,8 @@ def main():
     parser = create_arg_parser()
     opts = parser.parse_args()
 
-    logging.setup_vortex_logging(opts.debug, opts.logfile, opts.extended_logging)
+    logging.setup_vortex_logging(opts.debug, opts.logfile, opts.extended_logging,
+                                 opts.filter)
 
     config = vortex.emulator.config.Configuration()
     try:

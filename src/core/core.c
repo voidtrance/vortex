@@ -97,6 +97,7 @@ typedef struct core_command {
 } core_command_t;
 
 typedef struct {
+    PyObject *module;
     PyObject *logger;
     uint8_t level;
 } core_logging_data_t;
@@ -161,6 +162,11 @@ static uint64_t core_object_command_submit(core_object_t *source,
                                            uint16_t obj_cmd_id, void *args,
                                            complete_cb_t handler,
                                            void *user_data);
+static void __core_log(void *logger, core_log_level_t level, const char *fmt,
+                       ...);
+
+#define core_log(level, fmt, ...) \
+    __core_log(logging.logger, level, fmt, ##__VA_ARGS__)
 
 static core_call_data_t core_call_data = { 0 };
 static core_logging_data_t logging;
@@ -217,8 +223,7 @@ do_events:
     while (event && batch_count++ < MAX_PROCESSING_BATCH) {
         event_subscription_t *subscription;
 
-        core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-                 "processing event = %s %s %lu",
+        core_log(LOG_LEVEL_DEBUG, "processing event = %s %s %lu",
                  ObjectTypeNames[event->object_type],
                  OBJECT_EVENT_NAMES[event->type], event->object_id);
         event_next = STAILQ_NEXT(event, entry);
@@ -231,7 +236,7 @@ do_events:
                        entry) {
             core_object_t *object;
 
-            core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+            core_log(LOG_LEVEL_DEBUG,
                      "sub type: %s, sub id: %lu, sub python: %u",
                      ObjectTypeNames[subscription->object_type],
                      subscription->object_id, subscription->is_python);
@@ -283,8 +288,8 @@ do_completions:
         PyObject *args;
         bool handled = false;
 
-        core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-                 "completing cmd %lu", comps->entries[comps->tail].id);
+        core_log(LOG_LEVEL_DEBUG, "completing cmd %lu",
+                 comps->entries[comps->tail].id);
 
         pthread_mutex_lock(&core->submitted.lock);
         empty = STAILQ_EMPTY(&core->submitted.list);
@@ -296,8 +301,8 @@ do_completions:
         cmd = STAILQ_FIRST(&core->submitted.list);
         pthread_mutex_unlock(&core->submitted.lock);
         while (cmd) {
-            core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-                     "submitted command %lu", cmd->command.command_id);
+            core_log(LOG_LEVEL_DEBUG, "submitted command %lu",
+                     cmd->command.command_id);
             cmd_next = STAILQ_NEXT(cmd, entry);
             if (cmd->command.command_id == comps->entries[comps->tail].id) {
                 if (cmd->handler)
@@ -355,9 +360,8 @@ static void core_object_command_complete(uint64_t cmd_id, int64_t result,
             comps->entries = (struct __comp_entry *)ptr;
             comps->size *= 2;
         } else {
-            core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
-                     "Resizing of completion entries failed! "
-                     "Completions can be missed");
+            core_log(LOG_LEVEL_ERROR, "Resizing of completion entries failed! "
+                                      "Completions can be missed");
         }
     }
 }
@@ -430,7 +434,7 @@ static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
     core_call_data.event_unregister = core_object_event_unregister;
     core_call_data.event_submit = core_object_event_submit;
     core_call_data.cmd_submit = core_object_command_submit;
-    core_call_data.log = core_log;
+    core_call_data.log = __core_log;
     core_call_data.cb_data = core;
 
     return (PyObject *)core;
@@ -693,10 +697,10 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
                                     const char *name, void *config) {
     core_object_t *obj;
     char object_path[PATH_MAX];
+    char logger_name[256];
 
     if (klass == OBJECT_TYPE_NONE || klass >= OBJECT_TYPE_MAX) {
-        core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
-                 "Invalid object klass %u", klass);
+        core_log(LOG_LEVEL_ERROR, "Invalid object klass %u", klass);
         return CORE_OBJECT_ID_INVALID;
     }
 
@@ -711,8 +715,7 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
         core->object_libs[klass] = dlopen(object_path, RTLD_LAZY);
         if (!core->object_libs[klass]) {
             char *err = dlerror();
-            core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core", "dlopen: %s",
-                     err);
+            core_log(LOG_LEVEL_ERROR, "dlopen: %s", err);
             return CORE_OBJECT_ID_INVALID;
         }
     }
@@ -730,20 +733,32 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
      */
     LIST_FOREACH(obj, &core->objects[klass], entry) {
         if (!strncmp(obj->name, name, max(strlen(name), strlen(obj->name)))) {
-            core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+            core_log(LOG_LEVEL_ERROR,
                      "object of klass '%s' and name '%s' already exists",
                      ObjectTypeNames[klass], name);
             return CORE_OBJECT_ID_INVALID;
         }
     }
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-             "creating object klass %s, name %s", ObjectTypeNames[klass], name);
+    core_log(LOG_LEVEL_DEBUG, "creating object klass %s, name %s",
+             ObjectTypeNames[klass], name);
     obj = core->object_create[klass](name, config);
     if (!obj)
         return CORE_OBJECT_ID_INVALID;
 
     obj->call_data = core_call_data;
+    snprintf(logger_name, sizeof(logger_name), "vortex.core.%s.%s",
+             ObjectTypeNames[klass], name);
+    obj->call_data.logger =
+        PyObject_CallMethod(logging.module, "getLogger", "s", logger_name);
+    if (!obj->call_data.logger) {
+        core_log(LOG_LEVEL_ERROR, "Failed to create logger for %s %s",
+                 ObjectTypeNames[klass], name);
+        free((char *)obj->name);
+        free(obj);
+        return CORE_OBJECT_ID_INVALID;
+    }
+
     LIST_INSERT_HEAD(&core->objects[klass], obj, entry);
     return (core_object_id_t)obj;
 }
@@ -788,15 +803,15 @@ static PyObject *vortex_core_register_virtual_object(PyObject *self,
      */
     LIST_FOREACH(obj, &core->objects[klass], entry) {
         if (!strncmp(obj->name, name, strlen(obj->name))) {
-            core_log(LOG_LEVEL_ERROR, OBJECT_TYPE_NONE, "core",
+            core_log(LOG_LEVEL_ERROR,
                      "object of klass %s and name %s already exists", klass,
                      name);
             return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
         }
     }
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-             "creating object klass %s, name %s", ObjectTypeNames[klass], name);
+    core_log(LOG_LEVEL_DEBUG, "creating object klass %s, name %s",
+             ObjectTypeNames[klass], name);
     obj = calloc(1, sizeof(core_object_t));
     if (!obj)
         return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
@@ -828,8 +843,7 @@ static PyObject *vortex_core_exec_command(PyObject *self, PyObject *args,
         return NULL;
     }
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-             "Submitting %u for %s %s", obj_cmd_id,
+    core_log(LOG_LEVEL_DEBUG, "Submitting %u for %s %s", obj_cmd_id,
              ObjectTypeNames[object->type], object->name);
     if (object->exec_command) {
         cmd->command_id = cmd_id;
@@ -1029,9 +1043,9 @@ static int __core_object_event_submit(const core_object_event_type_t event_type,
     if (!event)
         return -1;
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-             "submitting event = %s %s, %s, %lu", ObjectTypeNames[object->type],
-             object->name, OBJECT_EVENT_NAMES[event_type], id);
+    core_log(LOG_LEVEL_DEBUG, "submitting event = %s %s, %s, %lu",
+             ObjectTypeNames[object->type], object->name,
+             OBJECT_EVENT_NAMES[event_type], id);
     event->type = event_type;
     event->object_type = object->type;
     event->object_id = id;
@@ -1067,9 +1081,8 @@ static uint64_t core_object_command_submit(core_object_t *source,
     cmd->command.object_cmd_id = obj_cmd_id;
     cmd->command.args = args;
     cmd->handler = cb;
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
-             "submitting command for %u, id: %lu, cmd: %u", target_id,
-             cmd->command.command_id, obj_cmd_id);
+    core_log(LOG_LEVEL_DEBUG, "submitting command for %u, id: %lu, cmd: %u",
+             target_id, cmd->command.command_id, obj_cmd_id);
     pthread_mutex_lock(&core->cmds.lock);
     STAILQ_INSERT_TAIL(&core->cmds.list, cmd, entry);
     pthread_mutex_unlock(&core->cmds.lock);
@@ -1207,7 +1220,7 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
     }
 
     core_threads_pause();
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core", "resetting objects");
+    core_log(LOG_LEVEL_DEBUG, "resetting objects");
     if (object_list && PyList_Check(object_list)) {
         Py_ssize_t size = PyList_Size(object_list);
         Py_ssize_t i;
@@ -1240,7 +1253,7 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
         }
     }
 
-    core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core", "reset done");
+    core_log(LOG_LEVEL_DEBUG, "reset done");
     core_threads_resume();
 
     Py_RETURN_TRUE;
@@ -1320,28 +1333,22 @@ static PyObject *vortex_core_compare_timer(PyObject *self, PyObject *args) {
     return py_result;
 }
 
-void core_log(core_log_level_t level, core_object_type_t type, const char *name,
-              const char *fmt, ...) {
+static void __core_log(void *logger, core_log_level_t level, const char *fmt,
+                       ...) {
+    PyObject *_logger = (PyObject *)logger;
     va_list args;
     PyGILState_STATE state;
     char msg_str[4096];
-    int size;
 
     if (level < logging.level)
         return;
 
-    if (type != OBJECT_TYPE_NONE)
-        size = snprintf(msg_str, sizeof(msg_str), "[%s:%s] ",
-                        ObjectTypeNames[type], name);
-    else
-        size = snprintf(msg_str, sizeof(msg_str), "[%s] ", name);
-
     va_start(args, fmt);
-    vsnprintf(msg_str + size, sizeof(msg_str) - size, fmt, args);
+    vsnprintf(msg_str, sizeof(msg_str), fmt, args);
     va_end(args);
 
     state = PyGILState_Ensure();
-    if (!PyObject_CallMethod(logging.logger, log_methods[level], "(s)", msg_str))
+    if (!PyObject_CallMethod(_logger, log_methods[level], "s", msg_str))
         PyErr_Print();
 
     PyGILState_Release(state);
@@ -1467,7 +1474,6 @@ static PyTypeObject Vortex_Core_Type = {
 
 static int vortex_core_module_exec(PyObject *module) {
     PyObject *path;
-    PyObject *logging_module = NULL;
     PyObject *ns;
     char *enum_str;
 
@@ -1510,18 +1516,18 @@ static int vortex_core_module_exec(PyObject *module) {
     free(enum_str);
     Py_DECREF(ns);
 
-    logging_module = PyImport_ImportModule("vortex.lib.logging");
-    if (!logging_module)
+    logging.module = PyImport_ImportModule("vortex.lib.logging");
+    if (!logging.module)
         goto fail;
 
-    logging.logger = PyObject_CallMethod(logging_module, "getLogger", NULL);
+    logging.logger =
+        PyObject_CallMethod(logging.module, "getLogger", "s", "vortex.core");
     if (!logging.logger)
         goto fail;
 
     return 0;
 
 fail:
-    Py_XDECREF(logging_module);
     Py_XDECREF(VortexCoreError);
     Py_CLEAR(VortexCoreError);
     Py_XDECREF(module);

@@ -372,3 +372,50 @@ class MyVirtualObject(vobj.VirtualObjectBase):
     def my_virtual_obj_command(self, args):
         return 0
 ```
+
+## Debugging
+### Emulator Logging
+To enable emulator logging, use the `-d` command line option. The emulator accepts the
+following debug levels:
+
+* `INFO` - Informational messages.
+* `VERBOSE` - Additional message with increased verbosity.
+* `DEBUG` - Debug message. This is the most verbose level, producing a high volume of
+messages from all modules/objects/etc.
+* `WARNING` - Warning message. These are message that are not errors but the user should
+be aware of.
+* `ERROR` - Error messages. These usually result in the emulator terminating.
+* `CRITICAL` - Critical errors. The emulator always terminates on such errors.
+
+By default, log messages are displayed in the console. However, with the `--logfile`
+command line option, they can be redirected to a file specified by the option.
+
+If the `--extended-logging` command line option is given, log messages also include the
+log module/object name and the filename and line number where the message was issued.
+
+### Message Filtering
+Each emulator module/object uses a differnt logging name in order to differentiate which
+object/module issues the message. The logging names use the following format:
+
+```
+<module>[.<object type>][.<object name>]
+```
+
+Some examples for the different sections are:
+* `<module>` can be `core` or `frontend`.
+* `<object type>` can be `stepper`, `axis`, or `endstop`.
+* `<object name>` can be `axisX`, or `stepperX`.
+
+Emulator logging includes support for log message filtering. Filters are given by the
+`--filter` command line option. Filters use the same format as the logging name. When
+issuing log message, the logging facility will compare the logging name to all filters.
+If any of the filters match, the message will be displayed.
+
+When not all section of the filter are specified, all message that match that filter
+will be displayed. For example, the filter `core.stepper` will display message from
+all HW stepper objects. On the other hand, `core.stepper.stepperX` will display
+messages only from the stepper HW object with the name `stepperX`.
+
+Filters also support the `*` wildcard character, which matches any value for the section
+where it is found. For example, `core.*.stepperX` will match all massages from any HW
+objects with the name `stepperX`.

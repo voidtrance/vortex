@@ -48,7 +48,7 @@ spec = importlib.util.spec_from_file_location("ll",
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
-level_dict = mod._levelToName
+level_dict = mod.logging._levelToName
 levels = sorted(level_dict.keys())
 with open(OUTPUT, 'w') as fd:
     fd.write(HEADER)
@@ -67,8 +67,8 @@ with open(OUTPUT, 'w') as fd:
     fd.write("""
 #define CORE_LOG(obj, level, fmt, ...)				\\
     (((core_object_t *)(obj))->call_data.log( \\
-        (level), ((core_object_t *)(obj))->type,          \\
-        ((core_object_t *)(obj))->name, (fmt), ##__VA_ARGS__))\n\n""")
+        ((core_object_t *)(obj))->call_data.logger, (level), \\
+        (fmt), ##__VA_ARGS__))\n\n""")
     
     for value in levels:
         if value:

@@ -165,10 +165,11 @@ class Controller(core.VortexCore):
     _libc = ctypes.CDLL("libc.so.6")
     _Command = namedtuple("Command", ['id', 'name', 'opts', 'defaults'])
     def __init__(self, config):
+        self.log = logging.getLogger("vortex.core")
         debug_level = logging.logger.getEffectiveLevel()
         if debug_level <= logging.DEBUG:
-            logging.warning("With DEBUG and higher logging levels")
-            logging.warning("controller timing will be imprecise!")
+            self.log.warning("With DEBUG and higher logging levels")
+            self.log.warning("controller timing will be imprecise!")
         super().__init__(debug=debug_level)
         self._pin_index = 0
         self._objects = _Objects()
@@ -212,7 +213,7 @@ class Controller(core.VortexCore):
         for klass, name, options in config:
             if klass not in self.object_defs or \
                 self.object_defs[klass] is None:
-                logging.error(f"No definitions for klass '{klass}'")
+                self.log.error(f"No definitions for klass '{klass}'")
                 continue
             res, pin = self._verify_pins(options)
             if res != True:
@@ -234,14 +235,14 @@ class Controller(core.VortexCore):
                 try:
                     vortex.lib.ctypes_helpers.fill_ctypes_struct(obj_conf, options)
                 except TypeError as e:
-                    logging.error("Could not create object configuration!")
-                    logging.error(f"   klass={klass}, name={name}: {str(e)}")
+                    self.log.error("Could not create object configuration!")
+                    self.log.error(f"   klass={klass}, name={name}: {str(e)}")
                     continue
-                if logging.getLogger().getEffectiveLevel == logging.DEBUG:
-                    vortex.lib.ctypes_helpers.show_struct(obj_conf)
-                logging.verbose(f"Creating object {klass}:{name}")
+                if self.log.isEnabledFor(logging.DEBUG):
+                    vortex.lib.ctypes_helpers.show_struct(obj_conf, self.log.debug)
+                self.log.verbose(f"Creating object {klass}:{name}")
                 object_id = self.create_object(klass, name, ctypes.addressof(obj_conf))
-                logging.debug(f"Object {klass}:{name} created: {object_id}")
+                self.log.debug(f"Object {klass}:{name} created: {object_id}")
             self._objects.add_object(klass, name, object_id)
     def _verify_pins(self, config):
         for name, value in vars(config).items():
@@ -316,7 +317,7 @@ class Controller(core.VortexCore):
         for i, id  in enumerate(objects):
             object = self.objects.object_by_id(id)
             if not object.klass:
-                logging.error(f"Could not find klass for object id {id}")
+                self.log.error(f"Could not find klass for object id {id}")
                 continue
             if _status[i]:
                 status_struct = self.object_defs[object.klass].state
@@ -343,7 +344,7 @@ class Controller(core.VortexCore):
             try:
                 vortex.lib.ctypes_helpers.fill_ctypes_struct(opts_struct, opts)
             except TypeError as e:
-                logging.error(f"Failed to convert command options: {str(e)}")
+                self.log.error(f"Failed to convert command options: {str(e)}")
             return opts_struct
         for opt, value in opts.items():
             if value.lower() in ("true", "false"):
