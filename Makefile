@@ -25,6 +25,7 @@ VENV_PYTHON := $(VENV)/bin/python3
 DEBUG_OPTS :=
 MESON_DEBUG_OPTS :=
 GCC_BUILD_OPTS :=
+VERSION=$(shell git describe --tags --abbrev=0)
 
 PYTHON_VERSION=$(shell $(PYTHON) -c "import platform; print(platform.python_version())")
 PYTHON_VERSION_NUMS = $(subst ., ,$(PYTHON_VERSION))
@@ -34,13 +35,16 @@ ifeq ($(DEBUG),1)
 	MESON_BUILD_OPTS=--config-settings=setup-args="-Dbuildtype=debug"
 endif
 
-all:
+all: version
 	$(GCC_BUILD_OPTS) $(PYTHON) -m pip install --no-build-isolation \
 		--editable . $(MESON_BUILD_OPTS)
 	@if [ ! -L compile_commands.json ]; then \
 		ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
 			compile_commands.json; \
 	fi
+
+version:
+	@echo $(VERSION) > version.txt
 
 venv:
 	@if [ -z "$(VENV)" ]; then \
@@ -54,7 +58,7 @@ venv:
 	@echo "Installing dependencies..."
 	$(VENV)/bin/pip install -r ./virtualenv.txt
 
-wheel: venv
+wheel: venv version
 	$(VENV_PYTHON) -m build -w .
 	$(VENV_PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
 
@@ -64,4 +68,4 @@ gdb:
 clean:
 	rm -rf build dist builddir
 	rm -f src/core/auto-events.h src/core/objects/auto-types.h \
-		src/core/logging.h compile_commands.json
+		src/core/logging.h compile_commands.json version.txt

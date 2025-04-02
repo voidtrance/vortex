@@ -19,8 +19,8 @@ requires = ['meson-python', 'regex', 'cffi', 'setuptools']
 
 [project]
 name = 'vortex'
-version = '0.0.1'
 description = 'GCode machine emulator'
+dynamic = ['version']
 requires-python = '>=3.11'
 authors = [
   {name = 'Mitko Haralanov', email = 'voidtrance@gmail.com'},
