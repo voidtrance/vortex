@@ -329,34 +329,28 @@ class Controller(core.VortexCore):
         return object_status
     def _convert_opts(self, klass, cmd_id, opts):
         klass_def = self.object_defs[klass]
+        commands = klass_def.commands
+        # The presence of cmd_id in the list of commands should
+        # have been verified by now in the frontend.
+        command = self._Command(*[x for x in commands if x[0] == cmd_id][0])
+        if command.opts is None:
+            return None
+        opts_defaults = command.defaults
         if not klass_def.virtual:
-            commands = klass_def.commands
-            # The presence of cmd_id in the list of commands should
-            # have been verified by now in the frontend.
-            command = self._Command(*[x for x in commands if x[0] == cmd_id][0])
-            if command.opts is None:
-                return None
             opts_struct = command.opts()
             # TODO: Use the default values to initial the structs
-            opts_defaults = command.defaults
             try:
                 vortex.lib.ctypes_helpers.fill_ctypes_struct(opts_struct, opts)
             except TypeError as e:
                 self.log.error(f"Failed to convert command options: {str(e)}")
             return opts_struct
-        for opt, value in opts.items():
-            if value.lower() in ("true", "false"):
-                value = True if value.lower() == "true" else False
-            else:
-                try:
-                    value = float(value)
-                except ValueError:
-                    try:
-                        value = int(value)
-                    except ValueError:
-                        pass
-            opts[opt] = value
-        return opts
+        else:
+            for opt, value in opts.items():
+                for cmd_opt in command.opts:
+                    if cmd_opt[0] == opt:
+                        value = cmd_opt[1](value)
+                opts[opt] = value
+            return opts
     def exec_command(self, command_id, object_id, subcommand_id, opts=None):
         object = self.objects.object_by_id(object_id)
         if opts is not None:

@@ -13,20 +13,5 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.controllers.objects.vobj_base as vobj
-from vortex.core import ObjectTypes
-
-class DigitalPin(vobj.VirtualObjectBase):
-    type = ObjectTypes.DIGITAL_PIN
-    commands = [(0, "set", [("state", bool)], None)]
-    def __init__(self, *args):
-        super().__init__(*args)
-        self._state = False
-    def exec_command(self, cmd_id, cmd, opts):
-        ret = super().exec_command(cmd_id, cmd, opts)
-        if ret:
-            return ret
-        self._state = bool(opts.get("state"))
-        self.complete_command(cmd_id, 0)
-    def get_status(self):
-        return {"state" : self._state, "pin": self.config.pin}
+python_sources = ['server.py', 'api.py']
+py.install_sources(python_sources, subdir: 'vortex/emulator/remote')

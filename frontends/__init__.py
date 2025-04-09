@@ -185,15 +185,28 @@ class BaseFrontend:
                 completed = set(self._command_results.keys())
         return [self._command_results[i] for i in cmd_set]
 
-    def queue_command(self, klass, object, cmd, opts):
+    def queue_command(self, klass, object, cmd, opts, callback=None):
         if self.is_reset:
             return False
-        if isinstance(cmd, str):
+        if isinstance(object, int):
+            if object not in self._obj_id_2_name[klass]:
+                return False
+            obj_id = object
+        elif isinstance(object, str):
+            obj_id = self._obj_name_2_id[klass].get(object, None)
+            if obj_id is None:
+                return False
+        else:
+            return False
+        if isinstance(cmd, int):
+            if cmd not in self._cmd_id_2_cmd[klass]:
+                return False
+            cmd_id = cmd
+        elif isinstance(cmd, str):
             cmd_id = self._cmd_name_2_id[klass].get(cmd, None)
             if cmd_id is None:
                 return False
-        obj_id = self._obj_name_2_id[klass].get(object, None)
-        if obj_id is None:
+        else:
             return False
         if isinstance(opts, str):
             opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
@@ -203,15 +216,19 @@ class BaseFrontend:
         with self._command_completion_lock:
             cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts)
             self.log.debug(f"Command ID:{cmd_id}")
-            self._command_completion[cmd_id] = cmd
+            self._command_completion[cmd_id] = (cmd, callback)
         if self._run_sequential:
             self.wait_for_command(cmd_id)
         return cmd_id
 
     def complete_command(self, id, result):
         with self._command_completion_lock:
-            self._command_completion.pop(id)
-            self._command_results[id] = result
+            self.log.debug(f"Completing command: {id} {result}")
+            cmd, callback = self._command_completion.pop(id)
+            if callback is not None:
+                callback(id, result)
+            else:
+                self._command_results[id] = result
 
     def respond(self, code, data):
         response = Response(code, data)

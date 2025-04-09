@@ -13,20 +13,29 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.controllers.objects.vobj_base as vobj
-from vortex.core import ObjectTypes
+import enum
+from argparse import Namespace
 
-class DigitalPin(vobj.VirtualObjectBase):
-    type = ObjectTypes.DIGITAL_PIN
-    commands = [(0, "set", [("state", bool)], None)]
-    def __init__(self, *args):
-        super().__init__(*args)
-        self._state = False
-    def exec_command(self, cmd_id, cmd, opts):
-        ret = super().exec_command(cmd_id, cmd, opts)
-        if ret:
-            return ret
-        self._state = bool(opts.get("state"))
-        self.complete_command(cmd_id, 0)
-    def get_status(self):
-        return {"state" : self._state, "pin": self.config.pin}
+@enum.unique
+class RequestType(enum.IntEnum):
+    KLASS_LIST = enum.auto()
+    OBJECT_LIST = enum.auto()
+    OBJECT_STATUS = enum.auto()
+    OBJECT_COMMANDS = enum.auto()
+    OBJECT_EVENTS = enum.auto()
+    EMULATION_PAUSE = enum.auto()
+    EMULATION_RESUME = enum.auto()
+    EMULATION_PID = enum.auto()
+    EXECUTE_COMMAND = enum.auto()
+    COMMAND_STATUS = enum.auto()
+
+    
+class Request(Namespace):
+    def __init__(self, type):
+        self.type = type
+
+class Response(Namespace):
+    def __init__(self, type):
+        self.type = type
+        self.status = 0
+        self.data = None

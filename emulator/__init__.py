@@ -20,7 +20,7 @@ from argparse import Namespace
 import vortex.lib.logging as logging
 from vortex.lib.utils import parse_frequency
 from vortex.core import VortexCoreError
-import vortex.emulator.monitor as monitor
+import vortex.emulator.remote.server as remote_server
 import vortex.emulator.kinematics as kinematics
 import vortex.frontends as frontends
 
@@ -64,7 +64,7 @@ class Emulator:
         self._timer_frequency = 0
         self._update_frequency = 0
         self._controller_thread_priority = False
-        self._monitor = None
+        self._server = None
 
     def set_frequency(self, timer_frequency=0, update_frequency=0):
         self._timer_frequency = parse_frequency(timer_frequency)
@@ -110,8 +110,8 @@ class Emulator:
                 self._frontend.complete_command(command.id, ret)
     
     def stop(self):
-        if self._monitor is not None:
-            self._monitor.stop()
+        if self._server is not None:
+            self._server.stop()
         self._frontend.stop()
         self._controller.stop()
         

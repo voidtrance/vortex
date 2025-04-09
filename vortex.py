@@ -80,8 +80,8 @@ def create_arg_parser():
                        help="""Enable extended debugging. When enabled, log
                        messages will also contain the source of the message
                        (filename and line number). """)
-    debug.add_argument("-M", "--monitor", action="store_true",
-                       help="""Start monitoring server thread. This thread
+    debug.add_argument("-R", "--remote", action="store_true",
+                       help="""Start remote API server thread. This thread
                        processes requests from the monitoring application.""")
 
     parser.add_argument("-C", "--config", required=True,
@@ -114,8 +114,8 @@ def main():
     
     emulation.set_frequency(opts.timer_frequency, opts.frequency)
     emulation.set_thread_priority_change(opts.set_priority)
-    if opts.monitor:
-        emulation.start_monitor()
+    if opts.remote:
+        emulation.start_remote_server()
 
     try:
         emulation.run()

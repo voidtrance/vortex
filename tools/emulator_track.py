@@ -20,11 +20,11 @@ import time
 import socket
 import pickle
 import argparse
-import threading
 import plotly.graph_objects as go
-from dash import Dash, dcc, html, set_props
+from dash import Dash, dcc, html, set_props, Patch
 from dash.dependencies import Input, Output
 from vortex.core import ObjectTypes
+import vortex.emulator.remote.api as api
 import collections
 from weakref import proxy
 
@@ -99,7 +99,7 @@ class OrderedSet(collections.abc.MutableSet):
             return '%s()' % (self.__class__.__name__,)
         return '%s(%r)' % (self.__class__.__name__, list(self))
 
-socket_path = "/tmp/vortex_monitor"
+socket_path = "/tmp/vortex-remote"
 
 def connect(path):
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -115,19 +115,24 @@ def get(conn, request):
     return pickle.loads(data)
 
 def get_toolhead_id(conn):
-    response = get(conn, {"request" : "object_list"})
-    toolheads = response["objects"][ObjectTypes.TOOLHEAD]
+    request = api.Request(api.RequestType.OBJECT_LIST)
+    response = get(conn, request)
+    toolheads = response.data[ObjectTypes.TOOLHEAD]
     if len(toolheads) > 1:
         return 0
     return toolheads[0]["id"]
 
 def get_heaters_id(conn):
-    response = get(conn, {"request" : "object_list"})
-    heaters = response["objects"][ObjectTypes.HEATER]
+    request = api.Request(api.RequestType.OBJECT_LIST)
+    response = get(conn, request)
+    heaters = response.data[ObjectTypes.HEATER]
     return [x["id"] for x in heaters]
 
 def get_objects(conn, *args):
-    return get(conn, {"request": "query", "objects": list(args)})
+    request = api.Request(api.RequestType.OBJECT_STATUS)
+    request.objects = list(args)
+    response =  get(conn, request)
+    return response.data
 
 def get_data(conn, toolhead, *heaters):
     state = get_objects(conn, toolhead, *heaters)
@@ -192,8 +197,9 @@ def run_dash_server(connection, toolhead, *heaters):
     
     tfig = go.Figure()
     for h in heaters:
-        t = go.Scatter(x=[], y=[], mode="lines", line_shape="spline", name=f"heater {h}")
+        t = go.Scatter(x=[], y=[], mode="lines", name=f"heater {h}")
         tfig.add_trace(t)
+    tfig.update_xaxes(tickformat="%H:%M:%S")
 
     app.layout = html.Div([
         html.Div([
@@ -215,7 +221,6 @@ def run_dash_server(connection, toolhead, *heaters):
                   Input('interval-component', 'n_intervals'))
     def update_path_data(n):
         pos, temps = get_data(connection, toolhead, *heaters)
-        print(f"X={pos[0]}, Y={pos[1]}, Z={pos[2]}")
         data = {'x':[[pos[0]]], 'y': [[pos[1]]], 'z': [[pos[2]]]}
         return data
 
@@ -224,9 +229,12 @@ def run_dash_server(connection, toolhead, *heaters):
     def update_temp_data(n):
         pos, temps = get_data(connection, toolhead, *heaters)
         runtime = round(time.time() - start_time, 3)
+        millis = int((runtime - int(runtime)) * 1000)
         runtime = time.strftime("%H:%M:%S", time.localtime(runtime))
-        data = {'x': [[runtime], [runtime]], 'y':[[temps[h]] for h in heaters]}
-        return data, [0, 1], 100
+        # Combine formatted time with milliseconds
+        formatted_runtime = f"1900-01-01 {runtime}.{millis:03d}"
+        data = {'x': [[formatted_runtime], [formatted_runtime]], 'y':[[temps[h]] for h in heaters]}
+        return (data, [0, 1], 10000)
     
     @app.callback(Output('interval-component', 'disabled'),
                   Output('refresh-control', 'children'),
