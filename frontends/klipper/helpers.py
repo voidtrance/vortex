@@ -42,13 +42,23 @@ class MoveQueue:
         with self._lock:
             self._queue.clear()
 
-class AnalogPin:
-    def __init__(self, frontend, oid, obj_id, klass, name):
+class HelperBase:
+    def __init__(self, frontend, oid, obj_id, klass, name=""):
         self.frontend = frontend
         self.oid = oid
         self.id = obj_id
         self.klass = klass
         self.name = name
+    def shutdown(self):
+        if hasattr(self, "timer"):
+            self.timer.remove()
+            del self.timer
+    def __del__(self):
+        self.shutdown()
+
+class AnalogPin(HelperBase):
+    def __init__(self, frontend, oid, obj_id, klass, name):
+        super().__init__(frontend, oid, obj_id, klass, name)
         self.timer = None
         self._log = logging.getLogger(f"vortex.frontend.analog.{name}")
         self._log.add_prefix(f"[{oid}]")
@@ -92,13 +102,6 @@ class AnalogPin:
                                    next_clock=self.query_time,
                                    value=value)
         return self.query_time
-    def shutdown(self):
-        try:
-            del self.timer
-        except (NameError, AttributeError):
-            pass
-    def __del__(self):
-        self.shutdown()
 
 class Flags(enum.IntFlag):
     ON = enum.auto()
@@ -106,16 +109,13 @@ class Flags(enum.IntFlag):
     CHECK_END = enum.auto()
     DEFAULT_ON = enum.auto()
 
-class DigitalPin:
+class DigitalPin(HelperBase):
     class Cycle:
         def __init__(self, waketime, duration):
             self.waketime = waketime
             self.duration = duration
-    def __init__(self, frontend, oid, obj_id, name):
-        self.frontend = frontend
-        self.oid = oid
-        self.id = obj_id
-        self.name = name
+    def __init__(self, frontend, oid, obj_id, klass, name):
+        super().__init__(frontend, oid, obj_id, klass, name)
         self.end_time = 0
         self.flags = 0
         self.max_duration = 0
@@ -229,18 +229,10 @@ class DigitalPin:
             waketime = self.end_time
         self.waketime = waketime
         return waketime
-    def shutdown(self):
-        try:
-            del self.timer
-        except (NameError, AttributeError):
-            pass
-    def __del__(self):
-        self.shutdown()
-
 
 class HeaterPin(DigitalPin):
-    def __init__(self, frontend, oid, obj_id, name):
-        super().__init__(frontend, oid, obj_id, name)
+    def __init__(self, frontend, oid, obj_id, klass, name):
+        super().__init__(frontend, oid, obj_id, klass, name)
         status = frontend.query([obj_id])[obj_id]
         self.heater_max_temp = status["max_temp"]
         cmd_id = self.frontend.queue_command(ObjectTypes.HEATER,
@@ -274,8 +266,8 @@ class StepperMasks(enum.IntEnum):
     EN_DIR = (StepperPins.ENABLE | StepperPins.DIR)
 
 class StepperEnablePin(DigitalPin):
-    def __init__(self, frontend, oid, obj_id, name, word):
-        super().__init__(frontend, oid, obj_id, name)
+    def __init__(self, frontend, oid, obj_id, klass, name, word):
+        super().__init__(frontend, oid, obj_id, klass, name)
         self.word = word
     def _set_pin(self, value):
         if value:
@@ -293,12 +285,9 @@ class CurrentMove:
     def __repr__(self):
         return f"interval={self.interval}, count={self.count}, increment={self.increment}, dir={self.dir}"
 
-class Stepper:
-    def __init__(self, frontend, oid, obj_id, name):
-        self.frontend = frontend
-        self.oid = oid
-        self.id = obj_id
-        self.name = name
+class Stepper(HelperBase):
+    def __init__(self, frontend, oid, obj_id, klass, name):
+        super().__init__(frontend, oid, obj_id, klass, name)
         self._log = logging.getLogger(f"vortex.frontend.stepper.{name}")
         self._log.add_prefix(f"[{oid}]")
         status = self.frontend.query([obj_id])[obj_id]
@@ -328,10 +317,11 @@ class Stepper:
             if pin != obj_pin:
                 continue
             if name == "enable":
-                pin = StepperEnablePin(self.frontend, oid, self.id, self.name,
-                                       self.pin_word)
-        setattr(self, f"{name}_pin", pin)
-        return pin
+                pin = StepperEnablePin(self.frontend, oid, self.id, self.klass,
+                                       self.name, self.pin_word)
+                setattr(self, f"{name}_pin", pin)
+                return pin
+        return None
     @property
     def position(self):
         status = self.frontend.query_object([self.id])[self.id]
@@ -417,23 +407,13 @@ class Stepper:
     def reset_clock(self, clock):
         self.next_step_time = clock
         self._needs_reset = False
-    def shutdown(self):
-        try:
-            del self.timer
-        except (NameError, AttributeError):
-            pass
-    def __del__(self):
-        self.shutdown()
 
 # Ideally, we'd want to use the endstop's ENDSTOP_TRIGGER
 # event. However, Klipper wants the endstop pin valus to
 # match for a certain sample count before triggering.
-class EndstopPin:
-    def __init__(self, frontend, oid, obj_id, name):
-        self.frontend = frontend
-        self.oid = oid
-        self.id = obj_id
-        self.name = name
+class EndstopPin(HelperBase):
+    def __init__(self, frontend, oid, obj_id, klass, name):
+        super().__init__(frontend, oid, obj_id, klass, name)
         self.timer = None
         self.sample_time = 0
         self.sample_count = 0
@@ -488,23 +468,14 @@ class EndstopPin:
     def get_state(self):
         return {"homing": self.is_homing, "next_clock" : self.nextwake,
                 "pin_value": self._get_status()}
-    def shutdown(self):
-        try:
-            del self.timer
-        except (NameError, AttributeError):
-            pass
-    def __del__(self):
-        self.shutdown()
 
 class TRSyncFlags(enum.IntFlag):
     ZERO = 0
     CAN_TRIGGER = enum.auto()
 
-class TRSync:
-    def __init__(self, frontend, oid):
-        self.frontend = frontend
-        self.id = -1
-        self.oid = oid
+class TRSync(HelperBase):
+    def __init__(self, frontend, oid, obj_id, klass, name=""):
+        super().__init__(frontend, oid, obj_id, klass, name)
         self.triger_reason = 0
         self.expire_reason = 0
         self.report_ticks = 0
@@ -567,5 +538,3 @@ class TRSync:
             del self.expire_timer
         except (NameError, AttributeError):
             pass
-    def __del__(self):
-        self.shutdown()

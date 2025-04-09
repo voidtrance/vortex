@@ -307,7 +307,7 @@ class KlipperFrontend(BaseFrontend):
             return False
         name = self.get_object_name(klass, obj_id)
         if klass == ObjectTypes.HEATER:
-            pin = HeaterPin(self, oid, obj_id, name)
+            pin = HeaterPin(self, oid, obj_id, klass, name)
         elif klass == ObjectTypes.STEPPER:
             stepper = self.find_existing_object(obj_id)
             if stepper is None or not stepper.owns_pin(pin):
@@ -342,7 +342,7 @@ class KlipperFrontend(BaseFrontend):
             return False
         name = self.get_object_name(klass, obj_id)
         try:
-            self._oid_map[oid] = Stepper(self, oid, obj_id, name)
+            self._oid_map[oid] = Stepper(self, oid, obj_id, klass, name)
         except ValueError:
             self.shutdown("Stepper initialization failed")
         return True
@@ -379,7 +379,7 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        self._oid_map[oid] = EndstopPin(self, oid, obj_id, name)
+        self._oid_map[oid] = EndstopPin(self, oid, obj_id, klass, name)
         return True
 
     def endstop_home(self, cmd, oid, clock, sample_ticks, sample_count, rest_ticks,
@@ -398,7 +398,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_trsync(self, cmd, oid):
-        self._oid_map[oid] = TRSync(self, oid)
+        self._oid_map[oid] = TRSync(self, oid, -1, ObjectTypes.NONE)
         return True
 
     def trsync_start(self, cmd, oid, report_clock, report_ticks, expire_reason):
