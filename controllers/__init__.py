@@ -265,42 +265,40 @@ class Controller(core.VortexCore):
         return self.FREQUENCY
     def virtual_command_complete(self, cmd_id, status):
         self._completion_callback(cmd_id, status)
-    def get_params(self):
-        params = {'commands': [], "objects": [], "events": {}}
-        params["hw"] = {"type":self.__class__.__name__,
-                        "pins": self.PINS, "motors": self.MOTOR_COUNT,
-                        "thermistors": self.THERMISTOR_COUNT,
-                        "endstops": self.ENDSTOP_COUNT, "probe": self.PROBE_COUNT,
-                        "heaters": self.HEATER_COUNT, "pwm": self.PWM_PIN_COUNT,
-                        "digital": self.DIGITAL_PIN_COUNT,
-                        "adc_max": self.ADC_MAX,
-                        "arch": self.ARCH,
-                        "frequency": self.FREQUENCY}
-        cmds = {x: [] for x in core.ObjectTypes}
-        for klass in core.ObjectTypes:
-            if self.object_defs[klass] is not None:
-                cmds[klass] += self.object_defs[klass].commands
-        params["commands"] = cmds
-        objects = {x: [] for x in core.ObjectTypes}
-        for klass, name, id in self.objects:
-            status = self.query_objects([id])
-            pins = {}
-            for key, value in status[id].items():
-                if "pin" in key:
-                    pins[key] = value
-            objects[klass].append((name, id, pins))
-        params["objects"] = objects
-        events = {x: {} for x in core.ObjectTypes}
-        for klass in core.ObjectTypes:
-            if self.object_defs[klass] is not None:
-                if not self.object_defs[klass].virtual:
-                    events[klass] = \
-                        {e: s for e, s in self.object_defs[klass].events.items()}
-                else:
-                    events[klass] = \
-                        {e: None for e in self.object_defs[klass].events}
-        params["events"] = events
-        return params
+    def get_param(self, param):
+        if param == "commands":
+            cmds = {x: [] for x in core.ObjectTypes}
+            for klass in core.ObjectTypes:
+                if self.object_defs[klass] is not None:
+                    cmds[klass] += self.object_defs[klass].commands
+            return cmds
+        elif param == "objects":
+            objects = {x: [] for x in core.ObjectTypes}
+            for klass, name, id in self.objects:
+                status = self.query_objects([id])
+                pins = {}
+                for key, value in status[id].items():
+                    if "pin" in key:
+                        pins[key] = value
+                objects[klass].append((name, id, pins))
+            return objects
+        elif param == "events":
+            events = {x: {} for x in core.ObjectTypes}
+            for klass in core.ObjectTypes:
+                if self.object_defs[klass] is not None:
+                    if not self.object_defs[klass].virtual:
+                        events[klass] = \
+                            {e: s for e, s in self.object_defs[klass].events.items()}
+                    else:
+                        events[klass] = \
+                            {e: None for e in self.object_defs[klass].events}
+            return events
+        else:
+            raise core.VortexCoreError(f"Unknown parameter '{param}'")
+    def get_hw_param(self, param):
+        if hasattr(self, param):
+            return getattr(self, param)
+        raise core.VortexCoreError(f"Unknown HW parameter '{param}'")
     def lookup_object(self, klass, name):
         return self.objects.object_by_name(name, klass)
     def lookup_objects(self, klass):

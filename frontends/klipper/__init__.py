@@ -86,7 +86,7 @@ class KlipperFrontend(BaseFrontend):
 
         # Setup enumerations
         base, pins = 0, {}
-        for pin_set in self._raw_controller_params["hw"]["pins"]:
+        for pin_set in self.query_hw("PINS"):
             pins[f"{pin_set.name}{pin_set.min}"] = \
                 [base + pin_set.min, len(pin_set)]
             base += len(pin_set)
@@ -98,8 +98,7 @@ class KlipperFrontend(BaseFrontend):
         self.identity["enumerations"]["static_string_id"] = self._string_map
 
         # Setup basic config variables
-        self.identity["config"]["CLOCK_FREQ"] = \
-            self._raw_controller_params["hw"]["frequency"]
+        self.identity["config"]["CLOCK_FREQ"] = self.query_hw("FREQUENCY")
         self.identity["config"]["STATS_SUMSQ_BASE"] = self.STATS_SUMSQ_BASE
 
         # Setup basic Klipper commands
@@ -122,26 +121,23 @@ class KlipperFrontend(BaseFrontend):
         self._add_commands(proto.KLIPPER_PROTOCOL.sched)
 
         # Setup stepper commands
-        if self._raw_controller_params["hw"]["motors"]:
+        if self.query_hw("MOTOR_COUNT"):
             self._add_commands(proto.KLIPPER_PROTOCOL.stepper)
             self._add_commands(proto.KLIPPER_PROTOCOL.trsync)
 
         # Setup endstop commands
-        if self._raw_controller_params["hw"]["endstops"] or \
-            self._raw_controller_params["hw"]["digital"]:
+        if self.query_hw("ENDSTOP_COUNT") or self.query_hw("DIGITAL_PIN_COUNT"):
             self._add_commands(proto.KLIPPER_PROTOCOL.gpiocmds)
             self._add_commands(proto.KLIPPER_PROTOCOL.endstop)
 
         # Setup thermistor commands
-        if self._raw_controller_params["hw"]["thermistors"]:
+        if self.query_hw("THERMISTOR_COUNT"):
             self._add_commands(proto.KLIPPER_PROTOCOL.thermocouple)
             self._add_commands(proto.KLIPPER_PROTOCOL.adccmds)
 
-        if self._raw_controller_params["hw"]["heaters"] or \
-            self._raw_controller_params["hw"]["pwm"]:
+        if self.query_hw("HEATER_COUNT") or self.query_hw("PWM_COUNT"):
             self._add_commands(proto.KLIPPER_PROTOCOL.pwmcmds)
-            self.identity["config"]["ADC_MAX"] = \
-                    self._raw_controller_params["hw"]["adc_max"]
+            self.identity["config"]["ADC_MAX"] = self.query_hw("ADC_MAX")
 
         self.identity_resp = json.dumps(self.identity).encode()
         # Create local command maps

@@ -21,7 +21,6 @@ import errno
 import traceback
 import vortex.emulator
 import vortex.emulator.config
-import vortex.frontends
 import vortex.lib.logging as logging
 
 def create_arg_parser():
@@ -107,15 +106,8 @@ def main():
     if opts.controller:
         config.override_controller(opts.controller)
 
-    frontend = vortex.frontends.create_frontend(opts.frontend)
-    if frontend is None:
-        logging.error(f"Did not find fronted '{opts.frontend}'")
-        return errno.ENOENT
-
-    frontend.set_sequential_mode(opts.sequential)
-
     try:
-        emulation = vortex.emulator.Emulator(frontend, config)
+        emulation = vortex.emulator.Emulator(config, opts.frontend, opts.sequential)
     except vortex.emulator.EmulatorError as err:
         print(err)
         return errno.ENOENT

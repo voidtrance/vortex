@@ -56,14 +56,10 @@ class BaseFrontend:
         self._command_id_queue = []
         self.log = logging.getLogger("vortex.frontend")
 
-    def set_controller_interface(self, interface):
-        self._query = interface.query
-        self._reset = interface.reset
-        self._get_controller_clock_ticks = interface.get_ticks
-        self._get_controller_runtime = interface.get_runtime
-        self._event_register = interface.event_register
-        self._event_unregister = interface.event_unregister
-        self.timers = interface.timers
+    def set_controller(self, controller):
+        self._controller = controller
+        self.timers = self._controller.timers
+        self._set_controller_data()
 
     # Implement these as class methods so subclasses can
     # override them. If they they are implemented as class
@@ -71,32 +67,34 @@ class BaseFrontend:
     # return the base class method instead of the overriden
     # one.
     def reset(self, *args, **kwargs):
-        return self._reset(*args, **kwargs)
+        return self._controller.reset(*args, **kwargs)
 
     def query(self, *args, **kwargs):
-        return self._query(*args, **kwargs)
+        return self._controller.query_objects(*args, **kwargs)
+
+    def query_hw(self, *args, **kwargs):
+        return self._controller.get_hw_param(*args, **kwargs)
 
     def get_controller_clock_ticks(self, *args, **kwargs):
-        return self._get_controller_clock_ticks(*args, **kwargs)
+        return self._controller.get_clock_ticks(*args, **kwargs)
 
     def get_controller_runtime(self, *args, **kwargs):
-        return self._get_controller_runtime(*args, **kwargs)
+        return self._controller.get_runtime(*args, **kwargs)
 
     def event_register(self, *args, **kwargs):
-        return self._event_register(*args, **kwargs)
+        return self._controller.event_register(*args, **kwargs)
 
     def event_unregister(self, *args, **kwargs):
-        return self._event_unregister(*args, **kwargs)
+        return self._controller.event_unregister(*args, **kwargs)
 
-    def set_controller_data(self, data):
-        self._raw_controller_params = data
-        commands = data.get("commands", None)
+    def _set_controller_data(self):
+        commands = self._controller.get_param("commands")
         if commands:
             for klass in commands:
                 for cmd in commands[klass]:
                     self._cmd_name_2_id[klass][cmd[1]] = cmd[0]
                     self._cmd_id_2_cmd[klass][cmd[0]] = cmd[1]
-        objects = data.get("objects", None)
+        objects = self._controller.get_param("objects")
         if objects:
             for klass in objects:
                 for obj in objects[klass]:
