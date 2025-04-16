@@ -23,7 +23,7 @@ from vortex.core import ObjectTypes
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
-           "Stepper", "TRSync"]
+           "Stepper", "TRSync", "Buttons"]
 
 class MoveQueue:
     def __init__(self, size):
@@ -538,3 +538,94 @@ class TRSync(HelperBase):
             del self.expire_timer
         except (NameError, AttributeError):
             pass
+
+class ButtonsState(enum.IntEnum):
+    NONE = 0
+    NO_RETRANSMIT = 0x80
+    PENDING = 0xff
+    ACKED = 0xfe
+
+class ButtonsTask:
+    def __init__(self, respond):
+        self.respond = respond
+        self._button_sets = []
+        self._cmd = None
+    def register(self, buttons):
+        if buttons not in self._button_sets:
+            self._button_sets.append(buttons)
+    def set_cmd(self, cmd):
+        if self._cmd is None:
+            self._cmd = cmd
+    def report(self):
+        for buttons in self._button_sets:
+            if buttons._retransmit_state.value != ButtonsState.PENDING:
+                continue
+            buttons._retransmit_state.value = buttons._retransmit_count
+            self.respond(ResponseTypes.RESPONSE, buttons._cmd,
+                         oid=buttons.oid, ack_count=buttons._ack_count,
+                         state=buttons._reports[:buttons._report_count])
+
+buttons_task = None
+
+class Buttons(HelperBase):
+    def __init__(self, frontend, oid, obj_id, klass, name, count):
+        global buttons_task
+        super().__init__(frontend, oid, obj_id, klass, name)
+        self._count = count
+        self._buttons = [None] * self._count
+        self._pressed = self._last_pressed = 0
+        self._report_count = 0
+        self._ack_count = 0
+        self._reports = [0] * self._count
+        self._retransmit_count = 0
+        self._retransmit_state = ctypes.c_uint8(0)
+        self._cmd = None
+        self._state = ButtonsState.NONE
+        self.timer = self.frontend.timers.new()
+        self.timer.callback = self.event
+        if buttons_task is None:
+            buttons_task = ButtonsTask(self.frontend.respond)
+            buttons_task.register(self)
+    def add_button(self, position, button_id, klass, name, pull_up):
+        if position >= self._count:
+            self.frontend.shutdown("Set button past maximum button count")
+            return False
+        self._buttons[position] = button_id
+        return True
+    def query(self, cmd, clock, rest_ticks, retransmit_count, invert):
+        self._cmd = cmd
+        self._rest_ticks = rest_ticks
+        self._retransmit_count = retransmit_count
+        self._retransmit_state.value = int(ButtonsState.ACKED)
+        self._invert = invert
+        self.timer.timeout = clock
+    def ack(self, count):
+        self._ack_count += count
+        if count >= self._report_count:
+            self._report_count = 0
+            self._retransmit_state.value = ButtonsState.ACKED
+        else:
+            self._reports[:count] = self._reports[count:]
+            self._report_count -= count
+    def event(self, ticks):
+        states = self.frontend.query_object(self._buttons)
+        status = 0
+        for i, button in enumerate(self._buttons):
+            if states[button]["state"]:
+                status |= (1 << i)
+        diff = status ^ self._pressed
+        if diff:
+            debounced = ~(status ^ self._last_pressed)
+            if diff & debounced:
+                self._pressed = (self._pressed & ~debounced) | (status & debounced)
+                if self._report_count < self._count:
+                    self._reports[self._report_count] = self._pressed
+                    self._report_count += 1
+                    self._retransmit_state.value = ButtonsState.PENDING
+                    buttons_task.report()
+        self._last_pressed = status
+        if not (self._retransmit_state.value & ButtonsState.NO_RETRANSMIT):
+            self._retransmit_state.value -= 1
+            if self._retransmit_state.value & ButtonsState.NO_RETRANSMIT:
+                buttons_task.report()
+        return self.frontend.timers.to_time(ticks + self._rest_ticks)

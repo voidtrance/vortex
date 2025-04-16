@@ -139,6 +139,9 @@ class KlipperFrontend(BaseFrontend):
             self._add_commands(proto.KLIPPER_PROTOCOL.pwmcmds)
             self.identity["config"]["ADC_MAX"] = self.query_hw("ADC_MAX")
 
+        if self.find_object(ObjectTypes.DISPLAY) is not None:
+            self._add_commands(proto.KLIPPER_PROTOCOL.buttons)
+
         self.identity_resp = json.dumps(self.identity).encode()
         # Create local command maps
         self.mp.process_identify(self.identity_resp, False)
@@ -315,6 +318,8 @@ class KlipperFrontend(BaseFrontend):
             pin = stepper.configure_pin(oid, pin)
         else:
             pin = DigitalPin(self, oid, obj_id, klass, name)
+        if not isinstance(pin, DigitalPin):
+            return False
         pin.set_initial_value(value, default_value)
         pin.set_max_duration(max_duration)
         self._oid_map[oid] = pin
@@ -415,6 +420,28 @@ class KlipperFrontend(BaseFrontend):
         trsync = self._oid_map[oid]
         trsync.trigger(reason)
         trsync.report(0)
+        return True
+
+    def config_buttons(self, cmd, oid, button_count):
+        self._oid_map[oid] = Buttons(self, oid, -1, ObjectTypes.NONE, "", button_count)
+        return True
+
+    def buttons_add(self, cmd, oid, pos, pin, pull_up):
+        buttons = self._oid_map[oid]
+        button, klass = self._find_object(pin, ObjectTypes.DIGITAL_PIN)
+        if button is None:
+            return False
+        name = self.get_object_name(klass, button)
+        return buttons.add_button(pos, button, klass, name, pull_up)
+
+    def buttons_query(self, cmd, oid, clock, rest_ticks, retransmit_count, invert):
+        buttons = self._oid_map[oid]
+        buttons.query(cmd, clock, rest_ticks, retransmit_count, invert)
+        return True
+
+    def buttons_ack(self, cmd, oid, count):
+        buttons = self._oid_map[oid]
+        buttons.ack(count)
         return True
 
     def _process_command(self, data):

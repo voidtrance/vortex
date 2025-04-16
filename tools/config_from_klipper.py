@@ -281,12 +281,32 @@ def generate_thermistor_config(section : str, kconfig : Type[configparser.Config
     generate_thermistor(section, name, kconfig, econfig)    
     return
 
+def generate_digital_pin(section : str,
+                    name : str,
+                    pin : str,
+                    kconfig : Type[configparser.ConfigParser],
+                    econfig : Type[configparser.ConfigParser]) -> None:
+    s = f"digital_pin dpin{name.upper()}"
+    econfig.add_section(s)
+    econfig.set(s, "pin", parse_pin(pin))
+    return
+
+def generate_digital_pin_config(section : str, kconfig : Type[configparser.ConfigParser],
+                                econfig : Type[configparser.ConfigParser]) -> None:
+    print(f"Generating digital pin config for section '{section}'...")
+    klass, _, name = section.partition(" ")
+    if not name:
+        name = klass
+    generate_digital_pin(section, name, kconfig.get(section, "pin"), kconfig, econfig)
+    return
+
 KLIPPER_SECTION_HANDLERS = {
     "stepper" : generate_stepper_config,
     "extruder": generate_heater_config,
     "heater": generate_heater_config,
     "fan": generate_dpin_config,
     "temperature_sensor": generate_thermistor_config,
+    "button": generate_digital_pin_config,
 }
 
 parser = argparse.ArgumentParser()
