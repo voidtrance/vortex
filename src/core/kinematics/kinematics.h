@@ -48,10 +48,42 @@ typedef enum {
     KINEMATICS_MAX,
 } kinematics_type_t;
 
-int kinematics_type_set(kinematics_type_t type);
+typedef struct {
+    float min;
+    float max;
+} axis_limits_t;
+
+typedef struct {
+    axis_limits_t limits[AXIS_TYPE_MAX];
+} cartesian_kinematics_config_t;
+
+typedef struct {
+    axis_limits_t limits[AXIS_TYPE_MAX];
+    float arm_length;
+    float radius;
+    float tower_radius;
+    float tower_angle[3];
+    float z_length;
+} delta_kinematics_config_t;
+
+typedef struct {
+    kinematics_type_t type;
+    union {
+        cartesian_kinematics_config_t cartesian;
+        cartesian_kinematics_config_t corexy;
+        cartesian_kinematics_config_t corexz;
+        delta_kinematics_config_t delta;
+    };
+} kinematics_config_t;
+
+int kinematics_init(kinematics_config_t *config);
 kinematics_type_t kinematics_type_get(void);
 axis_type_t kinematics_axis_type_from_char(char type_char);
-int compute_motor_movement(coordinates_t *delta, coordinates_t *movement);
-int compute_axis_movement(coordinates_t *delta, coordinates_t *movement);
+void *kinematics_get_config(void);
+int kinematics_get_motor_movement(coordinates_t *delta,
+                                  coordinates_t *movement);
+int kinematics_get_axis_movement(coordinates_t *delta, coordinates_t *movement);
+int kinematics_get_toolhead_position(coordinates_t *axis_position,
+                                     coordinates_t *position);
 
 #endif

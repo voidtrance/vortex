@@ -40,11 +40,40 @@ typedef struct {
 typedef struct {
     core_object_t object;
     toolhead_axis_t *axes;
-    double position[AXIS_TYPE_MAX];
+    coordinates_t position;
     size_t n_axes;
 } toolhead_t;
 
 static object_cache_t *toolhead_event_cache;
+
+static inline void set_axis_position(coordinates_t *positions, axis_type_t type,
+                                     double position) {
+    switch (type) {
+    case AXIS_TYPE_X:
+        positions->x = position;
+        break;
+    case AXIS_TYPE_Y:
+        positions->y = position;
+        break;
+    case AXIS_TYPE_Z:
+        positions->z = position;
+        break;
+    case AXIS_TYPE_A:
+        positions->a = position;
+        break;
+    case AXIS_TYPE_B:
+        positions->b = position;
+        break;
+    case AXIS_TYPE_C:
+        positions->c = position;
+        break;
+    case AXIS_TYPE_E:
+        positions->e = position;
+        break;
+    default:
+        break;
+    }
+}
 
 static int toolhead_init(core_object_t *object) {
     toolhead_t *toolhead = (toolhead_t *)object;
@@ -67,7 +96,6 @@ static int toolhead_init(core_object_t *object) {
             axis->get_state(axis, &status);
             if (status.type == toolhead->axes[i].type) {
                 toolhead->axes[i].obj = axis;
-                toolhead->position[i] = status.position;
                 break;
             }
             axis_ptr++;
@@ -88,6 +116,7 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
                             uint64_t runtime) {
     toolhead_t *toolhead = (toolhead_t *)object;
     toolhead_origin_event_data_t *event;
+    coordinates_t axis_positions = { 0 };
     axis_status_t status;
     bool at_origin = true;
     size_t i;
@@ -97,17 +126,21 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
         axis_type_t type = toolhead->axes[i].type;
 
         axis->get_state(axis, &status);
-        toolhead->position[type] = status.position;
-        at_origin &= toolhead->position[type] == 0.0;
+        set_axis_position(&axis_positions, type, status.position);
     }
 
-    log_debug(toolhead, "position: %.15f, %.15f, %.15f",
-              toolhead->position[0], toolhead->position[1],
-              toolhead->position[2]);
+    if (kinematics_get_toolhead_position(&axis_positions,
+                                         &toolhead->position)) {
+        log_error(toolhead, "Failed to get toolhead position");
+        return;
+    }
+
+    log_debug(toolhead, "position: %.15f, %.15f, %.15f", toolhead->position.x,
+              toolhead->position.y, toolhead->position.z);
     if (at_origin) {
         event = object_cache_alloc(toolhead_event_cache);
         if (event) {
-            memcpy(event->position, toolhead->position,
+            memcpy(event->position, &toolhead->position,
                    sizeof(event->position));
             CORE_EVENT_SUBMIT(toolhead, OBJECT_EVENT_TOOLHEAD_ORIGIN, event);
         }
@@ -120,7 +153,7 @@ static void toolhead_status(core_object_t *object, void *status) {
     size_t i;
 
     memset(s, 0, sizeof(*s));
-    memcpy(s->position, toolhead->position, sizeof(toolhead->position));
+    memcpy(&s->position, &toolhead->position, sizeof(toolhead->position));
     for (i = 0; i < ARRAY_SIZE(s->axes); i++) {
         if (i < toolhead->n_axes)
             s->axes[i] = toolhead->axes[i].type;

@@ -19,7 +19,10 @@
 #define __CARTESIAN_H__
 #include "kinematics.h"
 
+int cartesian_init(cartesian_kinematics_config_t *config);
 int cartesian_motor_movement(coordinates_t *delta, coordinates_t *movement);
 int cartesian_axis_movement(coordinates_t *delta, coordinates_t *movement);
+int cartesian_toolhead_position(coordinates_t *axis_positions,
+                                coordinates_t *position);
 
 #endif

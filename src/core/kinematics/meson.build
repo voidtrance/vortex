@@ -13,10 +13,14 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+cc = meson.get_compiler('c')
+math = cc.find_library('m')
 core_kinematics_inc = include_directories('.')
 core_kinematics = library('kinematics',
-                                ['cartesian.c', 'corexy.c', 'kinematics.c'],
+                                ['cartesian.c', 'corexy.c', 'delta.c',
+                                'kinematics.c'],
                                 include_directories: [core_include_general],
+                                dependencies: [math],
                                 install: true,
                                 install_dir: py.get_install_dir(pure: false) / 'vortex/core/kinematics')
 core_kinematics_dep = declare_dependency(link_with: core_kinematics,

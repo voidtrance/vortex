@@ -50,9 +50,9 @@ def load_mcu(name, config):
 class Emulator:
     def __init__(self, config, frontend, sequential=False):
         machine = config.get_machine_config()
+        kin = config.get_kinematics_config()
+        self._kinematics = kinematics.Kinematics(kin)
         self._controller = load_mcu(machine.controller, config)
-        self._kinematics = kinematics.Kinematics(machine.kinematics,
-                                                 self._controller)
         self._frontend = frontends.create_frontend(frontend)
         if self._frontend is None:
             raise EmulatorError(f"Failed to create frontend '{frontend}'")

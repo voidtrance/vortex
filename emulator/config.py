@@ -55,7 +55,10 @@ class Configuration:
 
     def get_machine_config(self):
         return self.__parse_section("machine")
-    
+
+    def get_kinematics_config(self):
+        return self.__parse_section("kinematics")
+
     def get_section(self, type, name):
         if not isinstance(type, ObjectTypes):
             raise TypeError("'type' must be a ObjectTypes enumeration value")
@@ -68,7 +71,7 @@ class Configuration:
 
     def __iter__(self):
         for section in self._parser.sections():
-            if section == "machine":
+            if section in ("machine", "kinematics"):
                 continue
             klass, name = section.split(maxsplit=1)
             klass_enum = getattr(ObjectTypes, klass.upper(), None)

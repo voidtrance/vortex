@@ -19,7 +19,9 @@
 #define __COREXY_H__
 #include "kinematics.h"
 
+int corexy_init(cartesian_kinematics_config_t *config);
 int corexy_motor_movement(coordinates_t *delta, coordinates_t *movement);
 int corexy_axis_movement(coordinates_t *delta, coordinates_t *movement);
-
+int corexy_toolhead_position(coordinates_t *axis_positions,
+                             coordinates_t *position);
 #endif

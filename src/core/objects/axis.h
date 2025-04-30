@@ -23,7 +23,8 @@
 
 typedef struct {
     bool homed;
-    float length;
+    float min;
+    float max;
     axis_type_t type;
     double position;
     char motors[8][64];

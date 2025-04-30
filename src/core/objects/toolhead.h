@@ -22,7 +22,7 @@
 
 typedef struct {
     int axes[AXIS_TYPE_MAX];
-    double position[AXIS_TYPE_MAX];
+    coordinates_t position;
 } toolhead_status_t;
 
 #endif

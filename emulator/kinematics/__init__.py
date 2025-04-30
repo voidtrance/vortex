@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-from typing import Any
+import ctypes
 import vortex.core.kinematics._vortex_kinematics as core_kinematics
 from vortex.lib.ext_enum import ExtIntEnum
 from argparse import Namespace
@@ -43,17 +43,28 @@ class Coordinate(Namespace):
                 raise AttributeError(f"Axis of type '{axis}' is invalid")
 
 class Kinematics:
-    def __init__(self, type, controller):
+    def __init__(self, config):
         self._ffi = core_kinematics.ffi
         self._lib = core_kinematics.lib
-        self._controller = controller
-        if isinstance(type, str):
-            self._kinematics_type = getattr(self._lib,
-                                       f"KINEMATICS_{type.upper()}",
+        conf = self._ffi.new("kinematics_config_t *")
+        self._kinematics_type = getattr(self._lib,
+                                       f"KINEMATICS_{config.type.upper()}",
                                        self._lib.KINEMATICS_NONE)
         if self._kinematics_type == self._lib.KINEMATICS_NONE:
             raise AttributeError("Invalid machine kinematics type")
-        self._lib.kinematics_type_set(self._kinematics_type)
+        conf.type = self._kinematics_type
+        if self._kinematics_type == self._lib.KINEMATICS_DELTA:
+            conf.delta.arm_length = config.arm_length
+            conf.delta.radius = config.radius
+            conf.delta.tower_radius = config.tower_radius
+            conf.delta.tower_angle = config.tower_angle
+            conf.delta.z_length = config.z_length
+        else:
+            struct = getattr(conf, config.type)
+            for i, v in enumerate(config.axis_length):
+                struct.limits[i].min = 0
+                struct.limits[i].max = v
+        self._lib.kinematics_init(conf)
 
     def get_move(self, cur_position, new_position):
         current = Coordinate()
@@ -78,10 +89,11 @@ class Kinematics:
         movement = self.compute_motor_movement(current, new)
         movement = [getattr(movement, str(x).lower()) for x in AxisType]
         return movement[:len(new_position)]
+
     def compute_motor_movement(self, cur_position, new_position):
         distance = {x: getattr(new_position, x) - getattr(cur_position, x) \
                     for x in cur_position}
         delta = self._ffi.new("coordinates_t *", distance)
         movement = self._ffi.new("coordinates_t *")
-        ret = self._lib.compute_motor_movement(delta, movement)
+        ret = self._lib.kinematics_get_motor_movement(delta, movement)
         return movement

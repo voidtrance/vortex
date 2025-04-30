@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import argparse
 import configparser
+from sys import exit
 from typing import Type
 from time import strftime
 from vortex.core import ObjectTypes
@@ -32,7 +33,7 @@ def parse_pin(pin_name : str):
 
 def generate_stepper_config(section : str,
                             kconfig : Type[configparser.ConfigParser],
-                            econfig : Type[configparser.ConfigParser]) -> None:
+                            econfig : Type[configparser.ConfigParser]) -> bool:
     klass, _, name = section.partition("_")
     if not name:
         name = klass
@@ -52,9 +53,10 @@ def generate_stepper_config(section : str,
     spm = (spr * ms * (i / o)) / rd
     econfig.set(s, "steps_per_mm", str(int(spm)))
     econfig.set(s, "start_speed", "30")
+    return True
 
 def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser],
-                         econfig : Type[configparser.ConfigParser]) -> None:
+                         econfig : Type[configparser.ConfigParser]) -> bool:
     klass, _, name = section.partition("_")
     if name[0] == "z":
         axis = AxisType.Z
@@ -63,31 +65,38 @@ def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser
 
     print(f"Generating axis config for axis '{axis}'...")
 
-    kin = econfig.get("machine", "kinematics")
+    kin = econfig.get("kinematics", "type")
 
-    if axis != AxisType.Z or name == "z":
+    if kin == "delta":
         s = f"endstop endstop{name.upper()}"
         econfig.add_section(s)
-        pe = kconfig.getfloat(section, "position_endstop")
-        minp = kconfig.getfloat(section, "position_min")
-        maxp = kconfig.getfloat(section, "position_max")
-        if abs(minp - pe) < abs(maxp - pe):
-            econfig.set(s, "type", "min")
-        else:
-            econfig.set(s, "type", "max")
-        econfig.set(s, "axis", str(axis).lower())
+        econfig.set(s, "type", "max")
         pin = parse_pin(kconfig.get(section, "endstop_pin"))
         econfig.set(s, "pin", pin)
+        econfig.set(s, "axis", str(axis).lower())
+    else:
+        if axis != AxisType.Z or name == "z":
+            s = f"endstop endstop{name.upper()}"
+            econfig.add_section(s)
+            pe = kconfig.getfloat(section, "position_endstop")
+            minp = kconfig.getfloat(section, "position_min")
+            maxp = kconfig.getfloat(section, "position_max")
+            if abs(minp - pe) < abs(maxp - pe):
+                econfig.set(s, "type", "min")
+            else:
+                econfig.set(s, "type", "max")
+            econfig.set(s, "axis", str(axis).lower())
+            pin = parse_pin(kconfig.get(section, "endstop_pin"))
+            econfig.set(s, "pin", pin)
 
     s = f"axis axis{str(axis).upper()}"
     if not econfig.has_section(s):
         econfig.add_section(s)
         econfig.set(s, "type", str(axis).lower())
-        econfig.set(s, "length", kconfig.get(section, "position_max"))
         econfig.set(s, "endstop", f"endstop{name.upper()}")
         econfig.set(s, "stepper", f"stepper{name.upper()}")
-    # Handle various kinematics types
 
+    # Handle various kinematics types
     if kin == "corexy" and axis in (AxisType.X, AxisType.Y):
         if econfig.has_option(s, f"stepper"):
             steppers = econfig.get(s, "stepper")
@@ -112,14 +121,15 @@ def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser
         steppers = econfig.get("axis axisZ", "stepper")
         steppers = ",".join([steppers, f"stepper{name.upper()}"])
         econfig.set("axis axisZ", "stepper", steppers)
+    return True
 
 def generate_thermistor(section : str, name : str,
                         kconfig : Type[configparser.ConfigParser],
-                        econfig : Type[configparser.ConfigParser]) -> None:
+                        econfig : Type[configparser.ConfigParser]) -> bool:
     t_type = kconfig.get(section, "sensor_type")
     if t_type.lower() not in ("pt1000", "pt100", "generic 3950"):
         print("Unsupported thermistor type")
-        return
+        return False
     s = f"thermistor sensor{name.upper()}"
     econfig.add_section(s)
     econfig.set(s, "heater", f"heater{name.upper()}")
@@ -138,7 +148,7 @@ def generate_thermistor(section : str, name : str,
     else:
         econfig.set(s, "sensor_type", t_type.lower())
 
-    return
+    return True
 
 def generate_extruder_layers(section : str, esection : str,
                              name : str,
@@ -171,18 +181,13 @@ def generate_bed_layers(section : str, esection : str, name : str,
     econfig.set(esection, "power", "400")
     # Get axis sizes so we can infer bed size
     bed_size = dict.fromkeys(["x", "y", "z"], 0.)
-    axes = [x for x in econfig.sections() if x.startswith("axis")]
-    for axis in axes:
-        axis_type = econfig.get(axis, "type")
-        if axis_type in ('x', 'y'):
-            bed_size[axis_type] = econfig.getfloat(axis, "length")
-    # It's possible that the heaters are defined prior to the axis
-    # in which case the bed size would not be available.
-    # Use the Klipper config for all missing sizes
-    for axis in bed_size:
-        if bed_size[axis] == 0.:
-            size = kconfig.getfloat(f"stepper_{axis}", "position_max")
-            bed_size[axis] = size
+    kin_type = econfig.get("kinematics", "type")
+    if kin_type in ("cartesian", "corexy", "corexz"):
+        axis_sizes = econfig.get("kinematics", "axis_length").split(",")
+        bed_size["x"], bed_size["y"] = map(float, axis_sizes[:2])
+    elif kin_type == "delta":
+        bed_size["x"], bed_size["y"] = [econfig.getfloat("kinematics", "radius")] * 2
+
     # Generate bed thermal layers
     econfig.set(esection, "layers_1_type", "1")
     econfig.set(esection, "layers_1_density", "1100000")
@@ -300,6 +305,45 @@ def generate_digital_pin_config(section : str, kconfig : Type[configparser.Confi
     generate_digital_pin(section, name, kconfig.get(section, "pin"), kconfig, econfig)
     return
 
+def generate_kinematics_config(kconfig : Type[configparser.ConfigParser],
+                               econfig : Type[configparser.ConfigParser]) -> bool:
+    econfig.add_section("kinematics")
+    kin_type = kconfig.get("printer", "kinematics")
+    econfig.set("kinematics", "type", kin_type)
+
+    if kin_type in ("cartesian", "corexy", "corexz"):
+        axis_lengths = []
+        for axis_type in ("x", "y", "z"):
+            ksection = f"stepper_{axis_type}"
+            if not kconfig.has_section(ksection):
+                print(f"ERROR: Klipper config missing section '{ksection}")
+                return False
+            axis_lengths.append(kconfig.get(ksection, "position_max"))
+        econfig.set("kinematics", "axis_length", ",".join(axis_lengths))
+    elif kin_type == "delta":
+        econfig.set("kinematics", "tower_radius", kconfig.get("printer", "delta_radius"))
+        if kconfig.has_option("printer", "print_radius"):
+            radius = kconfig.get("printer", "print_radius")
+        else:
+            radius = kconfig.get("printer", "delta_radius")
+        econfig.set("kinematics", "radius", radius)
+        arm_length = 0.
+        tower_angles = []
+        endstop = 0.0
+        default_angles = ["210", "330", "90"]
+        for i, axis_type in enumerate(("a", "b", "c")):
+            ksection = f"stepper_{axis_type}"
+            if kconfig.has_option(ksection, "arm_length") and not arm_length:
+                arm_length = kconfig.get(ksection, "arm_length")
+            if kconfig.has_option(ksection, "position_endstop") and not endstop:
+                endstop = kconfig.get(ksection, "position_endstop")
+            angle = kconfig.get(ksection, "angle", fallback=default_angles[i])
+            tower_angles.append(angle)
+        econfig.set("kinematics", "arm_length", arm_length)
+        econfig.set("kinematics", "z_length", endstop)
+        econfig.set("kinematics", "tower_angle", ",".join(tower_angles))
+    return True
+
 KLIPPER_SECTION_HANDLERS = {
     "stepper" : generate_stepper_config,
     "extruder": generate_heater_config,
@@ -319,14 +363,18 @@ klipper_config.read(opts.klipper_config)
 
 emulator_config = configparser.ConfigParser()
 emulator_config.add_section("machine")
-emulator_config.set("machine", "kinematics",
-                    klipper_config.get("printer", "kinematics"))
 emulator_config.set("machine", "controller", "stm32f4")
+
+if not generate_kinematics_config(klipper_config, emulator_config):
+    exit(1)
 
 for section in klipper_config.sections():
     for key, handler in KLIPPER_SECTION_HANDLERS.items():
         if key in section:
-            handler(section, klipper_config, emulator_config)
+            ret = handler(section, klipper_config, emulator_config)
+            if ret is False:
+                print(f"ERROR: Failed to generate configiration")
+                exit(1)
 
 # Generate axis configuration.
 # Axes are done separately to ensure that all steppers have
@@ -334,7 +382,10 @@ for section in klipper_config.sections():
 # able to generate configuration for different kinematics types.
 for section in klipper_config.sections():
     if section.startswith("stepper"):
-        generate_axis_config(section, klipper_config, emulator_config)
+        ret = generate_axis_config(section, klipper_config, emulator_config)
+        if ret is False:
+            print(f"ERROR: Failed to generate axis configuration")
+            exit(1)
 
 # Once we have all the axes configured, we can generate the
 # toolhead/probe configuration.

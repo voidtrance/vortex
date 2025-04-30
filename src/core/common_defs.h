@@ -21,6 +21,8 @@
 #include "events.h"
 #include "logging.h"
 
+#define __maybe_unused __attribute__((__unused__))
+
 #define CMD_ERROR_PREFIX (0xdeadbeef)
 #define CMD_ID_IS_ERROR(x) ((x) >> 32 == CMD_ERROR_PREFIX)
 #define CMD_ID_ERROR(x) ((int32_t)((x) & ~(CMD_ERROR_PREFIX << 32)))

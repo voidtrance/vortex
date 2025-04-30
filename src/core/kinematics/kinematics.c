@@ -17,26 +17,40 @@
  */
 #include <errno.h>
 #include <ctype.h>
+#include <string.h>
 #include "kinematics.h"
 #include "cartesian.h"
 #include "corexy.h"
+#include "delta.h"
+#include <debug.h>
 
 int (*motor_movement_func)(coordinates_t *, coordinates_t *);
 int (*axis_movement_func)(coordinates_t *, coordinates_t *);
+int (*toolhead_position)(coordinates_t *, coordinates_t *);
 
-static kinematics_type_t core_kinematics_type = KINEMATICS_NONE;
+static kinematics_config_t core_kinematics = { 0 };
 
-int kinematics_type_set(kinematics_type_t type) {
-    core_kinematics_type = type;
+int kinematics_init(kinematics_config_t *config) {
+    memcpy(&core_kinematics, config, sizeof(*config));
 
-    switch (core_kinematics_type) {
+    switch (core_kinematics.type) {
     case KINEMATICS_CARTESIAN:
         motor_movement_func = cartesian_motor_movement;
         axis_movement_func = cartesian_axis_movement;
+        toolhead_position = cartesian_toolhead_position;
+        cartesian_init(&core_kinematics.cartesian);
         break;
     case KINEMATICS_COREXY:
         motor_movement_func = corexy_motor_movement;
         axis_movement_func = corexy_axis_movement;
+        toolhead_position = corexy_toolhead_position;
+        corexy_init(&core_kinematics.corexy);
+        break;
+    case KINEMATICS_DELTA:
+        motor_movement_func = delta_motor_movement;
+        axis_movement_func = delta_axis_movement;
+        toolhead_position = delta_toolhead_position;
+        delta_init(&core_kinematics.delta);
         break;
     default:
         return -EINVAL;
@@ -46,7 +60,7 @@ int kinematics_type_set(kinematics_type_t type) {
 }
 
 kinematics_type_t kinematics_type_get(void) {
-    return core_kinematics_type;
+    return core_kinematics.type;
 }
 
 axis_type_t kinematics_axis_type_from_char(char type_char) {
@@ -82,10 +96,32 @@ axis_type_t kinematics_axis_type_from_char(char type_char) {
     return type;
 }
 
-int compute_motor_movement(coordinates_t *delta, coordinates_t *movement) {
+void *kinematics_get_config(void) {
+    switch (core_kinematics.type) {
+    case KINEMATICS_CARTESIAN:
+        return &core_kinematics.cartesian;
+    case KINEMATICS_COREXY:
+        return &core_kinematics.corexy;
+    case KINEMATICS_COREXZ:
+        return &core_kinematics.corexz;
+    case KINEMATICS_DELTA:
+        return &core_kinematics.delta;
+    default:
+        return NULL;
+    }
+}
+
+int kinematics_get_motor_movement(coordinates_t *delta,
+                                  coordinates_t *movement) {
     return motor_movement_func(delta, movement);
 }
 
-int compute_axis_movement(coordinates_t *delta, coordinates_t *movement) {
+int kinematics_get_axis_movement(coordinates_t *delta,
+                                 coordinates_t *movement) {
     return axis_movement_func(delta, movement);
+}
+
+int kinematics_get_toolhead_position(coordinates_t *axis_positions,
+                                     coordinates_t *position) {
+    return toolhead_position(axis_positions, position);
 }

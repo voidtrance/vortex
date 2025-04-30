@@ -15,32 +15,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#ifndef __DELTA_H__
+#define __DELTA_H__
+#include "kinematics.h"
 
-/*
- * https://corexy.com/theory.html
- */
-#include "corexy.h"
+int delta_init(delta_kinematics_config_t *config);
+int delta_motor_movement(coordinates_t *delta, coordinates_t *movement);
+int delta_axis_movement(coordinates_t *delta, coordinates_t *movement);
+int delta_toolhead_position(coordinates_t *axis_positions,
+                            coordinates_t *position);
 
-int corexy_init(cartesian_kinematics_config_t *config) {
-    return 0;
-}
-
-int corexy_motor_movement(coordinates_t *delta, coordinates_t *movement) {
-    *movement = *delta;
-    movement->x = delta->x + delta->y;
-    movement->y = delta->x - delta->y;
-    return 0;
-}
-
-int corexy_axis_movement(coordinates_t *delta, coordinates_t *movement) {
-    *movement = *delta;
-    movement->x = (delta->x + delta->y) * 0.5;
-    movement->y = (delta->x - delta->y) * 0.5;
-    return 0;
-}
-
-int corexy_toolhead_position(coordinates_t *axis_positions,
-                             coordinates_t *position) {
-    *position = *axis_positions;
-    return 0;
-}
+#endif

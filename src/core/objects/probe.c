@@ -100,8 +100,9 @@ static void probe_update(core_object_t *object, uint64_t ticks,
         if (!probe->axis_valid[i])
             continue;
 
-        probe->position[i] = status.position[i] + probe->offsets[i];
-        probe->triggered &= status.position[i] <= probe->fuzz;
+        probe->position[i] =
+            ((double *)&status.position)[i] + probe->offsets[i];
+        probe->triggered &= ((double *)&status.position)[i] <= probe->fuzz;
     }
 
     probe->pin_word = !!probe->triggered;

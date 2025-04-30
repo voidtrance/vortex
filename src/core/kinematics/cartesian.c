@@ -17,6 +17,10 @@
  */
 #include "cartesian.h"
 
+int cartesian_init(cartesian_kinematics_config_t *config) {
+    return 0;
+}
+
 int cartesian_motor_movement(coordinates_t *delta, coordinates_t *movement) {
     *movement = *delta;
     return 0;
@@ -24,5 +28,11 @@ int cartesian_motor_movement(coordinates_t *delta, coordinates_t *movement) {
 
 int cartesian_axis_movement(coordinates_t *delta, coordinates_t *movement) {
     *movement = *delta;
+    return 0;
+}
+
+int cartesian_toolhead_position(coordinates_t *axis_positions,
+                                coordinates_t *position) {
+    *position = *axis_positions;
     return 0;
 }

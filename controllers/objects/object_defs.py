@@ -163,7 +163,8 @@ class Axis(ObjectDef):
         _fields_ = [("position", ctypes.c_double)]
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
-                    ("length", ctypes.c_float),
+                    ("min", ctypes.c_float),
+                    ("max", ctypes.c_float),
                     ("type", ctypes.c_int),
                     ("position", ctypes.c_double),
                     ("motors", (ctypes.c_char * 64) * 8),

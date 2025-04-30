@@ -61,6 +61,8 @@ typedef struct {
     core_object_t *endstop;
     bool homed;
     bool endstop_is_max;
+    float min;
+    float max;
     float length;
     double start_position;
     double position;
@@ -85,23 +87,27 @@ static void axis_reset(core_object_t *object) {
         axis->start_position = 0.0;
     } else {
         kinematics_type_t kin = kinematics_type_get();
-        double start = random_double_limit(0, axis->length);
+        double start = 0;
         double r;
         uint32_t spmm;
 
         switch (kin) {
         case KINEMATICS_COREXY:
+            start = random_double_limit(axis->min, axis->max);
             if (axis->type != AXIS_TYPE_Y)
                 spmm = axis->motors[0].steps_per_mm;
             else
                 spmm = axis->motors[1].steps_per_mm;
             break;
         case KINEMATICS_COREXZ:
+            start = random_double_limit(axis->min, axis->max);
             if (axis->type != AXIS_TYPE_Z)
                 spmm = axis->motors[0].steps_per_mm;
             else
                 spmm = axis->motors[1].steps_per_mm;
             break;
+        case KINEMATICS_DELTA:
+            start = axis->min;
         default:
             spmm = axis->motors[0].steps_per_mm;
         }
@@ -172,9 +178,9 @@ static void axis_event_handler(core_object_t *object, const char *name,
 #define step_distance(motor)                                          \
     ((double)(motor.steps - motor.initial_step) / motor.steps_per_mm)
 
-static inline void set_axis_distance(coordinates_t *coords, double distance,
-                                     axis_type_t type) {
-    switch (type) {
+static inline void set_axis_distance(axis_t *axis, coordinates_t *coords,
+                                     double distance) {
+    switch (axis->type) {
     case AXIS_TYPE_X:
         coords->x = distance;
         break;
@@ -270,11 +276,10 @@ static void axis_update(core_object_t *object, uint64_t ticks,
         for (i = 0; i < axis->n_motors; i++)
             average_distance += step_distance(axis->motors[i]);
 
-        set_axis_distance(&coords, average_distance / axis->n_motors,
-                          axis->type);
+        set_axis_distance(axis, &coords, average_distance / axis->n_motors);
     }
 
-    compute_axis_movement(&coords, &distance);
+    kinematics_get_axis_movement(&coords, &distance);
     axis->position = get_axis_distance(axis, &distance);
     log_debug(axis, "position: %.15f, homed: %u", axis->position, axis->homed);
 }
@@ -285,7 +290,8 @@ static void axis_status(core_object_t *object, void *status) {
     size_t i;
 
     s->homed = axis->homed;
-    s->length = axis->length;
+    s->min = axis->min;
+    s->max = axis->max;
     s->type = axis->type;
     s->position = axis->position;
     if (axis->endstop_name)
@@ -337,8 +343,6 @@ axis_t *object_create(const char *name, void *config_ptr) {
     if (config->endstop[0] != '\0')
         axis->endstop_name = strdup(config->endstop);
 
-    axis->type = kinematics_axis_type_from_char(config->type);
-
     /* First, we have to find out how many motors are
      * defined.
      */
@@ -356,23 +360,50 @@ axis_t *object_create(const char *name, void *config_ptr) {
     }
 
     axis->n_motors = i;
-    if (((kinematics == KINEMATICS_COREXY &&
-          (axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Y))
-         || (kinematics == KINEMATICS_COREXZ &&
-             (axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Z))) &&
-        axis->n_motors != 2) {
-        log_error(axis, "Kinematics model requires 2 motors for axis");
-        free(axis->motors);
-        object_cache_destroy(axis_event_cache);
-        free((char *)axis->endstop_name);
-        free(axis);
-        return NULL;
+
+    axis->type = kinematics_axis_type_from_char(config->type);
+
+    switch (kinematics) {
+    case KINEMATICS_COREXY:
+        if ((axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Y) &&
+            axis->n_motors != 2) {
+            goto error;
+        }
+    case KINEMATICS_COREXZ:
+        if ((axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Z) &&
+            axis->n_motors != 2) {
+            goto error;
+        }
+    case KINEMATICS_CARTESIAN: {
+        cartesian_kinematics_config_t *kin_config __maybe_unused;
+        kin_config = kinematics_get_config();
+        axis->min = kin_config->limits[axis->type].min;
+        axis->max = kin_config->limits[axis->type].max;
+        axis->length = axis->max - axis->min;
+        for (i = 0; i < axis->n_motors; i++)
+            axis->motors[i].name = strdup(config->steppers[i]);
+        break;
+    }
+    case KINEMATICS_DELTA: {
+        delta_kinematics_config_t *kin_config __maybe_unused;
+        kin_config = kinematics_get_config();
+        axis->min = kin_config->limits[axis->type].min;
+        axis->max = kin_config->limits[axis->type].max;
+        axis->length = axis->max - axis->min;
+        for (i = 0; i < axis->n_motors; i++)
+            axis->motors[i].name = strdup(config->steppers[i]);
+        break;
+    }
+    default:
+        goto error;
     }
 
-    for (i = 0; i < axis->n_motors; i++)
-        axis->motors[i].name = strdup(config->steppers[i]);
-
-    axis->length = config->length;
-
     return axis;
+
+error:
+    free(axis->motors);
+    object_cache_destroy(axis_event_cache);
+    free((char *)axis->endstop_name);
+    free(axis);
+    return NULL;
 }
