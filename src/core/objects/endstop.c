@@ -169,7 +169,7 @@ endstop_t *object_create(const char *name, void *config_ptr) {
     endstop->object.name = strdup(name);
     endstop->object.init = endstop_init;
     endstop->object.update = endstop_update;
-    endstop->object.update_frequency = 1000; /* 1 kHz */
+    endstop->object.update_frequency = 5000; /* 5 kHz */
     endstop->object.reset = endstop_reset;
     endstop->object.get_state = endstop_status;
     endstop->object.destroy = endstop_destroy;

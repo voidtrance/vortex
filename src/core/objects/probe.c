@@ -143,7 +143,7 @@ probe_t *object_create(const char *name, void *config_ptr) {
     probe->object.name = strdup(name);
     probe->object.init = probe_init;
     probe->object.update = probe_update;
-    probe->object.update_frequency = 1000; /* 1 kHz */
+    probe->object.update_frequency = 5000; /* 5 kHz */
     probe->object.get_state = probe_get_state;
     probe->object.destroy = probe_destroy;
     probe->toolhead_name = strdup(config->toolhead);

@@ -336,7 +336,7 @@ axis_t *object_create(const char *name, void *config_ptr) {
     axis->object.name = strdup(name);
     axis->object.init = axis_init;
     axis->object.update = axis_update;
-    axis->object.update_frequency = 1000; /* 1kHz */
+    axis->object.update_frequency = 5000; /* 5kHz */
     axis->object.reset = axis_reset;
     axis->object.get_state = axis_status;
     axis->object.destroy = axis_destroy;
