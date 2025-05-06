@@ -244,12 +244,17 @@ class MainWindow(Gtk.Window):
 
     def get_data_value(self, value):
         precision = self.precision_spin.get_value_as_int()
-        if isinstance(value, float):
-            if precision != -1:
-                if value and round(value, precision):
-                    value = round(value, precision)
+        if isinstance(value, float) and precision != -1 and \
+            value and round(value, precision):
+            value = round(value, precision)
         elif isinstance(value, list):
-            value = ", ".join([str(x) for x in value if not isinstance(x,str) or x])
+            rounded = []
+            for v in value:
+                if isinstance(v, float) and precision != -1:
+                    rounded.append(round(v, precision))
+                else:
+                    rounded.append(v)
+            value = ", ".join([str(x) for x in rounded if not isinstance(x,str) or x])
         return str(value)
     
     def populate_grids(self, data):
