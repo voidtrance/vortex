@@ -171,12 +171,12 @@ class KlipperFrontend(BaseFrontend):
         return ticks + self.timers.from_us(100000)
 
     def run(self):
-        if self.log.getEffectiveLevel() >= logging.DEBUG:
+        if self.log.getEffectiveLevel() <= logging.DEBUG:
             self.log.warning("Klipper host is very dependent on controller")
             self.log.warning("timing, High levels of debug output will affect")
             self.log.warning("controller timer performance and as a result,")
             self.log.warning("Klipper host may encounter timing errors.")
-        if self.emulation_frequency < parse_frequency("600KHz"):
+        if self.emulation_frequency < parse_frequency("2MHz"):
             self.log.warning("Using frequency of less than 600KHz may result")
             self.log.warning("in Klipper failures due to timing granularity.")
         self._create_identity()
@@ -198,7 +198,7 @@ class KlipperFrontend(BaseFrontend):
             if not cmd.response:
                 return
             msg = self.mp.lookup_command(cmd.response)
-            self.log.debug("response: %s", msg.format_params(kwargs))
+            self.log.verbose("response: %s", msg.format_params(kwargs))
             data = msg.encode_by_name(**kwargs)
         else:
             data = []
@@ -463,7 +463,7 @@ class KlipperFrontend(BaseFrontend):
                     msgid, param_pos = self.mp.msgid_parser.parse(block, pos)
                     mid = self.mp.messages_by_id.get(msgid, self.mp.unknown)
                     msg_params, pos = mid.parse(block, pos)
-                    self.log.debug("request: %s %s", mid.name, msg_params)
+                    self.log.verbose("request: %s %s", mid.name, msg_params)
                     cmd = self.all_commands[mid.name]
                     if not isinstance(cmd, str) and self._shutdown and \
                         proto.KlipperProtoFlags.HF_IN_SHUTDOWN not in cmd.flags:

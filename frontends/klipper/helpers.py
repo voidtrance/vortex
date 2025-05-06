@@ -482,6 +482,7 @@ class TRSync(HelperBase):
         self.signals = []
         self.flags = TRSyncFlags.ZERO
         self._log = logging.getLogger(f"vortex.frontend.trsync.{oid}")
+        self._log.add_prefix(f"[{oid}]")
         self.report_timer = self.frontend.timers.new()
         self.report_timer.callback = self.report_handler
         self.expire_timer = self.frontend.timers.new()
@@ -505,6 +506,7 @@ class TRSync(HelperBase):
     def add_signal(self, handler):
         self.signals.append(handler)
     def report(self, ticks, reason=None):
+        self._log.debug(f"{ticks}: reason={reason}, trigger_reason={self.triger_reason}")
         if reason is None:
             reason = self.trigger_reason
         self.frontend.respond(ResponseTypes.RESPONSE,
@@ -527,8 +529,10 @@ class TRSync(HelperBase):
         self.do_trigger(self.frontend.get_controller_clock_ticks(), reason)
     def report_handler(self, ticks):
         self.report(ticks)
+        self._log.debug(f"next report: {ticks + self.report_ticks}")
         return ticks + self.report_ticks
     def expire_handler(self, ticks):
+        self._log.debug(f"{ticks}: trsync expired")
         self.report_timer.timeout = 0
         self.do_trigger(ticks, self.expire_reason)
         return 0
