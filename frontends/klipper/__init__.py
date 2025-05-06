@@ -257,6 +257,7 @@ class KlipperFrontend(BaseFrontend):
     def reset(self, cmd):
         self._reset_objects()
         self.config_crc = 0
+        self._shutdown = False
         super().reset()
         return True
 
@@ -464,7 +465,7 @@ class KlipperFrontend(BaseFrontend):
                     msg_params, pos = mid.parse(block, pos)
                     self.log.debug("request: %s %s", mid.name, msg_params)
                     cmd = self.all_commands[mid.name]
-                    if self._shutdown and \
+                    if not isinstance(cmd, str) and self._shutdown and \
                         proto.KlipperProtoFlags.HF_IN_SHUTDOWN not in cmd.flags:
                         self.is_shutdown(self._shutdown_reason)
                         break
