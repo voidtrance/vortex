@@ -6,3 +6,4 @@ setuptools
 plotly
 dash
 clang
+PyGObject

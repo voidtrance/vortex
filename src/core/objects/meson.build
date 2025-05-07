@@ -26,11 +26,11 @@ math = cc.find_library('m')
 foreach object : objects
     r = run_command(py, root / 'tools/find_modules.py', meson.current_source_dir(), object, check: true)
     sources = r.stdout().strip().split()
-    lib = library(object, sources + [auto_gen_types, auto_gen_events],
-                         include_directories: [core_include, core_include_general, core_atomics_inc],
-                         dependencies: [core_utils_dep, core_kinematics_dep, math, core_atomics_dep],
-                         name_prefix: '',
-                         install: true,
-                         install_dir: py.get_install_dir(pure: false) / 'vortex/core/objects',
-                         install_rpath: '$ORIGIN/../lib')
+    library(object, sources + [auto_gen_types, auto_gen_events],
+            include_directories: [core_include, core_include_general, core_atomics_inc],
+            dependencies: [core_utils_dep, core_kinematics_dep, math, core_atomics_dep],
+            name_prefix: '',
+            install: true,
+            install_dir: py.get_install_dir(pure: false) / 'vortex/core/objects',
+            install_rpath: '$ORIGIN/../lib')
 endforeach

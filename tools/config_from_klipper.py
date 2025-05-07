@@ -355,7 +355,7 @@ KLIPPER_SECTION_HANDLERS = {
 
 parser = argparse.ArgumentParser()
 parser.add_argument("klipper_config", help="Klipper configuration file")
-parser.add_argument("emulator_config", help="Pin map file")
+parser.add_argument("emulator_config", help="Emulator configuration filename")
 
 opts = parser.parse_args()
 klipper_config = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))

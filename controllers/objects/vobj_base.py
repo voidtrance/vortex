@@ -19,7 +19,6 @@ from vortex.core import ObjectTypes
 class VirtualObjectBase:
     type = ObjectTypes.NONE
     commands = []
-    # Virtual objects don't have events
     events = []
     virtual = True
     def __init__(self, config, obj_lookup, obj_query, cmd_complete, event_submit):

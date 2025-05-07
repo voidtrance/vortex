@@ -211,7 +211,6 @@ static void *pin_monitor_thread(void *args) {
         uint8_t dir = !!(val & DIR_PIN);
         uint8_t enabled = !!(val & ENABLE_PIN);
 
-        log_debug(stepper, "Pin word: 0x%x", val);
         stepper->enabled = enabled;
         stepper->dir = (stepper_move_dir_t)dir;
         stepper->current_step +=
