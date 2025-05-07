@@ -63,6 +63,8 @@ class VortexLogger(logging.Logger):
         if self.isEnabledFor(VERBOSE):
             self._log(VERBOSE, message, args, **kwargs)
     def filter(self, record):
+        if not self.filters:
+            return record
         results = set()
         for filter in self.filters:
             if hasattr(filter, "filter"):
