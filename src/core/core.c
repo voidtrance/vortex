@@ -32,7 +32,6 @@
 #include <kinematics.h>
 #include <threads.h>
 
-#include "core.h"
 #include "events.h"
 #include "common_defs.h"
 #include "timers.h"
@@ -198,7 +197,7 @@ static void core_process_work(void *arg) {
         pthread_mutex_unlock(&core->cmds.lock);
 
         object = core_id_to_object(cmd->target_id);
-        core_log(LOG_LEVEL_DEBUG, OBJECT_TYPE_NONE, "core",
+        core_log(LOG_LEVEL_DEBUG,
                  "issuing command for %s, id: %lu, cmd: %u", object->name,
                  cmd->command.command_id, cmd->command.object_cmd_id);
         (void)object->exec_command(object, &cmd->command);
@@ -1177,15 +1176,15 @@ static PyObject *vortex_core_python_event_unregister(PyObject *self,
 static PyObject *vortex_core_python_event_submit(PyObject *self,
                                                  PyObject *args) {
     core_t *core = (core_t *)self;
-    core_object_type_t object_type;
+    core_object_event_type_t event_type;
     core_object_id_t object_id;
     PyObject *data;
 
-    if (!PyArg_ParseTuple(args, "ikO", &object_type, &object_id, &data))
+    if (!PyArg_ParseTuple(args, "ikO", &event_type, &object_id, &data))
         return NULL;
 
     Py_INCREF(data);
-    if (__core_object_event_submit(object_type, object_id, (void *)data, false,
+    if (__core_object_event_submit(event_type, object_id, (void *)data, false,
                                    core))
         Py_RETURN_FALSE;
 

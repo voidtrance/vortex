@@ -32,5 +32,7 @@ foreach object : objects
             name_prefix: '',
             install: true,
             install_dir: py.get_install_dir(pure: false) / 'vortex/core/objects',
-            install_rpath: '$ORIGIN/../lib')
+            link_args: ['-Wl,-rpath=$ORIGIN/../lib',
+                        '-Wl,-rpath=$ORIGIN/../kinematics',
+                        '-Wl,-rpath=$ORIGIN/../lib/atomics'])
 endforeach

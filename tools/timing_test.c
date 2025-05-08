@@ -39,7 +39,6 @@ struct thread_args {
 static void *thread_func(void *arg) {
     struct thread_args *args = (struct thread_args *)arg;
     struct timespec ts, te, sleep, rem;
-    uint64_t duration;
 
     sleep.tv_sec = 0;
     sleep.tv_nsec = args->sleep_time;
@@ -137,7 +136,7 @@ int main(int argc, char **argv) {
     do_run = false;
     pthread_join(thread, &res);
 
-    printf("sleep time: %llu / %llu = %f ns\n", args.total, args.count,
+    printf("sleep time: %lu / %lu = %f ns\n", args.total, args.count,
            (float)args.total / args.count);
     pthread_attr_destroy(&attrs);
     return 0;
