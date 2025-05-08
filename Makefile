@@ -60,6 +60,8 @@ venv:
 
 wheel: venv version
 	$(VENV_PYTHON) -m build -w .
+
+install: wheel
 	$(VENV_PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
 
 gdb:
