@@ -136,7 +136,7 @@ def get_objects(conn, *args):
 
 def get_data(conn, toolhead, *heaters):
     state = get_objects(conn, toolhead, *heaters)
-    idxs = [i for i in state[toolhead]["axes"] if i != 7]
+    idxs = [i for i, axis in enumerate(state[toolhead]["axes"]) if axis != 7]
     pos = [state[toolhead]["position"][i] for i in idxs]
     temps = dict.fromkeys(heaters, 0.)
     for h in heaters:
@@ -152,7 +152,8 @@ def draw(filename, data, times, heaters):
                   margin=go.layout.Margin(l=50, r=50, b=100, t=100, pad=4))
     fig = go.Figure(g, layout=l)
 
-    tfig = go.Figure()
+    tl = go.Layout(autosize=False, width=1800, height=300)
+    tfig = go.Figure(layout=tl)
     for h in heaters:
         t = go.Scatter(x=times, y=heaters[h], mode="lines", line_shape="spline", name=f"heater {h}")
         tfig.add_trace(t)
@@ -160,7 +161,7 @@ def draw(filename, data, times, heaters):
     prefix = """<html>
 <head>
 <style>
-div.plotly-graph-top { display: inline-block; }
+div.plotly-graph-top { display: inline-block; border: 1px solid #3f87a6; }
 table { display: inline-block; vertical-align: top; }
 th { text-align: left; background-color: #e4f0f5; }
 th.title { text-align: center; background-color: #3f87a6; }
@@ -195,7 +196,8 @@ def run_dash_server(connection, toolhead, *heaters):
                     margin=go.layout.Margin(l=50, r=50, b=100, t=100, pad=4))
     fig = go.Figure(g, layout=l)
     
-    tfig = go.Figure()
+    l = go.Layout(autosize=False, width=1800, height=300)
+    tfig = go.Figure(layout=l)
     for h in heaters:
         t = go.Scatter(x=[], y=[], mode="lines", name=f"heater {h}")
         tfig.add_trace(t)
@@ -203,16 +205,26 @@ def run_dash_server(connection, toolhead, *heaters):
 
     app.layout = html.Div([
         html.Div([
-            html.Button('Stop Refresh', id='refresh-control', n_clicks=0)
+            html.Button('Stop Refresh', id='refresh-control', n_clicks=0),
         ], title="Refresh Control"),
+        html.Div(["Toolhead Tracking"], id='toolhead-tracking',
+                 style={'fontSize': 18, 'textAlign': 'center',
+                        'backgroundColor': '#3f87a6', 'width': '1802px',
+                        'margin-top': '10px'}),
         html.Div([
             dcc.Graph(id="travel-plot", figure=fig),
             dcc.Interval(id="interval-component", interval=40, n_intervals=0)
-        ]),
+        ],
+        style={'border': '1px solid #3f87a6', 'display': 'inline-block'}),
+        html.Div(["Heater Tracking"], id='toolhead-tracking',
+                 style={'fontSize': 18, 'textAlign': 'center',
+                        'backgroundColor': '#3f87a6', 'width': '1802px',
+                        'margin-top': '10px'}),
         html.Div([
             dcc.Graph(id="heater-temps", figure=tfig),
             dcc.Interval(id="temp-interval-component", interval=1000, n_intervals=0)
-        ])
+        ],
+        style={'border': '1px solid #3f87a6', 'display': 'inline-block'}),
     ])
 
     start_time = time.time()
