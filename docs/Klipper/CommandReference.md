@@ -54,7 +54,7 @@ uptime high=%u clock=%u
 | Command/Response | Argument | Description |
 |-|-|-|
 | `get_uptime` | | Request controller uptime |
-| `uptime high=%u clock=%u` | high | Higher 32 bits of the controller uptime counter |
+| `uptime high=%u clock=%u` | high | The number of times the clock has wrapped. This value is incremented only after sending back a *stats* response (which happens every 5 sec) and the clock has wrappeed |
 | | clock | Lower 32 bits of the controller uptime counter |
 
 ## *finalize_config*
@@ -248,40 +248,135 @@ Set the step direction of the next set of steps.
 ```
 set_next_step_dir oid=%c dir=%c
 ```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *set_next_step_dir* | oid | The OID of the stepper for which this command applies. |
+| | dir | The direction that of subsequent *queue_step* commands. The direction set by this command is to be maintained until changed by another *set_next_step_dir* command. |
 
 ## *reset_step_clock*
 ```
 reset_step_clock oid=%c clock=%u
 ```
+| Command/Response | Argument | Description |
+|-|-|-|
 
 ## *stepper_get_position*
 ```
 stepper_get_position oid=%c
 stepper_position oid=%c pos=%i
 ```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *stepper_get_position* | oid | Request position of stepper with OID `oid`. |
+| *stepper_position* | oid | The position of the stepper with OID `oid`. |
+| | pos | The position (in steps) of the stepper. |
 
 ## *stepper_stop_on_trigger*
+Stop all stepper movement when a TRsync synchronization object is triggered.
+
 ```
 stepper_stop_on_trigger oid=%c trsync_oid=%c
 ```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *stepper_stop_on_trigger* | oid | The OID of the stepper. |
+| | trsync_oid | The OID of the TRSync object which should be triggered in order to stop the movement. |
 
 ## *config_trsync*
+
+Create a TRSync object.
+
 ```
 config_trsync oid=%c
 ```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *config_trsync* | oid | The OID of the TRSync object. |
 
 ## *trsync_start*
+
+This command starts the TRSync synchronization process. The *trsync_start* command specifies
+parameters for the synchronization and response frequency. The *trsync_state* command is
+periodically sent back by the controller based on the parameters from *trsync_start*.
+
 ```
 trsync_start oid=%c report_clock=%u report_ticks=%u expire_reason=%c
 trsync_state oid=%c can_trigger=%c trigger_reason=%c clock=%u
 ```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *trsync_start* | oid | The OID of the TRSync object which is to start. |
+| | report_clock | The clock tick on which the intitial *trsync_state* response should be sent. |
+| | report_ticks | The internval (in clock ticks) with which subsequent responses should be sent. |
+| | expire_reason | The reason ID which should be sent as the `trigger_reason` in the *trsync_state* response if the synchronization expires. |
+| *trsync_state* | oid | The OID of the TRsync object which is sending the response. |
+| | can_trigger | Has the TRsync object been triggered yet. If no, `can_trigger` is 1, otherwise 0. |
+| | trigger_reason | The reason for which the object was triggered. |
+| | clock | The current controller clock tick. |
 
 ## *trsync_set_timeout*
+Set TRSync synchronization exparation timeout. Synchronization exparation happens when the
+controller clock reaches the timeout value without the TRSync object having been triggered.
+This prevents infinite movement if the endstop does not trigger for any reason.
+
 ```
 trsync_set_timeout oid=%c clock=%u
 ```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *trsync_set_timeout* | oid | The OID of the synchronizer. |
+| | clock | The clock tick at which the TRSync will expire. If an endstop has not trigger by this clock tick, the synchronizer will terminate all stepper movement and report the expiration to the host. |
 
 ## *trsync_trigger*
+
+The *trsync_trigger* command is used by the host to cause the TRSync synchronizer to trigger
+prematurely. This is usually done due to some error condition.
+
 ```
 trsync_trigger oid=%c reason=%c
 ```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *trsync_trigger* | oid | The OID of the synchronizer which should trigger. |
+
+## *config_endstop*
+Create and configure an endstop.
+```
+config_endstop oid=%c pin=%c pull_up=%c
+```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *config_endstop* | oid | The OID which the endstop should use. |
+| | pin | The name of the endstop pin. |
+| | pull_up | Whether to enable a pullup resistor on the endstop pin. |
+
+## *endstop_home*
+Start then homing processes for an axis to which the endstop is connected.
+
+```
+endstop_home oid=%c clock=%u sample_ticks=%u sample_count=%c rest_ticks=%u pin_value=%c trsync_oid=%c trigger_reason=%c
+```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *endstop_home* | oid | The OID of the endstop. |
+| | clock | The controller clock tick on which to start the homing. |
+| | sample_ticks | Once a positive sample happens, how often (in controller ticks) should the endstop pin be resampled. |
+| | sample_count | How many consequitive positive samples should happen before the endstop triggers the TRSync object. |
+| | rest_ticks | The frequency (in clock ticks) of how often the pin is sampled. This is the time between negative samples. Once there is a positive sample, sampling starts using `sample_ticks`. |
+| | pin_value | The value of the pin which will be considered a positive sample. |
+| | trsync_oid | The OID of the TRSync object which should be triggered when `sample_count` positive samples have happened. |
+
+## *endstop_query*
+Query the current state of the endstop.
+
+```
+endstop_query_state oid=%c
+endstop_state oid=%c homing=%c next_clock=%u pin_value=%c
+```
+| Command/Response | Argument | Description |
+|-|-|-|
+| *endstop_query_state* | oid | The OID of the endstop which is being queried. |
+| *endstop_state* | oid | The OID of the endstop. |
+| | homing | Is the endstop current in the homing process. |
+| | next_clock | The controller clock tick on which the next sample will happen. |
+| | pin_value | The current value of the endstop pin. |

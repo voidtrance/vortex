@@ -34,30 +34,26 @@ python -m pip install --user virtualenv
 To clone the Vortex emulator repository, use the
 following command:
 ```
-git clone http://github.com/... <destination>/vortex
+git clone http://github.com/voidtrance/vortex <destination>/vortex
 ```
-This clone the repository in the directory
-`<directory>/vortex`. From now on, `VORTEX` will be
+This clones the repository in the directory
+`<destination>/vortex`. From now on, `VORTEX` will be
 used to refer to that directory.
 
 ## Creating The Virtual Environment
 Create a new Python virtual environment using the
 following command:
 ```
-virtualenv <destination>
+cd VORTEX
+make venv VENV=<destination>
 ```
 where `<destination>` is the directory where you want
-your virtual environment to be setup. From this point
-on `VIRTDIR` will be used to indicate the path to the
-virtual environment.
+your virtual environment to be setup. The command wil
+create the virtual environment and install all Vortex
+requirements in it.
 
-## Installing Vortex Requirements
-Once the virtual environment has been setup, all of
-required package should be installed within the
-virtual environemtn using the following command:
-```
-VIRTDIR/bin/pip install -r virtualenv.txt
-```
+From this point on `VIRTDIR` will be used to indicate
+the path to the virtual environment.
 
 ## Building And Installing The Vortex Wheel
 The Vortex emulator can be installed within the
@@ -68,13 +64,24 @@ virtual environment.
 To build the Python wheel, use the following commands:
 ```
 cd VORTEX
-VIRTDIR/bin/python -m build -w .
+make wheel VENV=VIRTDIR
 ```
 The above commands will build the package in
-`VORTEX/dest/vortex-<VERSION>-cp311-cp311-linux_x86_64.whl` where `<VERSION>` is the version of the Vortex
-emulator.
+`VORTEX/dest/vortex-<VERSION>-<cpython>-<cpython>-linux_x86_64.whl`
+where `<VERSION>` is the version of the Vortex emulator.
+`<cpython>` is the CPython version installed on your
+system.
 
 Once the Python wheel has been build, install it with:
 ```
-VIRTDIR/bin/pip install VORTEX/dest/vortex-<VERSION>-cp311-cp311-linux_x86_64.whl
+make install VENV=VIRTDIR
+```
+
+The next step before running the emulator is to activate the virtual
+environment. Note that the command below is for the Bash shell. The
+virtual environment will contain a matching script for other popular
+shells.
+
+```
+source VIRTDIR/bin/activate
 ```

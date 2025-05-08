@@ -176,8 +176,8 @@ class KlipperFrontend(BaseFrontend):
             self.log.warning("timing, High levels of debug output will affect")
             self.log.warning("controller timer performance and as a result,")
             self.log.warning("Klipper host may encounter timing errors.")
-        if self.emulation_frequency < parse_frequency("2MHz"):
-            self.log.warning("Using frequency of less than 600KHz may result")
+        if self.emulation_frequency < parse_frequency("1MHz"):
+            self.log.warning("Using frequency of less than 1MHz may result")
             self.log.warning("in Klipper failures due to timing granularity.")
         self._create_identity()
         self._object_pin_map = self._create_object_pin_map()

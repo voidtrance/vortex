@@ -34,48 +34,47 @@ The Vortex emulator executable supports the following command line options:
 
 ```
 usage: vortex.py [-h] [-f FRONTEND] [-s] [-c CONTROLLER] [-F FREQUENCY] [-T TIMER_FREQUENCY] [-P]
-                 [-d {NOTSET,DEBUG,VERBOSE,INFO,WARNING,ERROR,CRITICAL}] [--filter FILTER] [-l LOGFILE] [--extended-logging]
-                 [-M] -C CONFIG
+                 [-d {NOTSET,DEBUG,VERBOSE,INFO,WARNING,ERROR,CRITICAL}] [--filter FILTER] [-l LOGFILE] [--extended-logging] [-R]
+                 -C CONFIG
 
 options:
   -h, --help            show this help message and exit
-  -C CONFIG, --config CONFIG
-                        HW object configuration file. This argument is required. (default: None)
+  -C, --config CONFIG   HW object configuration file. This argument is required. (default: None)
 
 Frontend Options:
-  -f FRONTEND, --frontend FRONTEND
+  -f, --frontend FRONTEND
                         The frontend that will be started for the emulation. (default: direct)
   -s                    Enable sequential mode. In this mode, the frontent will execute one command at a time rather than submit
                         commands to the command queue as they are received. (default: False)
 
 Controller Options:
-  -c CONTROLLER, --controller CONTROLLER
+  -c, --controller CONTROLLER
                         The HW controller to be used for the emulation. This argument is required. (default: None)
   -F, --frequency FREQUENCY
                         This is the frequency with which the object updates will run. (default: 100kHZ)
   -T, --timer-frequency TIMER_FREQUENCY
-                        Frequency of time control loop. The time control loop is the main emulator control loop. It's the on
-                        that updates controller clock and emulation runtime. Higher values provide more precise emulation but at
-                        the cost of CPU load. (default: 1MHz)
+                        Frequency of time control loop. The time control loop is the main emulator control loop. It's the on that
+                        updates controller clock and emulation runtime. Higher values provide more precise emulation but at the cost
+                        of CPU load. (default: 1MHz)
   -P, --set-priority    Set the priority of the emulator to real-time. This will make the emulator run with higher priority than
-                        other processes on the system. This is useful for more precise emulation but may affect system
-                        performance as the emulator will take up more CPU cycles. (default: False)
+                        other processes on the system. This is useful for more precise emulation but may affect system performance
+                        as the emulator will take up more CPU cycles. (default: False)
 
 Debug Options:
   -d, --debug {NOTSET,DEBUG,VERBOSE,INFO,WARNING,ERROR,CRITICAL}
-                        Set logging level. Higher logging levels will provide more information but will also affect conroller
-                        timing more. (default: INFO)
+                        Set logging level. Higher logging levels will provide more information but will also affect conroller timing
+                        more. (default: INFO)
   --filter FILTER       Filter log messages by the specified module/object. Filter format is a dot-separated hierarchy of
                         modules/objects. For example, the filter 'core.stepper.X' will only show log messages from the core HW
                         stepper object with name 'X'. '*' can be used to match all modules/objects at the particular level. This
-                        option can be used multiple times to filter multiple modules. The filter is applied to the module name
-                        and not the logger name. (default: [])
+                        option can be used multiple times to filter multiple modules. The filter is applied to the module name and
+                        not the logger name. (default: [])
   -l, --logfile LOGFILE
                         Log messages are sent to the file specified by this option. (default: None)
-  --extended-logging    Enable extended debugging. When enabled, log messages will also contain the source of the message
-                        (filename and line number). (default: False)
-  -M, --monitor         Start monitoring server thread. This thread processes requests from the monitoring application.
-                        (default: False)
+  --extended-logging    Enable extended debugging. When enabled, log messages will also contain the source of the message (filename
+                        and line number). (default: False)
+  -R, --remote          Start remote API server thread. This thread processes requests from the monitoring application. (default:
+                        False)
 ```
 
 ## How To Use The Emulator
@@ -97,3 +96,33 @@ onject commands, or any data that the instantiated frontend can process.
 
 For detailed information on the emulator's operation, see the 
 [architecture description](/docs/Architecture.md) document.
+
+## Available Tools
+Vortex includes a couple of useful tools when using or, even, developing the
+emulator:
+
+### *monitor.py*
+
+This is a graphical tool that shows state, available commands and events for
+all emulated objects. It can be used to monitor the state of the emulator in
+real time.
+
+### *emulator_track.py*
+This tool is designed to query the emulator for the position of the toolhead
+and heater temperature values and then create graphs displaying that information.
+
+It was created in order to visually see whether the Klipper firmware emulation
+was doing what it was supposed todo - emulate printing of objects. When the
+print emulation is done, the graph can be used to check if the shape of the
+"printed" object matches expectations.
+
+```
+usage: emulator_track.py [-h] [--graph GRAPH] [--csv CSV] [--data DATA] [--real-time]
+
+options:
+  -h, --help     show this help message and exit
+  --graph GRAPH  Graph filename
+  --csv CSV      Output file for toolhead coordinates
+  --data DATA    Toolhead coordinates data
+  --real-time    Create dynamic graph
+```

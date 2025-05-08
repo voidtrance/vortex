@@ -78,13 +78,6 @@ class Atomic:
             raise TypeError
         self.__and(self._value, other)
         return self
-    def __ior__(self, other):
-        if isinstance(other, Atomic):
-            other = other.value
-        if not isinstance(other, int):
-            raise TypeError
-        self.__or(self._value, other)
-        return self
     def __ixor__(self, other):
         if isinstance(other, Atomic):
             other = other.value
@@ -98,7 +91,7 @@ class Atomic:
         self.__inc(self._value)
     def dec(self):
         self.__dec(self._value)
-    def exchange(self, value):
+    def exchange(self, other):
         if isinstance(other, Atomic):
             other = other.value
         if not isinstance(other, int):

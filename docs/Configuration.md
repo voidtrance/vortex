@@ -16,18 +16,61 @@ with a blank line. Skipping this line will cause parsing
 errors.
 
 ## Machine Configuration
-The configuration file requires a `machine` configuration.
+The configuration file requires a `machine` and `kinematics` sections.
 
 ```ini
 [machine]
-kinematics:
 controller:
 ```
 
 | Setting | Type | Description |
 | :- | :-: | :- |
-| kinematics | string | The machine kinematics. Some values are `cartesian`, `delta`, `corexy`, `corexz`. |
 | controller | string | This setting specifies the controller type to be used. |
+
+The `kinematics` sections defines the kinematics of the emulated machine. The content
+depends on the kinematics type.
+
+```ini
+[kinematics]
+type:
+...
+```
+
+| Setting | Type | Description |
+| :- | :-: | :- |
+| type | string | The kinematics type of the emulated machine. Currently supported types are `cartesian`, `corexy`, `corexz`, and `delta`. |
+
+For `cartesian`, `corexy`, and `corexz` machines, the sections requires the `axis_length`
+setting:
+
+```ini
+[kinematics]
+type: cartesian
+axis_length:
+```
+
+| Setting | Type | Description |
+| :- | :-: | :- |
+| axis_length | list[float] | A comma-separated list of the length of each axis of the machine. |
+
+For `delta` machines, the following setting are required:
+
+```ini
+[kinematics]
+tower_radius:
+radius:
+arm_length:
+z_length:
+tower_angle:
+```
+
+| Setting | Type | Description |
+| :- | :-: | :- |
+| tower_radius | float | The radius of the circle on which the three machine towers are located |
+| radius | float | The radius of the work surface |
+| arm_length | float | The length of the lower arms connecting the actuator on the towers to the end effector |
+| z_length | float | The working Z distance of the machine |
+| tower_angle | list[float] | A comma-separated list of angle at which each of the towers is located |
 
 ## Object Configuration Guide
 Vortex provides the following emulated HW objects:
@@ -42,7 +85,6 @@ Vortex provides the following emulated HW objects:
 In addition, the following virtual objects are also
 provided:
 * Digital Pin
-* Fan
 
 ### Motors/Stepper
 Motor/Stepper configuration user the following format:
@@ -73,14 +115,12 @@ step_pin:
 ### Axis
 ```ini
 [axis x]
-length:
 type:
 stepper:
 endstop:
 ```
 | Setting | Type | Description |
 | :--- | :---: | :--- |
-| length | float | The length of the axis in millimeters. |
 | type | char | They axis type. One of `x`, `y`, `z`, `a`, `b`, `c`, or `e` |
 | stepper | list[string] | A comma-separated list of all motors assigned to the axis. |
 | endstop | string | The name of the endstop object asigned to the axis. |
@@ -169,20 +209,15 @@ toolhead:
 offsets:
 range:
 pin:
+axes:
 ```
 | Setting | Type | Description |
 | :--- | :---: | :--- |
 | z_offset | float | The distance that the probe is offted from the tip of the tool/toolhead. |
 | range | float | The probe object attempts to provide a more realistic emulation of a real-world probe by randomizing when it triggers. This setting specifies a maximum distance (in mm) from the axis 0 position for the randomization range. The probe will trigger at a random distance between 0 and 'range'. |
 | toolhead | string | The toolhead to which the probe is attached. |
-| pin | string | The probe's output pin name |
-
-### Fan
-```ini
-[fan cooling]
-pin:
-```
-Fan objects do not have any configuration settings.
+| pin | string | The probe's output pin name. |
+| axes | list[char] | A comma-separated list of all the axis to which the probe is sensitive. An axis to which a probe is sensitive means that there is a point along the axis where the probe will trigger. |
 
 ### Toolhead
 ```ini

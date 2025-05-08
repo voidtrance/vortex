@@ -130,6 +130,45 @@ started from, prior to starting it:
 
 ### Core HW Objects
 
+As discussed above, core HW objects emulator actual HW (motors, endstops,
+sensors, etc.). These objects are created based on the emulation configuration.
+The core will create, intialize, and start the emulation of each of the
+objects defined by the configuration.
+
+Core HW objects operation has 4 main stages: creation, initialization,
+update, and destruction.
+
+During creation, the core will call the object's creation function. This
+function will allocate a new object instance, initialize the object's
+structure and return it to the core. As part of the object creation, the
+core will create a separate thread for each object.
+
+After all objects have been created, the core will go through each object and
+call its initialization function. This is an opportunity for the object to
+complete the initialization/setup of its state.
+
+When the emulation is started, the core will start each objects update
+thread. This thread will call the object's `update` function which is
+supposed to update the object's state.
+
+If the emulation is every reset, the core will pause all update threads and
+will call the object's `reset` function. This function should reset the
+object's state to some, per-object, initial state. When all of the objects
+have been reset, the core will resume the update threads.
+
+Core HW objects can implement one or both of the following control types:
+
+ 1. Core object commands - the objects define a set of commands that can
+ be submitted for execution.
+ 2. Control pins - the object can expose a "pin word" that is used to
+ to emulator object pins. For example, stepper objects can expose a
+ pin word where different bits of the word can be assigned to the
+ `enable`, `direction`, and `step` pins. The object is responsible for
+ implementing a method for monitoring the value of the pin word.
+ Usually, that take the form of a separate thread that continuously
+ reads the value and acts accordingly (see the
+ [stepper object](/src/core/objects/stepper.c) as an example).
+
 ## Frontend Architecture
 The frontends' purpose is to read command data from the Vortex serial pipe
 and convert them to object commands. Each frontend accepts a different

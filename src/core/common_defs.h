@@ -59,15 +59,63 @@ typedef struct {
  * structure.
  */
 struct core_object {
+    /*
+     * The type of the object. This is set by the
+     * object creation function.
+     */
     core_object_type_t type;
+
+    /*
+     * The object name. Set during object creation.
+     */
     const char *name;
-    LIST_ENTRY(core_object) entry;
+
+    /*
+     * Object update frequency in HZ. This is how
+     * frequently the `update` callback will be called.
+     */
     uint64_t update_frequency;
 
+    /*
+     * This member is for internal use.
+     */
+    LIST_ENTRY(core_object) entry;
+
+    /*
+     * Initialize the object.
+     * All objects are initialized before the update
+     * loop begins.
+     */
     int (*init)(core_object_t *object);
+
+    /*
+     * Reset the object state.
+     * This function is called when the emulator is
+     * reset.
+     */
     void (*reset)(core_object_t *object);
+
+    /*
+     * Object command execution function.
+     * This function is called when a command is
+     * submitted to the object.
+     *    - cmd is the command to execute.
+     *    - return value is the command ID of the
+     *      command that was executed. If the command
+     *      failed, the return value should be
+     *      CMD_ERROR_PREFIX | error_code.
+    */
     int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
-    void (*get_state)(core_object_t *object, void *);
+
+    /*
+     * Object state retrieval function.
+     * This function is called when the object
+     * state is requested.
+     *    - state is a pointer to the state structure
+     *      that will be filled by the object.
+     */
+    void (*get_state)(core_object_t *object, void *state);
+
     /*
      * Object update callback. This callback will be called
      * by the timing loop to update the object's state.
@@ -78,8 +126,16 @@ struct core_object {
      *      the emulator.
      */
     void (*update)(core_object_t *object, uint64_t ticks, uint64_t runtime);
+
+    /*
+     * Destory the object.
+     * This function should free all object resources.
+     */
     void (*destroy)(core_object_t *object);
 
+    /*
+     * This is structure is for internal use only.
+     */
     core_call_data_t call_data;
 };
 

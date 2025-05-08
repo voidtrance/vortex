@@ -25,15 +25,13 @@ could not be extended.
 The allocation cache defines the following API:
 
 * `object_cache_t` is an opaque type representing the cache.
-* `int object_cache_create(object_cache_t **cache, size_t object_size)`
-creates a new object allocation cache. `cache` will be initialized with
-the cache data and `object_size` is the size of the allocation object.
-* `void *object_cache_alloc(object_cache_t *cache)` will "allocate" an
-object from the cache. It returns an object pointer if the allocation
-is successfull or `NULL`.
-* `void object_cache_free(void *object)` frees an cache object.
-* `void object_cache_destory(object_cache_t *cache)` frees the cache and
-all its objects.
+
+| API | Description |
+| :- | :- |
+| `int object_cache_create(object_cache_t **cache, size_t object_size)` | Creates a new object llocation cache. `cache` will be initialized with the cache data and `object_size` is the size of the allocation  object. |
+| `void *object_cache_alloc(object_cache_t *cache)` | Allocate an object from the cache. It returns an object pointer if the allocation is successfull or `NULL`. |
+| `void object_cache_free(void *object)` | Free an cache object. |
+| `void object_cache_destory(object_cache_t *cache)` | Frees the cache and all its objects. |
 
 ### Random Number Generators
 The random number generators are a set of convinience functions,
@@ -61,12 +59,12 @@ The `random_<type>_limit()` variants will return a random number of
 type `<type>` that is between the values of `min` and `max`.
 
 ### Timers
-Timers are a facility that allows users to schedule callback that get
+Timers is a facility that allows users to schedule callback that get
 called at or after a specific time. The time is measured in controller
 clock ticks.
 
 Timers are implemented as part of the emulator core and provide APIs
-for both the core objects and Python users.
+for both the core objects and the Python layer.
 
 #### Core Object API
 The Core Object API uses the `core_timer_t` type to specify timers. Users
@@ -83,24 +81,151 @@ typedef struct {
 where `callback` is the callback function to be called when the timer expires
 and `data` is a pointer to private data that will be passed to the callback.
 
-* `core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout)`
-will register a timer callback to be called on or after `timeout`. The API will
-return an opaque handle that will be pass to other timer APIs.
-* `int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout)` will
-rescheule a timer callback to be called on or after `timeout`. The API will
-return `0` on success or `-1` on failure.
-* `void core_timer_unregister(core_timer_handle_t handle)` will unregister a
-registered timer.
+| API | Description |
+| :- | :- |
+| `core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout)` | Register a timer  callback to be called on or after `timeout`. The API will return an opaque handle that will be pass to other timer APIs. |
+| `int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout)` | Rescheule a timer callback to be called on or after `timeout`. The API will return `0` on success or `-1` on failure. |
+| `void core_timer_unregister(core_timer_handle_t handle)` | Unregister a registered timer. |
 
 #### Python API
 The Python timer API is defined as:
 
-* `vortex.core.register_timer(callback, timeout)` - register the callback `callback`
-to be called on or after `timeout`. The API will return a timer handle.
-* `vortex.core.reschedule_timer(timer)` - rescheuled the timer `timer`. `timer` is a
-timer handle returned by `vortex.core.register_timer()`.
-* `vortex.core.unregister_timer(timer)` - unregister the timer `timer`, which is a
-timer handle returned by `vortex.core.register_timer()`.
+| API | Description |
+| :- | :- |
+| `vortex.core.register_timer(callback, timeout)` | Register the callback `callback` to be called on or after `timeout`. The API will return a timer handle. |
+| `vortex.core.reschedule_timer(timer)` | Rescheuled the timer `timer`. `timer` is a timer handle returned by `vortex.core.register_timer()`. |
+| `vortex.core.unregister_timer(timer)` | Unregister the timer `timer`, which is a timer handle returned by `vortex.core.register_timer()`. |
+
+### Atomic Operations
+
+The core library has made available a set of APIs for hanlding atomic operations.
+The APIs are a more convinient way to use GCC's builtin atomic operations. Both a C
+and a Python API are available:
+
+There are APIs that operate on 8, 16, 32, and 64 bit values. In the list below `type`
+is one of `uint8_t`, `uint16_t`, `uint32_t`, or `uint64_t`. The name of the various
+APIs is based on the the width of the value on which they operate. Therefore, `<size>`
+is one of `8`, `16`, `32`, or `64`:
+
+#### Core C API
+| API | Description |
+| :- | :- |
+| `type atomic<size>_load(void)` | Atomically read and return a value. |
+| `void atomic<size>_store(type *ptr, type value)`| Atomically write the value `value` into a the variable pointed to by `ptr`. |
+| `type atomic<size>_exchange(type *ptr, type value)` | Atomically exchange the current value of the variable pointed to by `ptr` with the value `value` and return the old value.
+| `type atomic<size>_compare_exchange(type *ptr, type oldval, type newval)` |  Atomically compare and exchange the 
+| `type atomic<size>_add(type *ptr, type value)` | Atomically add `value` to the variable pointed to bye `ptr` and return the new value. |
+| `type atomic<size>_sub(type *ptr, type value)` | Atomically subtract `value` from the variable pointed to by `ptr` and return the new value. |
+| `type atomic<size>_inc(type *ptr)` | Atomicaly increment the value of the variable pointed to by `ptr` by one and return the new value. |
+| `type atomic<size>_dec(type *ptr)` | Atomically decrement the value of the varibale pointed to by `ptr` by one and return the new value. |
+| `type atomic<size>_and(type *ptr, type value)` | Perform a bitwise AND operation on the value of the variable pointed by `ptr` and `value` and store it. Returns the new value. |
+| `type atomic<size>_load_and(type *ptr, type value)` | Perform a bitwise AND operation on the value of the variable pointed by `ptr` and `value` and store it. Returns the original value. |
+| `type atomic<size>_or(type *ptr, type value)` | Perform a bitwise OR operation on the value of the variable pointed by `ptr` and `value` and store it. Returns the new value. |
+| `type atomic<size>_load_or(type *ptr, type value)` | Perform a bitwise OR operation on the value of the variable pointed by `ptr` and `value` and store it. Returns the original value. |
+| `type atomic<size>_xor(type *ptr, type value)` | Perform a bitwise XOR operation on the value of the variable pointed by `ptr` and `value` and store it. Returns the new value. |
+| `type atomic<size>_load_xor(type *ptr, type value)` | Perform a bitwise XOR operation on the value of the variable pointed by `ptr` and `value` and store it. Returns the original value. |
+| `type atomic<size>_not(type *ptr)` | Perform a bitwise NOT operation on the value of the variable pointed by `ptr` and `value` and store it. Returns the new value. |
+| `type atomic<size>_load_not(type *ptr)` | Perform a bitwise NOT operation on the value of the variable pointed by `ptr` and `value` and store it. Returns the original value. |
+
+#### Python API
+
+The core library includes a Python module which exposes all of the above atomic
+operations through a Python class. To use atomic operations through Python, the
+`vortex.core.lib.atomics` module needs to be imported. It contains the
+`Atomic` class:
+
+`class Atomic(size, value=0, var=None)`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Create an instance of an Atomic object. `size` is the width of
+the underlying C variable. `value` is the intial value of the atomic variable. If there
+is an existing variable passed from the core to the Python layer, its address can be
+given as the `var` value.
+
+##### Properties
+`value`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Accessing this property will atomically read and return the
+value of the variable
+
+##### Available Operations
+For the operations below, assume that a `Atomic()` instance has been created with
+`var = Atomic(8)`. All the operations are perform atomically.
+
+`var()`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Calling the instance will read and return the value of the variable.
+
+`var == other`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Compare the value of the instance to another value. The other
+value can be another `Atomic()` instance of an integer value.
+
+`var += other`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Add `other` to the value of `var`. `other` can be another instance of
+`Atomic()` or an integer.
+
+`var -= other`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Subtract `other` from the value of `var`. `other` can be another
+instance of `Atomic()` or an integer.
+
+`var |= other`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Bitwise OR the value of `var` with `other`. `other` can be another
+instance of `Atomic()` or an integer.
+
+`var &= other`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Bitwise AND the value of `var` with `other`. `other` can be another
+instance of `Atomic()` or an integer.
+
+`var ^= other`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Bitwise XOR (exclusive OR) the value of `var` with `other`.
+`other` can be another instance of `Atomic()` or an integer.
+
+`~var`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Bitwise NOT (invert) the value of `var`.
+
+`var.inc()`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Increment the value of `var` by 1.
+
+`var.dec()`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Decrement the value of `var` by 1.
+
+`var.exchange(other)`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Exchange the value of `var` with `other`. `other` can be another
+instance of `Atomic()` or an integer.
+
+`var.cmpexg(expected, new)`
+
+&nbsp;&nbsp;&nbsp;&nbsp;Compare the value of `var` to `expected` and, if equal, exchage
+it with `new`. Both `expected` and `new` can be either instances of `Atomic()` or
+integers.
+
+## Adding New Controllers
+
+Controller implementations are located in the `controllers/` directory. Each controller
+is a subclass if `vortex.controllers.Controller`.
+
+## Adding New Frontends
+
+Frontend implementations are located in the `frontends/` directory. Each frontend
+implementation should be in its own sub-directory under `frontends/` and all its files
+should also be placed there.
+
+Frontend implementations should all be a sub-class of `vortex.frontends.BaseFrontend`.
+They should all implement the `_process_command()` method. This method accepts a single
+argument - `data` - which is the data sent to the frontend instance through the
+`/tmp/vortex` socket.
+
+Additionally, frontend can override any of the `BaseFrontend`'s methods in order to
+implement custom functionality.
 
 ## Adding New HW Objects
 HW objects are implemented as C shared libraries which
@@ -143,14 +268,63 @@ The `core_object_t` structure has the following definition:
  * structure.
  */
 struct core_object {
+    /*
+     * The type of the object. This is set by the
+     * object creation function.
+     */
     core_object_type_t type;
+
+    /*
+     * The object name. Set during object creation.
+     */
     const char *name;
+
+    /*
+     * Object update frequency in HZ. This is how
+     * frequently the `update` callback will be called.
+     */
+    uint64_t update_frequency;
+
+    /*
+     * This member is for internal use.
+     */
     LIST_ENTRY(core_object) entry;
 
+    /*
+     * Initialize the object.
+     * All objects are initialized before the update
+     * loop begins.
+     */
     int (*init)(core_object_t *object);
+
+    /*
+     * Reset the object state.
+     * This function is called when the emulator is
+     * reset.
+     */
     void (*reset)(core_object_t *object);
+
+    /*
+     * Object command execution function.
+     * This function is called when a command is
+     * submitted to the object.
+     *    - cmd is the command to execute.
+     *    - return value is the command ID of the
+     *      command that was executed. If the command
+     *      failed, the return value should be
+     *      CMD_ERROR_PREFIX | error_code.
+    */
     int (*exec_command)(core_object_t *object, core_object_command_t *cmd);
-    void (*get_state)(core_object_t *object, void *);
+
+    /*
+     * Object state retrieval function.
+     * This function is called when the object
+     * state is requested.
+     *    - state is a pointer to the state structure
+     *      that will be filled by the object.
+     */
+    void (*get_state)(core_object_t *object, void *state);
+
     /*
      * Object update callback. This callback will be called
      * by the timing loop to update the object's state.
@@ -161,8 +335,16 @@ struct core_object {
      *      the emulator.
      */
     void (*update)(core_object_t *object, uint64_t ticks, uint64_t runtime);
+
+    /*
+     * Destory the object.
+     * This function should free all object resources.
+     */
     void (*destroy)(core_object_t *object);
 
+    /*
+     * This is structure is for internal use only.
+     */
     core_call_data_t call_data;
 };
 ```
@@ -183,19 +365,7 @@ The following members of `core_object_t` must be set:
 
 The `entry` and `call_data` members are for internal use.
 
-All other members are optional. Below are descriptions of their purpose:
-
-* `init` is a function that will initialize the instance. The different
-between creating and initializing an instance is that initialization is
-done after all objects have been created. Therefore, object that need to
-lookup other objects can successfully do that without the need to worry
-about object creation sequences.
-* `exec_command` is a function that will accept and "execute" commands
-sent to the object instance. Executing commands should not be a blocking
-process. In other words, when this function is called, it should update
-the instance state to record the submitted command and then execute the
-command in the object's `update` function.
-* `get_state` is a function that will return the object instance's state.
+All other members are optional.
 
 #### Adding New HW Object Types
 Adding new HW objects involves several steps described below.
@@ -354,19 +524,20 @@ The following is an example of a virtual object that implements a :
 
 ```python
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectTypes
+from vortex.core import ObjectEvents
 
 class MyVirtualObject(vobj.VirtualObjectBase):
-    type = ModuleTypes.NEW_TYPE
+    type = ObjectTypes.NEW_TYPE
     commands = [(0, {'opt1': }, defaults)]
-    events = [ModuleEvents.COMMAND_COMPLETE]
+    events = [ObjectEvents.COMMAND_COMPLETE]
     def __init__(self):
         super().__init__(self)
         self.run_command[0] = self.my_virtual_obj_command
     def exec_command(self, cmd_id, cmd, args):
         super().exec_command(cmd_id, cmd, args)
         status = self.run_command[cmd](args)
-        self.event_submit(ModuleEvents.COMMAND_COMPLETE,
+        self.event_submit(ObjectEvents.COMMAND_COMPLETE,
                         {"status": status})
         self.complete_command(cmd_id, status)
     def my_virtual_obj_command(self, args):
@@ -419,3 +590,31 @@ messages only from the stepper HW object with the name `stepperX`.
 Filters also support the `*` wildcard character, which matches any value for the section
 where it is found. For example, `core.*.stepperX` will match all massages from any HW
 objects with the name `stepperX`.
+
+### Submitting Log Messages
+The Python layer uses customized Logger objects for logging purposes. It is modified to
+implement the filtering described above.
+
+To add logging to Python layer code, a `VortexLogger` object must be created first:
+
+```python
+from vortex.frontends import BaseFrontend
+import vortex.lib.logging as logging
+
+class MyFrontendClass(BaseFrontend):
+    def __init__(self):
+        super().__init__()
+        self.logger = logging.getLogger("vortex.myfrontend")
+
+    def _process_command(self, data):
+        self.logger.debug("Received data: %s", data)
+```
+
+The name of the Logger is passed to `logging.getLogger()` and is used for filtering
+log messages.
+
+The emulator also hooks up the Python logging to all of the C code, as well. When
+the core initializes, it creates a `VortexLogger()` object for the core, itself, as
+well as a separate logger for each HW object. The name of the core logger is
+`vortex.core` and the name of the loggers for each HW object is
+`vortex.core.<object type>.<object name>`.
