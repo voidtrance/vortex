@@ -46,6 +46,9 @@ STATIC_STRINGS = [
     "Scheduled digital out event will exceed max duration",
 ]
 
+def div_round_up(x, y):
+    return (x + y - 1) // y
+
 class KlipperFrontend(BaseFrontend):
     STATS_SUMSQ_BASE = 256
     def __init__(self):
@@ -162,12 +165,30 @@ class KlipperFrontend(BaseFrontend):
     def klipper_stats(self, ticks):
         diff = ticks - self.start_tick
         self.stats_sum += diff
+        self.stats_count += 1
+        if diff <= 0xffff:
+            nextsumq = self.stats_sumsq + div_round_up(diff * diff, self.STATS_SUMSQ_BASE)
+        elif diff <= 0xfffff:
+            nextsumq = self.stats_sumsq + div_round_up(diff, self.STATS_SUMSQ_BASE) * diff
+        else:
+            nextsumq = 0xffffffff
+        if (nextsumq < self.stats_sumsq):
+            nextsumq = 0xffffffff
+        self.stats_sumsq = nextsumq
         stat_period = self.timers.from_us(5000000)
         if self.timers.is_before(ticks, self._stats_sent_time + stat_period):
             return ticks + self.timers.from_us(100000)
+        self.respond(proto.ResponseTypes.RESPONSE,
+                     proto.KLIPPER_PROTOCOL.basecmd.stats,
+                     count=self.stats_count,
+                     sum=self.stats_sum,
+                     sumsq=self.stats_sumsq)
         if ticks < self._stats_sent_time:
             self._clock_high += 1
         self._stats_sent_time = ticks
+        self.stats_count = 0
+        self.stats_sum = 0
+        self.stats_sumsq = 0
         return ticks + self.timers.from_us(100000)
 
     def run(self):
