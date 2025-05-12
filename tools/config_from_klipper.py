@@ -305,6 +305,33 @@ def generate_digital_pin_config(section : str, kconfig : Type[configparser.Confi
     generate_digital_pin(section, name, kconfig.get(section, "pin"), kconfig, econfig)
     return
 
+def generate_display_config(section : str, kconfig :Type[configparser.ConfigParser],
+                            econfig : Type[configparser.ConfigParser]) -> None:
+    print(f"Generating display config for section '{section}'...")
+    klass, _, name = section.partition(" ")
+    if not name:
+        name = klass
+    s = f"display {name.upper()}"
+    econfig.add_section(s)
+    econfig.set(s, "type", kconfig.get(section, "lcd_type"))
+    econfig.set(s, "cs_pin", parse_pin(kconfig.get(section, "cs_pin")))
+    econfig.set(s, "reset_pin", parse_pin(kconfig.get(section, "rst_pin")))
+    econfig.set(s, "data_pin", parse_pin(kconfig.get(section, "a0_pin")))
+    econfig.set(s, "spi_miso_pin",
+                parse_pin(kconfig.get(section, "spi_software_miso_pin")))
+    econfig.set(s, "spi_mosi_pin",
+                parse_pin(kconfig.get(section, "spi_software_mosi_pin")))
+    econfig.set(s, "spi_sclk_pin",
+                parse_pin(kconfig.get(section, "spi_software_sclk_pin")))
+    if kconfig.has_option(section, "encoder_pins"):
+        pins = [x.strip() for x in kconfig.get(section, "encoder_pins").split(",")]
+        for i, pin in enumerate(pins):
+            generate_digital_pin(section, f"ENCODER_{i}", pin, kconfig, econfig)
+    if kconfig.has_option(section, "click_pin"):
+        generate_digital_pin(section, "DISPLAY_CLICK", kconfig.get(section, "click_pin"),
+                        kconfig, econfig)
+    return
+
 def generate_kinematics_config(kconfig : Type[configparser.ConfigParser],
                                econfig : Type[configparser.ConfigParser]) -> bool:
     econfig.add_section("kinematics")
@@ -351,6 +378,7 @@ KLIPPER_SECTION_HANDLERS = {
     "fan": generate_dpin_config,
     "temperature_sensor": generate_thermistor_config,
     "button": generate_digital_pin_config,
+    "display": generate_display_config,
 }
 
 parser = argparse.ArgumentParser()

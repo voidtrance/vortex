@@ -22,6 +22,12 @@ class STM32F446(Controller):
             Pins("PC", 0, 15), Pins("PD", 0, 15),
             Pins("PE", 0, 15), Pins("PF", 0, 15),
             Pins("PG", 0, 15), Pins("PH", 0, 15)]
+    SPI = [["PA6", "PA7", "PA5"],
+           ["PB4", "PB5", "PB3"],
+           ["PB14", "PB15", "PB13"],
+           ["PC2", "PC3", "PB10"],
+           ["PC11", "PC12", "PC10"],
+           ["PE13", "PE14", "PE12"]]
     FREQUENCY = 12000000
     MOTOR_COUNT = 8
     PWM_COUNT = 8

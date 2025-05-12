@@ -142,6 +142,10 @@ class KlipperFrontend(BaseFrontend):
             self._add_commands(proto.KLIPPER_PROTOCOL.pwmcmds)
             self.identity["config"]["ADC_MAX"] = self.query_hw("ADC_MAX")
 
+        if len(self.query_hw("SPI")):
+            self._add_commands(proto.KLIPPER_PROTOCOL.spicmds)
+            self._add_commands(proto.KLIPPER_PROTOCOL.spi_software)
+
         if self.find_object(ObjectTypes.DISPLAY) is not None:
             self._add_commands(proto.KLIPPER_PROTOCOL.buttons)
 
@@ -338,6 +342,11 @@ class KlipperFrontend(BaseFrontend):
             if stepper is None or not stepper.owns_pin(pin):
                 return False
             pin = stepper.configure_pin(oid, pin)
+        elif klass == ObjectTypes.DISPLAY:
+            display = self.find_existing_object(obj_id)
+            if display is None or not display.owns_pin(pin):
+                return False
+            pin = display.configure_pin(oid, pin)
         else:
             pin = DigitalPin(self, oid, obj_id, klass, name)
         if not isinstance(pin, DigitalPin):
@@ -443,6 +452,32 @@ class KlipperFrontend(BaseFrontend):
         trsync.trigger(reason)
         trsync.report(0)
         return True
+
+    def config_spi(self, cmd, oid, pin, cs_active_high):
+        obj_id, klass = self._find_object(pin)
+        if obj_id is None:
+            return False
+        name = self.get_object_name(klass, obj_id)
+        self._oid_map[oid] = SPI(self, oid, obj_id, klass, name, pin, cs_active_high)
+        return True
+
+    def spi_set_software_bus(self, cmd, oid, miso_pin, mosi_pin, sclk_pin, mode, rate):
+        spi = self._oid_map[oid]
+        return spi.set_sw_bus(miso_pin, mosi_pin,sclk_pin, mode, rate)
+
+    def spi_send(self, cmd, oid, data):
+        spi = self._oid_map[oid]
+        result = spi.send(data)
+        return result >= 0
+
+    def spi_transfer(self, cmd, oid, data):
+        spi = self._oid_map[oid]
+        result = spi.send(data, True)
+        if isinstance(result, bytes):
+            self.respond(proto.ResponseTypes.RESPONSE, cmd, data=result)
+            return True
+        else:
+            return result >= 0
 
     def config_buttons(self, cmd, oid, button_count):
         self._oid_map[oid] = Buttons(self, oid, -1, ObjectTypes.NONE, "", button_count)

@@ -85,6 +85,7 @@ Vortex provides the following emulated HW objects:
 In addition, the following virtual objects are also
 provided:
 * Digital Pin
+* Display
 
 ### Motors/Stepper
 Motor/Stepper configuration user the following format:
@@ -234,3 +235,34 @@ axes:
 pin:
 ```
 Digital pin objects do not have any settings.
+
+### Display
+
+```ini
+[display screen]
+type:
+cs_pin:
+reset_pin:
+data_pin:
+spi_miso_pin:
+spi_mosi_pin:
+spi_sclk_pin:
+```
+
+Most of the below configuration settings are meant for supporting SPI emulation (for example,
+the Klipper frontend). The settings will claim ownership of the specified pins in order for
+frontends to be able to find the correct object based on pin names.
+
+The only setting that applies to the display object that is not meant for SPI controll objects
+is the `type` setting.
+
+
+| Setting | Type | Description |
+| :--- | :---: | :--- |
+| type | string | The type of the display. Currently, only UC1701 displays are supported. |
+| cs_pin | string | The chip select pin. |
+| reset_pin | string | The display reset pin. When this pin goes HIGH, the display is supposed to clear all internal state and reset it to its default values. |
+| data_pin | string | This is the pin that determines if the data sent from the SPI interface is control or data. |
+| spi_miso_pin | string | SPI MISO pin. |
+| spi_mosi_pin | string | SPI MOSI pin. |
+| spin_sclk_pin | string | SPI SCLK pin. |

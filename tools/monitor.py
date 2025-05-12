@@ -17,12 +17,13 @@
 import sys
 import socket
 import pickle
+import time
 import gi
 from vortex.core import ObjectTypes
 import vortex.emulator.remote.api as api
 gi.require_version("Gtk", "3.0")
 gi.require_version('GLib', '2.0')
-from gi.repository import Gtk, GLib, GObject
+from gi.repository import Gtk, GLib, GObject, GdkPixbuf
 from argparse import Namespace
 
 socket_path = "/tmp/vortex-remote"
@@ -48,6 +49,52 @@ class KlassObject(Gtk.Box):
     def set_value(self, prop, value):
         self.properties[prop].set_text(str(value))
     
+class DisplayKlassObject(KlassObject):
+    def __init__(self, name):
+        super().__init__(name)
+        self.top_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.prop_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.image = Gtk.Image()
+        self.image.set_hexpand(True)
+        self.image.set_vexpand(True)
+        self.image.set_halign(Gtk.Align.START)
+        self.top_box.pack_start(self.prop_box, True, True, 3)
+        self.top_box.pack_start(self.image, True, True, 3)
+        self.pack_end(self.top_box, True, True, 3)
+        self.width = 0
+        self.height = 0
+    def add_property(self, prop):
+        label = Gtk.Label(label=prop)
+        label.set_xalign(0.)
+        self.properties[prop] = Gtk.Entry()
+        self.properties[prop].editable = False
+        self.properties[prop].can_focus = False
+        self.prop_box.pack_end(self.properties[prop], False, False, 3)
+        self.prop_box.pack_end(label, False, False, 3)
+    def set_size(self, width, height):
+        self.width = width
+        self.height = height
+    def update(self, data):
+        pixels = [0] * self.width * self.height * 3
+        for byte in range(8):
+            for bit in range(8):
+                for column in range(self.width):
+                    if data[column][byte] & (1 << bit):
+                        self._put_pixel(pixels, column, byte * 8 + bit, 255, 255, 255)
+                    else:
+                        self._put_pixel(pixels, column, byte * 8 + bit, 0, 0, 0)
+        b = GLib.Bytes.new(pixels)
+        pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(b, GdkPixbuf.Colorspace.RGB, False, 8,
+                                                  self.width, self.height,
+                                                  self.width * 3)
+        pixbuf = pixbuf.scale_simple(int(self.width * 1.5), int(self.height * 1.5),
+                            GdkPixbuf.InterpType.BILINEAR)
+        self.image.set_from_pixbuf(pixbuf)
+    def _put_pixel(self, pixels, x, y, r, g, b):
+        offset = y * self.width + x
+        pixels[offset * 3 + 0] = r
+        pixels[offset * 3 + 1] = g
+        pixels[offset * 3 + 2] = b
 
 class KlassCommandOption:
     def __init__(self, name, type):
@@ -56,8 +103,15 @@ class KlassCommandOption:
         self.widget = None
     def get_widget(self):
         if self.type == bool:
-            self.widget = Gtk.CheckButton(label=self.name)
-            self.widget.set_active(False)
+            self.widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            self.r1 = Gtk.RadioButton.new()
+            l = Gtk.Label(label="On")
+            self.r1.add(l)
+            self.widget.pack_start(self.r1, False, False, 3)
+            r2 = Gtk.RadioButton.new_with_label_from_widget(self.r1, "Off")
+            self.widget.pack_start(r2, False, False, 3)
+            r3 = Gtk.RadioButton.new_with_label_from_widget(self.r1, "Toggle")
+            self.widget.pack_start(r3, False, False, 3)
             widget = self.widget
         else:
             widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -68,7 +122,10 @@ class KlassCommandOption:
         return widget
     def get_value(self):
         if self.type == bool:
-            return self.widget.get_active()
+            for i, r in enumerate(self.r1.get_group()):
+                if r.get_active():
+                    return 2 - i
+            return False
         return self.type(self.widget.get_text())
 
 class KlassCommands(Gtk.Box):
@@ -106,6 +163,16 @@ class KlassCommands(Gtk.Box):
         opts = {}
         for opt in cmd_opts:
             opts[opt.name] = opt.get_value()
+        if self.klass is ObjectTypes.DIGITAL_PIN:
+            if opts["state"] == 2:
+                opts[opt.name] = True
+                self.callback(self.klass, model[iter][0], cmd_id, opts)
+                time.sleep(0.01)
+                opts[opt.name] = False
+                self.callback(self.klass, model[iter][0], cmd_id, opts)
+                return
+            else:
+                opts[opt.name] = not(bool(opts[opt.name]))
         self.callback(self.klass, model[iter][0], cmd_id, opts)
     def clear(self):
         self._object_store.clear()
@@ -132,6 +199,8 @@ class KlassFrame(Gtk.Frame):
     def add_object(self, obj_id, name, obj):
         scroll = Gtk.ScrolledWindow()
         scroll.add(obj)
+        if isinstance(obj, DisplayKlassObject):
+            scroll.set_min_content_height(150)
         self.top_box.pack_start(scroll, True, True, 3)
         self._objects[obj_id] = obj
     def add_commands(self, cmds):
@@ -269,12 +338,20 @@ class MainWindow(Gtk.Window):
                 # then the entries added before the corresponding
                 # label.
                 obj_set.append((obj["id"], obj["name"]))
-                kobj = KlassObject(obj["name"])
+                if klass is ObjectTypes.DISPLAY:
+                    kobj = DisplayKlassObject(obj["name"])
+                else:
+                    kobj = KlassObject(obj["name"])
                 props = list(data[obj["id"]].keys())
                 props.reverse()
                 for j, prop in enumerate(props):
-                    kobj.add_property(prop)
-                    kobj.set_value(prop, data[obj["id"]][prop])
+                    if klass is ObjectTypes.DISPLAY and prop == "data":
+                        kobj.set_size(data[obj["id"]]["width"],
+                                      data[obj["id"]]["height"])
+                        kobj.update(data[obj["id"]][prop])
+                    else:
+                        kobj.add_property(prop)
+                        kobj.set_value(prop, data[obj["id"]][prop])
                 self.klass_frames[klass].add_object(obj["id"], obj["name"], kobj)
             kcmds = KlassCommands(klass, obj_set, self.exec_cmd)
             for i, cmd in enumerate(self.emulation_data.commands[klass]):
@@ -388,8 +465,11 @@ class MainWindow(Gtk.Window):
                 obj_id = obj["id"]
                 kobj = self.klass_frames[klass].get_object(obj_id)
                 for prop in status[obj_id]:
-                    value = self.get_data_value(status[obj_id][prop])
-                    kobj.set_value(prop, value)
+                    if klass is ObjectTypes.DISPLAY and prop == "data":
+                        kobj.update(status[obj_id][prop])
+                    else:
+                        value = self.get_data_value(status[obj_id][prop])
+                        kobj.set_value(prop, value)
         return self.run_update
     
     def destroy(self, button):

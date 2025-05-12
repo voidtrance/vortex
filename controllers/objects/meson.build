@@ -13,5 +13,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['object_defs.py', 'vobj_base.py', 'pwm_pin.py', 'dpin.py'],
+py.install_sources(['object_defs.py', 'vobj_base.py', 'pwm_pin.py', 'dpin.py',
+                    'display.py'],
                    subdir: 'vortex/controllers/objects')

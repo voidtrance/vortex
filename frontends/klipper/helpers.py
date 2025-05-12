@@ -23,7 +23,7 @@ from vortex.core import ObjectTypes
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
-           "Stepper", "TRSync", "Buttons"]
+           "Stepper", "TRSync", "SPI", "Buttons"]
 
 class MoveQueue:
     def __init__(self, size):
@@ -542,6 +542,78 @@ class TRSync(HelperBase):
             del self.expire_timer
         except (NameError, AttributeError):
             pass
+
+class SPIDataPin(DigitalPin):
+    def __init__(self, frontend, oid, obj_id, klass, name, device):
+        super().__init__(frontend, oid, obj_id, klass, name)
+        self._spi_dev = device
+    def _set_pin(self, value):
+        self._spi_dev.enable_data(value)
+class SPIResetPin(DigitalPin):
+    def __init__(self, frontend, oid, obj_id, klass, name, device):
+        super().__init__(frontend, oid, obj_id, klass, name)
+        self._spi_dev = device
+    def _set_pin(self, value):
+        self._spi_dev.reset(value)
+
+class SPI(HelperBase):
+    def __init__(self, frontend, oid, obj_id, klass, name, pin, cs_high=False):
+        super().__init__(frontend, oid, obj_id, klass, name)
+        status = self.frontend.query_object([obj_id])[obj_id]
+        self._pins = {k: v for k, v in status.items() if "pin" in k}
+        self.klass = klass
+        self._bus = []
+        self._cs_pin = pin
+        self._cs_high = cs_high
+        self._data_enabled = False
+        self._log = logging.getLogger(f"vortex.frontend.spi.{oid}")
+    def owns_pin(self, pin):
+        return pin in self._pins.values()
+    def set_bus(self, bus):
+        spi_buses = self.frontend.query_hw("SPI")
+        self._bus = spi_buses[bus]
+    def set_sw_bus(self, miso, mosi, sclk, mode, rate):
+        if self._pins["spi_miso_pin"] != miso or \
+            self._pins["spi_mosi_pin"] != mosi or \
+            self._pins["spi_sclk_pin"] != sclk:
+            return False
+        return True
+    def configure_pin(self, oid, pin):
+        for name, obj_pin in self._pins.items():
+            if pin != obj_pin:
+                continue
+            if name == "data_pin":
+                pin = SPIDataPin(self.frontend, oid, self.id, self.klass,
+                                 self.name, self)
+            elif name == "reset_pin":
+                pin = SPIResetPin(self.frontend, oid, self.id, self.klass,
+                                  self.name, self)
+            else:
+                return None
+            setattr(self, name, pin)
+            return pin
+        return None
+    def send(self, data, with_response=False):
+        cmd_id = self.frontend.queue_command(self.klass, self.name, "write",
+                                             {"is_data": self._data_enabled, "data": data})
+        if cmd_id is False:
+            return -1
+        result = self.frontend.wait_for_command(cmd_id)[0]
+        if result < 0:
+            return result
+        if with_response:
+            status = self.frontend.query_object([self.id])[self.id]
+            return status["response"]
+        return 0
+    def enable_data(self, value):
+        self._data_enabled = value
+    def reset(self, value):
+        cmd_id = self.frontend.queue_command(self.klass, self.name, "reset", {})
+        if cmd_id is False:
+            return -1
+        result = self.frontend.wait_for_command(cmd_id)[0]
+        if result < 0:
+            return result
 
 class ButtonsState(enum.IntEnum):
     NONE = 0
