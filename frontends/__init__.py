@@ -180,7 +180,7 @@ class BaseFrontend:
         with self._command_completion_lock:
             completed = set(self._command_results.keys())
         while not cmd_set & completed:
-            time.sleep(0.5)
+            time.sleep(0.01)
             with self._command_completion_lock:
                 completed = set(self._command_results.keys())
         return [self._command_results[i] for i in cmd_set]
