@@ -86,6 +86,7 @@ In addition, the following virtual objects are also
 provided:
 * Digital Pin
 * Display
+* Encoder
 
 ### Motors/Stepper
 Motor/Stepper configuration user the following format:
@@ -266,3 +267,19 @@ is the `type` setting.
 | spi_miso_pin | string | SPI MISO pin. |
 | spi_mosi_pin | string | SPI MOSI pin. |
 | spin_sclk_pin | string | SPI SCLK pin. |
+
+### Encoder
+```ini
+[encoder enc]
+pin_a:
+pin_b:
+```
+
+This object emulates a rotary encoder. When a `pulses` command is submitted, it will toggle
+the `pin_a` and `pin_b` pins in sequency with a small delay in between in order to simulate
+that phase offset of the two pins.
+
+| Setting | Type | Description |
+| :--- | :---: | :--- |
+| pin_a | string | The first pin in the encoder. |
+| pin_b | string | The second pin in the encoder. |

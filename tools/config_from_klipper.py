@@ -305,7 +305,22 @@ def generate_digital_pin_config(section : str, kconfig : Type[configparser.Confi
     generate_digital_pin(section, name, kconfig.get(section, "pin"), kconfig, econfig)
     return
 
-def generate_display_config(section : str, kconfig :Type[configparser.ConfigParser],
+def generate_encoder_config(section : str, pins : list[str],
+                            econfig : Type[configparser.ConfigParser]) -> bool:
+    if len(pins) != 2:
+        print("Pin list has to have only two pins in it.")
+        return False
+    print(f"Generating ecoder config for section '{section}...")
+    klass, _, name = section.partition(" ")
+    if not name:
+        name = klass
+    s = f"encoder {name.upper()}"
+    econfig.add_section(s)
+    econfig.set(s, "pin_a", pins[0])
+    econfig.set(s, "pin_b", pins[1])
+    return True
+
+def generate_display_config(section : str, kconfig : Type[configparser.ConfigParser],
                             econfig : Type[configparser.ConfigParser]) -> None:
     print(f"Generating display config for section '{section}'...")
     klass, _, name = section.partition(" ")
@@ -325,8 +340,7 @@ def generate_display_config(section : str, kconfig :Type[configparser.ConfigPars
                 parse_pin(kconfig.get(section, "spi_software_sclk_pin")))
     if kconfig.has_option(section, "encoder_pins"):
         pins = [x.strip() for x in kconfig.get(section, "encoder_pins").split(",")]
-        for i, pin in enumerate(pins):
-            generate_digital_pin(section, f"ENCODER_{i}", pin, kconfig, econfig)
+        generate_encoder_config(section, pins, econfig)
     if kconfig.has_option(section, "click_pin"):
         generate_digital_pin(section, "DISPLAY_CLICK", kconfig.get(section, "click_pin"),
                         kconfig, econfig)

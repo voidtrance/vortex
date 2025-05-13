@@ -162,7 +162,7 @@ class KlipperFrontend(BaseFrontend):
             object_status = self.query_object(objects)
             for obj_id, status in object_status.items():
                 for k, v in status.items():
-                    if k == "pin" or "_pin" in k:
+                    if k == "pin" or "_pin" in k or "pin_" in k:
                         pmap[klass][v] = obj_id
         return pmap
 
@@ -485,11 +485,12 @@ class KlipperFrontend(BaseFrontend):
 
     def buttons_add(self, cmd, oid, pos, pin, pull_up):
         buttons = self._oid_map[oid]
-        button, klass = self._find_object(pin, ObjectTypes.DIGITAL_PIN)
+        button, klass = self._find_object(pin, ObjectTypes.DIGITAL_PIN,
+                                          ObjectTypes.ENCODER)
         if button is None:
             return False
         name = self.get_object_name(klass, button)
-        return buttons.add_button(pos, button, klass, name, pull_up)
+        return buttons.add_button(pos, button, klass, pin, pull_up)
 
     def buttons_query(self, cmd, oid, clock, rest_ticks, retransmit_count, invert):
         buttons = self._oid_map[oid]

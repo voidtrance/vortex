@@ -666,7 +666,7 @@ class Buttons(HelperBase):
         if position >= self._count:
             self.frontend.shutdown("Set button past maximum button count")
             return False
-        self._buttons[position] = button_id
+        self._buttons[position] = (klass, name, button_id)
         return True
     def query(self, cmd, clock, rest_ticks, retransmit_count, invert):
         self._cmd = cmd
@@ -684,10 +684,13 @@ class Buttons(HelperBase):
             self._reports[:count] = self._reports[count:]
             self._report_count -= count
     def event(self, ticks):
-        states = self.frontend.query_object(self._buttons)
+        states = self.frontend.query_object([b[2] for b in self._buttons])
         status = 0
-        for i, button in enumerate(self._buttons):
-            if states[button]["state"]:
+        for i, (klass, name, button) in enumerate(self._buttons):
+            state = states[button]["state"]
+            if klass == ObjectTypes.ENCODER:
+                state = state[name]
+            if state:
                 status |= (1 << i)
         diff = status ^ self._pressed
         if diff:
