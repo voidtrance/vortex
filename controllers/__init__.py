@@ -175,6 +175,7 @@ class Controller(core.VortexCore):
         self._objects = _Objects()
         self.objects = ObjectLookUp(self._objects)
         self.object_defs = {x: None for x in core.ObjectTypes}
+        self.object_factory = {x: None for x in core.ObjectTypes}
         self._virtual_objects = {}
         self._completion_callback = None
         self._event_handlers = {}
@@ -186,7 +187,7 @@ class Controller(core.VortexCore):
     def timers(self):
         return self._timer_factory
     def _load_virtual_objects(self):
-        vobjs = []
+        vobjs = {}
         mod_base = "vortex.controllers.objects"
         vobj_base = importlib.import_module(f"{mod_base}.vobj_base")
         base_class = getattr(vobj_base, "VirtualObjectBase")
@@ -196,38 +197,50 @@ class Controller(core.VortexCore):
             members = inspect.getmembers(vobj_module, inspect.isclass)
             for name, member in members:
                 if issubclass(member, base_class) and member is not base_class:
-                    vobjs.append(member)
+                    if member.type in vobjs:
+                        funcs = inspect.getmembers(vobj_module, inspect.isfunction)
+                        match = [f for n, f in funcs if n.lower() == f"{member.type}factory".lower()]
+                        if match:
+                            vobjs[member.type] = match[0]
+                        else:
+                            raise core.VortexCoreError(f"Duplicate virtual object type '{member.type}'")
+                    else:
+                        vobjs[member.type] = member
         return vobjs
     def _load_objects(self, config):
         module = importlib.import_module("vortex.controllers.objects.object_defs")
         base = getattr(module, "ObjectDef")
         members = inspect.getmembers(module, inspect.isclass)
         members = [x for x in members if x[1] is not base]
-        object_defs = [klass for name, klass in members \
+        object_factory = [klass for name, klass in members \
                        if issubclass(klass, base)]
-        available_objects = [x() for x in object_defs]
-        self.object_defs.update({core.ObjectTypes[x.__class__.__name__.upper()]: x \
+        available_objects = [x() for x in object_factory]
+        self.object_factory.update({core.ObjectTypes[x.__class__.__name__.upper()]: x \
                                     for x in available_objects})
         available_objects = self._load_virtual_objects()
-        self.object_defs.update({x.type: x for x in available_objects})
+        self.object_factory.update(available_objects)
         for klass, name, options in config:
-            if klass not in self.object_defs or \
-                self.object_defs[klass] is None:
+            if klass not in self.object_factory or \
+                self.object_factory[klass] is None:
                 self.log.error(f"No definitions for klass '{klass}'")
                 continue
             res, pin = self._verify_pins(options)
             if res != True:
                 raise core.VortexCoreError(f"Unknown pin {pin} for object {name}")
-            if self.object_defs[klass].virtual:
-                obj = self.object_defs[klass](options, self.objects,
-                                              self.query_objects,
-                                              self.virtual_command_complete,
-                                              self.event_submit)
+            if getattr(self.object_factory[klass], "virtual", False) or \
+                inspect.isfunction(self.object_factory[klass]):
+                self.log.verbose(f"Creating object {klass}:{name}")
+                obj = self.object_factory[klass](options, self.objects,
+                                                 self.query_objects,
+                                                 self.virtual_command_complete,
+                                                 self.event_submit)
+                self.object_defs[klass] = obj.__class__
                 object_id = self.register_virtual_object(klass, name)
                 obj._id = object_id
                 self._virtual_objects[object_id] = obj
             else:
-                obj_conf = self.object_defs[klass].config()
+                self.object_defs[klass] = self.object_factory[klass]
+                obj_conf = self.object_factory[klass].config()
                 if klass == core.ObjectTypes.THERMISTOR:
                     options.adc_max = self.ADC_MAX
                 options = vortex.lib.ctypes_helpers.expand_substruct_config(options,

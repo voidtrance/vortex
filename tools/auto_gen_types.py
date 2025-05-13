@@ -56,7 +56,8 @@ def find_new_types(object_list):
                     if cnode.targets[0].id == "type":
                         if cnode.value.value.id != "ObjectTypes":
                             continue
-                        new_types.append(cnode.value.attr)
+                        if cnode.value.attr not in new_types:
+                            new_types.append(cnode.value.attr)
                     elif cnode.targets[0].id == "events":
                         if not isinstance(cnode.value, ast.List):
                             continue
@@ -64,7 +65,8 @@ def find_new_types(object_list):
                         for elnt in lnode.elts:
                             if elnt.value.id != "ObjectEvents":
                                 continue
-                            new_events.append(elnt.attr)
+                            if elnt.attr not in new_events:
+                                new_events.append(elnt.attr)
     return new_types, new_events
 
 def gen_types(output_file, types):

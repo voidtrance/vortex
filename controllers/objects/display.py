@@ -199,3 +199,10 @@ class UC1701(Display):
         return
     def update_state(self):
         return
+
+def DisplayFactory(config, obj_lookup, obj_query, cmd_complete, event_submit):
+    if config.type is None:
+        raise ValueError("DisplayProxy: type is not set")
+    if config.type == "uc1701":
+        return UC1701(config, obj_lookup, obj_query, cmd_complete, event_submit)
+    raise ValueError(f"DisplayProxy: Unknown type {config.type}")
