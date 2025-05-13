@@ -111,7 +111,14 @@ def connect(path):
 
 def get(conn, request):
     conn.sendall(pickle.dumps(request))
-    data = conn.recv(8192)
+    data = b""
+    incoming = conn.recv(8192)
+    while incoming:
+        data += incoming
+        try:
+            incoming = conn.recv(1024, socket.MSG_DONTWAIT)
+        except BlockingIOError:
+            break
     return pickle.loads(data)
 
 def get_toolhead_id(conn):
@@ -216,7 +223,7 @@ def run_dash_server(connection, toolhead, *heaters):
             dcc.Interval(id="interval-component", interval=40, n_intervals=0)
         ],
         style={'border': '1px solid #3f87a6', 'display': 'inline-block'}),
-        html.Div(["Heater Tracking"], id='toolhead-tracking',
+        html.Div(["Heater Tracking"], id='heater-tracking',
                  style={'fontSize': 18, 'textAlign': 'center',
                         'backgroundColor': '#3f87a6', 'width': '1802px',
                         'margin-top': '10px'}),

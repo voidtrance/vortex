@@ -14,8 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import queue
-from collections import OrderedDict
-
 class Command:
     def __init__(self, obj_id, cmd_id, opts):
         self.obj_id, self.cmd_id, self.opts = \
