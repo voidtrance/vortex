@@ -366,14 +366,13 @@ axis_t *object_create(const char *name, void *config_ptr) {
     switch (kinematics) {
     case KINEMATICS_COREXY:
         if ((axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Y) &&
-            axis->n_motors != 2) {
+            axis->n_motors != 2)
             goto error;
-        }
     case KINEMATICS_COREXZ:
-        if ((axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Z) &&
-            axis->n_motors != 2) {
+        if (kinematics == KINEMATICS_COREXZ &&
+            (axis->type == AXIS_TYPE_X || axis->type == AXIS_TYPE_Z) &&
+            axis->n_motors != 2)
             goto error;
-        }
     case KINEMATICS_CARTESIAN: {
         cartesian_kinematics_config_t *kin_config __maybe_unused;
         kin_config = kinematics_get_config();
