@@ -14,6 +14,7 @@ ultimate goal is for it to be able to emulate any CNC machine.
 2. [Quick Start Guide](/docs/QuickStart.md)
 3. User Guides
    * [Configuration Guide](/docs/Configuration.md)
+   * [Object Reference](/docs/ObjectReference.md)
    * [Klipper Documentation](/docs//Klipper/Klipper.md)
      * [Klipper MCU Protocol](/docs/Klipper/KlipperProtocol.md)
      * [Klipper Command Reference](/docs/Klipper/CommandReference.md)
