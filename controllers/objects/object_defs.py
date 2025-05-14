@@ -159,8 +159,6 @@ class Axis(ObjectDef):
                     ("type", ctypes.c_char),
                     ("stepper", ctypes.POINTER(ctypes.c_char_p)),
                     ("endstop", ctypes.c_char * 64)]
-    class AxisMoveCommandOpts(ctypes.Structure):
-        _fields_ = [("position", ctypes.c_double)]
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
                     ("min", ctypes.c_float),
@@ -173,8 +171,6 @@ class Axis(ObjectDef):
         _fields_ = [("axis", ctypes.c_char_p)]
     def __init__(self):
         super().__init__(ObjectTypes.AXIS)
-        self.commands = [(0, "move", self.AxisMoveCommandOpts, (0., )),
-                         (1, "home", None, None)]
         self.events = {ObjectEvents.AXIS_HOMED : self.AxisEventHomed}
 
 class Probe(ObjectDef):
