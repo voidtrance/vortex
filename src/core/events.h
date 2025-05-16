@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <kinematics.h>
-#include "auto-events.h"
+#include "objects/auto-events.h"
 #include "objects/object_defs.h"
 
 /*******

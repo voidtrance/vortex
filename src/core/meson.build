@@ -16,10 +16,6 @@
 core_include = include_directories('.')
 pthreads = dependency('threads')
 
-auto_gen_events = custom_target('auto-events.h', output: 'auto-events.h',
-                         input : root / 'tools/auto_gen_types.py',
-                         command : [py, '@INPUT@', '-e', root, '@OUTPUT@'])
-
 auto_gen_logging = custom_target('logging.h', output: 'logging.h',
                         input : root / 'tools/auto_gen_logging.py',
                         command : [py, '@INPUT@', root, '@OUTPUT@'])

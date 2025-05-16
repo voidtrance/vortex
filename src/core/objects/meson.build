@@ -20,6 +20,11 @@ auto_gen_types = custom_target('auto-types.h', output: 'auto-types.h',
                          input : root / 'tools/auto_gen_types.py',
                          command : [py, '@INPUT@', '-t', root, '@OUTPUT@'])
 
+auto_gen_events = custom_target('auto-events.h', output: 'auto-events.h',
+                         input : root / 'tools/auto_gen_types.py',
+                         command : [py, '@INPUT@', '-e', root, '@OUTPUT@'])
+
+
 cc = meson.get_compiler('c')
 math = cc.find_library('m')
 
