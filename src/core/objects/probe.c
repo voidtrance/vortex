@@ -33,7 +33,7 @@
 #include <random.h>
 
 typedef struct {
-    const char toolhead[64];
+    const char toolhead[TOOLHEAD_NAME_SIZE];
     float offset[AXIS_TYPE_MAX];
     const char **axes;
     float range;
@@ -49,7 +49,7 @@ typedef struct {
     bool axis_valid[AXIS_TYPE_MAX];
     float range;
     float fuzz;
-    char pin[8];
+    char pin[PIN_NAME_SIZE];
     uint8_t pin_word;
     bool triggered;
     pthread_mutex_t lock;

@@ -29,7 +29,7 @@
 
 typedef struct {
     uint16_t power;
-    char pin[8];
+    char pin[PIN_NAME_SIZE];
     float max_temp;
     heater_layer_t layers[MAX_LAYER_COUNT];
 } heater_config_params_t;
@@ -48,7 +48,7 @@ typedef struct {
     core_object_command_t command;
     uint64_t timestep;
     temp_data_t temp_data;
-    char pin[8];
+    char pin[PIN_NAME_SIZE];
     bool use_pins;
     uint8_t pin_word;
     pthread_t pin_thread;

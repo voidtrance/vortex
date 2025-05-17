@@ -15,18 +15,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef __ENDSTOP_H__
-#define __ENDSTOP_H__
-#include <stdbool.h>
-#include <kinematics.h>
-#include "global.h"
+#ifndef __GLOBAL_H__
+#define __GLOBAL_H__
 
-typedef struct {
-    bool triggered;
-    const char type[4];
-    axis_type_t axis;
-    char pin[PIN_NAME_SIZE];
-    unsigned long pin_addr;
-} endstop_status_t;
+#define PIN_NAME_SIZE 9 /* 8 chars + null */
+#define OBJECT_NAME_SIZE 65
+#define ENDSTOP_NAME_SIZE OBJECT_NAME_SIZE
+#define MOTOR_NAME_SIZE OBJECT_NAME_SIZE
+#define TOOLHEAD_NAME_SIZE OBJECT_NAME_SIZE
+#define HEATER_NAME_SIZE OBJECT_NAME_SIZE
+#define HEAT_SENSOR_NAME_SIZE OBJECT_NAME_SIZE
 
 #endif

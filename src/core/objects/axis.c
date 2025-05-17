@@ -49,7 +49,7 @@ typedef struct {
     float length;
     const char type;
     const char **steppers;
-    const char endstop[64];
+    const char endstop[ENDSTOP_NAME_SIZE];
 } axis_config_params_t;
 
 typedef struct {

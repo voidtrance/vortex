@@ -18,11 +18,12 @@
 #ifndef __THERMISTOR_H__
 #define __THERMISTOR_H__
 #include <stdint.h>
+#include "global.h"
 
 typedef struct {
     float resistance;
     uint16_t adc;
-    char pin[8];
+    char pin[PIN_NAME_SIZE];
 } thermistor_status_t;
 
 #endif

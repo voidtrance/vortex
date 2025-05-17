@@ -15,6 +15,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from argparse import Namespace
 from vortex.core import ObjectTypes, ObjectEvents
+from vortex.core import PIN_NAME_SIZE, ENDSTOP_NAME_SIZE, MOTOR_NAME_SIZE, \
+                        TOOLHEAD_NAME_SIZE, HEATER_NAME_SIZE, \
+                        HEAT_SENSOR_NAME_SIZE
 from vortex.emulator.kinematics import AxisType
 import ctypes
 
@@ -34,9 +37,9 @@ class Stepper(ObjectDef):
                     ("start_speed", ctypes.c_uint32),
                     ("steps_per_mm", ctypes.c_uint32),
                     ("driver", ctypes.c_char * 16),
-                    ("enable_pin", ctypes.c_char * 8),
-                    ("dir_pin", ctypes.c_char * 8),
-                    ("step_pin", ctypes.c_char * 8)]
+                    ("enable_pin", ctypes.c_char * PIN_NAME_SIZE),
+                    ("dir_pin", ctypes.c_char * PIN_NAME_SIZE),
+                    ("step_pin", ctypes.c_char * PIN_NAME_SIZE)]
     class StepperEnableCommandOpts(ctypes.Structure):
         _fields_ = [("enable", ctypes.c_bool)]
     class StepperSetSpeedCommandOpts(ctypes.Structure):
@@ -59,9 +62,9 @@ class Stepper(ObjectDef):
                     ("accel", ctypes.c_double),
                     ("decel", ctypes.c_double),
                     ("steps_per_mm", ctypes.c_uint),
-                    ("enable_pin", ctypes.c_char * 8),
-                    ("dir_pin", ctypes.c_char * 8),
-                    ("step_pin", ctypes.c_char * 8),
+                    ("enable_pin", ctypes.c_char * PIN_NAME_SIZE),
+                    ("dir_pin", ctypes.c_char * PIN_NAME_SIZE),
+                    ("step_pin", ctypes.c_char * PIN_NAME_SIZE),
                     ("pin_addr", ctypes.c_ulong)]
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
@@ -89,15 +92,15 @@ class ThermistorValueConfig(ctypes.Structure):
 
 class Thermistor(ObjectDef):
     class ThermistorConfig(ctypes.Structure):
-        _fields_ = [("sensor_type", ctypes.c_char * 64),
-                    ("heater", ctypes.c_char * 64),
-                    ("pin", ctypes.c_char * 8),
+        _fields_ = [("sensor_type", ctypes.c_char * HEAT_SENSOR_NAME_SIZE),
+                    ("heater", ctypes.c_char * HEATER_NAME_SIZE),
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE),
                     ("adc_max", ctypes.c_uint16),
                     ("config", ThermistorValueConfig)]
     class ThermistorStatus(ctypes.Structure):
         _fields_ = [("resistance", ctypes.c_float),
                     ("adc", ctypes.c_uint16),
-                    ("pin", ctypes.c_char * 8)]
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE)]
     def __init__(self):
         super().__init__(ObjectTypes.THERMISTOR)
 
@@ -113,7 +116,7 @@ class HeaterLayer(ctypes.Structure):
 class Heater(ObjectDef):
     class HeaterConfig(ctypes.Structure):
         _fields_ = [("power", ctypes.c_uint16),
-                    ("pin", ctypes.c_char * 8),
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE),
                     ("max_temp", ctypes.c_float),
                     ("layers", HeaterLayer * 8)]
     class HeaterSetTempCommandOpts(ctypes.Structure):
@@ -123,7 +126,7 @@ class Heater(ObjectDef):
     class HeaterStatus(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float),
                     ("max_temp", ctypes.c_float),
-                    ("pin", ctypes.c_char * 8),
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE),
                     ("pin_addr", ctypes.c_ulong)]
     class HeaterEventTempReached(ctypes.Structure):
         _fields_ = [("temp", ctypes.c_float)]
@@ -137,12 +140,12 @@ class Endstop(ObjectDef):
     class EndstopConfig(ctypes.Structure):
         _fields_ = [("type", ctypes.c_char * 4),
                     ("axis", ctypes.c_char),
-                    ("pin", ctypes.c_char * 8)]
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE)]
     class EndstopStatus(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool),
                     ("type", ctypes.c_char * 4),
                     ("axis", ctypes.c_int),
-                    ("pin", ctypes.c_char * 8),
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE),
                     ("pin_addr", ctypes.c_ulong)]
     class EndstopTriggerEvent(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool)]
@@ -158,15 +161,15 @@ class Axis(ObjectDef):
         _fields_ = [("length", ctypes.c_float),
                     ("type", ctypes.c_char),
                     ("stepper", ctypes.POINTER(ctypes.c_char_p)),
-                    ("endstop", ctypes.c_char * 64)]
+                    ("endstop", ctypes.c_char * ENDSTOP_NAME_SIZE)]
     class AxisStatus(ctypes.Structure):
         _fields_ = [("homed", ctypes.c_bool),
                     ("min", ctypes.c_float),
                     ("max", ctypes.c_float),
                     ("type", ctypes.c_int),
                     ("position", ctypes.c_double),
-                    ("motors", (ctypes.c_char * 64) * 8),
-                    ("endstop", ctypes.c_char * 64)]
+                    ("motors", (ctypes.c_char * MOTOR_NAME_SIZE) * 8),
+                    ("endstop", ctypes.c_char * ENDSTOP_NAME_SIZE)]
     class AxisEventHomed(ctypes.Structure):
         _fields_ = [("axis", ctypes.c_char_p)]
     def __init__(self):
@@ -175,16 +178,16 @@ class Axis(ObjectDef):
 
 class Probe(ObjectDef):
     class ProbeConfig(ctypes.Structure):
-        _fields_ = [("toolhead", ctypes.c_char * 64),
+        _fields_ = [("toolhead", ctypes.c_char * TOOLHEAD_NAME_SIZE),
                     ("offsets", ctypes.c_float * len(AxisType)),
                     ("axes", ctypes.POINTER(ctypes.c_char_p)),
                     ("range", ctypes.c_float),
-                    ("pin", ctypes.c_char * 8)]
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE)]
     class ProbeStatus(ctypes.Structure):
         _fields_ = [("triggered", ctypes.c_bool),
                     ("offsets", ctypes.c_float * len(AxisType)),
                     ("position", ctypes.c_double * len(AxisType)),
-                    ("pin", ctypes.c_char * 8),
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE),
                     ("pin_addr", ctypes.c_ulong)]
     class ProbeEventTriggered(ctypes.Structure):
         _fields_ = [("position", ctypes.c_double * len(AxisType))]

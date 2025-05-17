@@ -35,6 +35,7 @@
 #include "events.h"
 #include "common_defs.h"
 #include "timers.h"
+#include "objects/global.h"
 #include "objects/object_defs.h"
 #include "objects/axis.h"
 #include "objects/endstop.h"
@@ -1528,6 +1529,16 @@ static int vortex_core_module_exec(PyObject *module) {
     Py_XINCREF(VortexCoreError);
     if (PyModule_AddObject(module, "VortexCoreError", VortexCoreError) < 0)
         goto fail;
+
+    if (PyModule_AddIntConstant(module, "PIN_NAME_SIZE", PIN_NAME_SIZE) == -1 ||
+        PyModule_AddIntConstant(module, "ENDSTOP_NAME_SIZE", ENDSTOP_NAME_SIZE) == -1 ||
+        PyModule_AddIntConstant(module, "MOTOR_NAME_SIZE", MOTOR_NAME_SIZE) == -1 ||
+        PyModule_AddIntConstant(module, "TOOLHEAD_NAME_SIZE", TOOLHEAD_NAME_SIZE) == -1 ||
+        PyModule_AddIntConstant(module, "HEATER_NAME_SIZE", HEATER_NAME_SIZE) == -1 ||
+        PyModule_AddIntConstant(module, "HEAT_SENSOR_NAME_SIZE", HEAT_SENSOR_NAME_SIZE) == -1) {
+        Py_XDECREF(module);
+        return -1;
+    }
 
     ns = PyObject_GetAttrString(module, "__dict__");
     enum_str = core_create_object_enum();

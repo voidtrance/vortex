@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <kinematics.h>
+#include "global.h"
 
 typedef struct {
     bool homed;
@@ -27,8 +28,8 @@ typedef struct {
     float max;
     axis_type_t type;
     double position;
-    char motors[8][64];
-    char endstop[64];
+    char motors[8][MOTOR_NAME_SIZE];
+    char endstop[ENDSTOP_NAME_SIZE];
 } axis_status_t;
 
 #endif

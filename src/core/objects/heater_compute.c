@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <utils.h>
+#include <sys/types.h>
 
 /* Stefan-Boltzmann constant */
 #define kSB 0.0000000567

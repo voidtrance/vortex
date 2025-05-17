@@ -62,9 +62,9 @@ typedef struct {
 } thermistor_config_t;
 
 typedef struct {
-    char sensor_type[64];
-    char heater[64];
-    char pin[8];
+    char sensor_type[HEAT_SENSOR_NAME_SIZE];
+    char heater[HEATER_NAME_SIZE];
+    char pin[PIN_NAME_SIZE];
     uint16_t max_adc;
     thermistor_config_t config;
 } thermistor_config_params_t;
@@ -74,7 +74,7 @@ typedef struct {
     thermistor_type_t type;
     uint16_t max_adc;
     uint32_t resistor;
-    char pin[8];
+    char pin[PIN_NAME_SIZE];
     const char *heater_name;
     core_object_t *heater;
     float resistance;

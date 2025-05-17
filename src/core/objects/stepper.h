@@ -19,6 +19,7 @@
 #define __STEPPER_H__
 #include <stdint.h>
 #include <stdbool.h>
+#include "global.h"
 
 typedef enum {
     MOVE_DIR_BACK = 0,
@@ -67,9 +68,9 @@ typedef struct {
     double accel;
     double decel;
     uint32_t steps_per_mm;
-    char enable_pin[8];
-    char dir_pin[8];
-    char step_pin[8];
+    char enable_pin[PIN_NAME_SIZE];
+    char dir_pin[PIN_NAME_SIZE];
+    char step_pin[PIN_NAME_SIZE];
     unsigned long pin_addr;
 } stepper_status_t;
 

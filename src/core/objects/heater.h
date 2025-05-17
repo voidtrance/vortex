@@ -18,6 +18,7 @@
 #ifndef __HEATER_H__
 #define __HEATER_H__
 #include <stdbool.h>
+#include "global.h"
 
 enum {
     HEATER_COMMAND_SET_TEMP,
@@ -36,7 +37,7 @@ struct heater_use_pins_args {
 typedef struct {
     float temperature;
     float max_temp;
-    char pin[8];
+    char pin[PIN_NAME_SIZE];
     unsigned long pin_addr;
 } heater_status_t;
 

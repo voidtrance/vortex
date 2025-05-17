@@ -19,12 +19,13 @@
 #define __PROBE_H__
 #include <stdbool.h>
 #include <kinematics.h>
+#include "global.h"
 
 typedef struct {
     bool triggered;
     float offsets[AXIS_TYPE_MAX];
     double position[AXIS_TYPE_MAX];
-    char pin[8];
+    char pin[PIN_NAME_SIZE];
     unsigned long pin_addr;
 } probe_status_t;
 
