@@ -86,6 +86,11 @@ typedef struct event {
     bool should_free;
 } core_event_t;
 
+typedef struct event_handler_list {
+    pthread_mutex_t lock;
+    STAILQ_HEAD(, event_subscription) list;
+} event_handler_list_t;
+
 typedef struct core_command {
     STAILQ_ENTRY(core_command) entry;
     core_object_t *source;
@@ -105,41 +110,48 @@ typedef struct {
 
 typedef LIST_HEAD(core_object_list, core_object) core_object_list_t;
 
-#define STAILQ_DEFINE(name, type)  \
-    typedef struct {               \
-        pthread_mutex_t lock;      \
-        struct {                   \
-            struct type *stqh_first;            \
-            struct type **stqh_last;            \
-        } list;                                 \
-    } name;
+typedef STAILQ_HEAD(core_command_list, core_command) core_command_list_t;
+typedef STAILQ_HEAD(core_event_list, event) core_event_list_t;
 
-STAILQ_DEFINE(core_command_list_t, core_command);
-STAILQ_DEFINE(core_events_t, event);
-STAILQ_DEFINE(core_event_handlers_t, event_subscription);
+typedef struct {
+    pthread_mutex_t cmd_lock __attribute__((aligned(CACHELINE_SIZE)));
+    core_command_list_t cmds;
+    pthread_mutex_t submit_lock __attribute__((aligned(CACHELINE_SIZE)));
+    core_command_list_t submitted;
+} core_process_commands_args_t;
+
+typedef struct {
+    pthread_mutex_t handler_lock; __attribute__((aligned(CACHELINE_SIZE)))
+    event_handler_list_t handlers[OBJECT_EVENT_MAX];
+    object_cache_t *event_cache __attribute__((aligned(CACHELINE_SIZE)));
+    pthread_mutex_t event_lock;
+    core_event_list_t events;
+} core_process_events_args_t;
+
+typedef struct {
+    core_object_completion_data_t *list;
+    PyObject *python_complete_cb;
+} core_process_completions_args_t;
 
 typedef struct {
     PyObject_HEAD void *object_libs[OBJECT_TYPE_MAX];
     object_create_func_t object_create[OBJECT_TYPE_MAX];
     core_object_list_t objects[OBJECT_TYPE_MAX];
-    core_command_list_t cmds;
-    core_command_list_t submitted;
+
+    /* Command submission */
+    core_process_commands_args_t commands;
 
     /* Command completion */
-    core_object_completion_data_t *completions;
-    PyObject *python_complete_cb;
+    core_process_completions_args_t completions;
 
     /* Event handling */
-    core_event_handlers_t event_handlers[OBJECT_EVENT_MAX];
-    object_cache_t *event_cache;
-    core_events_t events;
+    core_process_events_args_t events;
 } core_t;
 
 static core_object_t *core_object_find(const core_object_type_t type,
                                        const char *name, void *data);
 static core_object_t **core_object_list(const core_object_type_t type,
                                         void *data);
-static void core_process_work(void *user_data);
 
 /* Object callbacks */
 static void core_object_command_complete(uint64_t command_id, int64_t result,
@@ -170,68 +182,67 @@ static void __core_log(void *logger, core_log_level_t level, const char *fmt,
 static core_call_data_t core_call_data = { 0 };
 static core_logging_data_t logging;
 
-static void core_process_work(void *arg) {
-    core_t *core = (core_t *)arg;
-    core_object_completion_data_t *comps;
+static void core_process_commands(void *arg) {
+    core_process_commands_args_t *cmds = (core_process_commands_args_t *)arg;
     core_command_t *cmd, *cmd_next;
-    core_event_t *event, *event_next;
     bool empty;
-    size_t batch_count = 0;
 
-    /* First, process any submitted commands. */
-    pthread_mutex_lock(&core->cmds.lock);
-    empty = STAILQ_EMPTY(&core->cmds.list);
-    pthread_mutex_unlock(&core->cmds.lock);
+    pthread_mutex_lock(&cmds->cmd_lock);
+    empty = STAILQ_EMPTY(&cmds->cmds);
+    pthread_mutex_unlock(&cmds->cmd_lock);
     if (empty)
-        goto do_events;
+        return;
 
-    pthread_mutex_lock(&core->cmds.lock);
-    cmd = STAILQ_FIRST(&core->cmds.list);
-    pthread_mutex_unlock(&core->cmds.lock);
-    while (cmd && batch_count++ < MAX_PROCESSING_BATCH) {
+    pthread_mutex_lock(&cmds->cmd_lock);
+    cmd = STAILQ_FIRST(&cmds->cmds);
+    pthread_mutex_unlock(&cmds->cmd_lock);
+    while (cmd) {
         core_object_t *object;
 
         cmd_next = STAILQ_NEXT(cmd, entry);
-        pthread_mutex_lock(&core->cmds.lock);
-        STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
-        pthread_mutex_unlock(&core->cmds.lock);
+        pthread_mutex_lock(&cmds->cmd_lock);
+        STAILQ_REMOVE(&cmds->cmds, cmd, core_command, entry);
+        pthread_mutex_unlock(&cmds->cmd_lock);
 
         object = core_id_to_object(cmd->target_id);
         core_log(LOG_LEVEL_DEBUG,
                  "issuing command for %s, id: %lu, cmd: %u", object->name,
                  cmd->command.command_id, cmd->command.object_cmd_id);
         (void)object->exec_command(object, &cmd->command);
-        pthread_mutex_lock(&core->submitted.lock);
-        STAILQ_INSERT_TAIL(&core->submitted.list, cmd, entry);
-        pthread_mutex_unlock(&core->submitted.lock);
+        pthread_mutex_lock(&cmds->submit_lock);
+        STAILQ_INSERT_TAIL(&cmds->submitted, cmd, entry);
+        pthread_mutex_unlock(&cmds->submit_lock);
         cmd = cmd_next;
     }
+}
 
-    batch_count = 0;
+static void core_process_events(void *arg) {
+    core_process_events_args_t *events = (core_process_events_args_t *)arg;
+    core_event_t *event, *event_next;
+    bool empty;
 
-do_events:
-    pthread_mutex_lock(&core->events.lock);
-    empty = STAILQ_EMPTY(&core->events.list);
-    pthread_mutex_unlock(&core->events.lock);
+    pthread_mutex_lock(&events->event_lock);
+    empty = STAILQ_EMPTY(&events->events);
+    pthread_mutex_unlock(&events->event_lock);
     if (empty)
-        goto do_completions;
+        return;
 
-    pthread_mutex_lock(&core->events.lock);
-    event = STAILQ_FIRST(&core->events.list);
-    pthread_mutex_unlock(&core->events.lock);
-    while (event && batch_count++ < MAX_PROCESSING_BATCH) {
+    pthread_mutex_lock(&events->event_lock);
+    event = STAILQ_FIRST(&events->events);
+    pthread_mutex_unlock(&events->event_lock);
+    while (event) {
         event_subscription_t *subscription;
 
         core_log(LOG_LEVEL_DEBUG, "processing event = %s %s %lu",
                  ObjectTypeNames[event->object_type],
                  OBJECT_EVENT_NAMES[event->type], event->object_id);
         event_next = STAILQ_NEXT(event, entry);
-        pthread_mutex_lock(&core->events.lock);
-        STAILQ_REMOVE(&core->events.list, event, event, entry);
-        pthread_mutex_unlock(&core->events.lock);
+        pthread_mutex_lock(&events->event_lock);
+        STAILQ_REMOVE(&events->events, event, event, entry);
+        pthread_mutex_unlock(&events->event_lock);
 
-        pthread_mutex_lock(&core->event_handlers[event->type].lock);
-        STAILQ_FOREACH(subscription, &core->event_handlers[event->type].list,
+        pthread_mutex_lock(&events->handlers[event->type].lock);
+        STAILQ_FOREACH(subscription, &events->handlers[event->type].list,
                        entry) {
             core_object_t *object;
 
@@ -268,7 +279,7 @@ do_events:
                 PyGILState_Release(state);
             }
         }
-        pthread_mutex_unlock(&core->event_handlers[event->type].lock);
+        pthread_mutex_unlock(&events->handlers[event->type].lock);
 
         if (event->should_free)
             object_cache_free(event->data);
@@ -277,12 +288,18 @@ do_events:
         object_cache_free(event);
         event = event_next;
     }
+}
 
-    batch_count = 0;
+static void core_process_completions(void *arg) {
+    core_process_completions_args_t *completions =
+        (core_process_completions_args_t *)arg;
+    core_t *core = container_of(completions, core_t, completions);
+    core_object_completion_data_t *comps;
+    core_command_t *cmd, *cmd_next;
+    comps = completions->list;
+    bool empty;
 
-do_completions:
-    comps = core->completions;
-    while (comps->tail != comps->head && batch_count++ < MAX_PROCESSING_BATCH) {
+    while (comps->tail != comps->head) {
         PyGILState_STATE state;
         PyObject *args;
         bool handled = false;
@@ -290,15 +307,15 @@ do_completions:
         core_log(LOG_LEVEL_DEBUG, "completing cmd %lu",
                  comps->entries[comps->tail].id);
 
-        pthread_mutex_lock(&core->submitted.lock);
-        empty = STAILQ_EMPTY(&core->submitted.list);
-        pthread_mutex_unlock(&core->submitted.lock);
+        pthread_mutex_lock(&core->commands.submit_lock);
+        empty = STAILQ_EMPTY(&core->commands.submitted);
+        pthread_mutex_unlock(&core->commands.submit_lock);
         if (empty)
             goto python;
 
-        pthread_mutex_lock(&core->submitted.lock);
-        cmd = STAILQ_FIRST(&core->submitted.list);
-        pthread_mutex_unlock(&core->submitted.lock);
+        pthread_mutex_lock(&core->commands.submit_lock);
+        cmd = STAILQ_FIRST(&core->commands.submitted);
+        pthread_mutex_unlock(&core->commands.submit_lock);
         while (cmd) {
             core_log(LOG_LEVEL_DEBUG, "submitted command %lu",
                      cmd->command.command_id);
@@ -308,9 +325,9 @@ do_completions:
                     cmd->handler(comps->entries[comps->tail].id,
                                  comps->entries[comps->tail].result,
                                  cmd->source);
-                pthread_mutex_lock(&core->submitted.lock);
-                STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
-                pthread_mutex_unlock(&core->submitted.lock);
+                pthread_mutex_lock(&core->commands.submit_lock);
+                STAILQ_REMOVE(&core->commands.submitted, cmd, core_command, entry);
+                pthread_mutex_unlock(&core->commands.submit_lock);
                 object_cache_free(cmd->command.args);
                 free(cmd);
                 handled = true;
@@ -331,7 +348,7 @@ do_completions:
             goto next;
         }
 
-        (void)PyObject_Call(core->python_complete_cb, args, NULL);
+        (void)PyObject_Call(completions->python_complete_cb, args, NULL);
         Py_DECREF(args);
         if (PyErr_Occurred())
             PyErr_Print();
@@ -345,7 +362,7 @@ do_completions:
 static void core_object_command_complete(uint64_t cmd_id, int64_t result,
                                          void *data) {
     core_t *core = (core_t *)data;
-    core_object_completion_data_t *comps = core->completions;
+    core_object_completion_data_t *comps = core->completions.list;
 
     if (comps->head != comps->tail - 1 ||
         (comps->head == comps->size && comps->tail != 0)) {
@@ -404,24 +421,24 @@ static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
     core_t *core;
 
     core = (core_t *)type->tp_alloc(type, 0);
-    core->completions = calloc(1, sizeof(*core->completions));
-    if (!core->completions) {
+    core->completions.list = calloc(1, sizeof(*core->completions.list));
+    if (!core->completions.list) {
         type->tp_free((PyObject *)core);
         return NULL;
     }
 
-    core->completions->size = MAX_COMPLETIONS;
-    core->completions->entries =
-        calloc(core->completions->size, sizeof(*core->completions->entries));
-    if (!core->completions->entries) {
-        free(core->completions);
+    core->completions.list->size = MAX_COMPLETIONS;
+    core->completions.list->entries =
+        calloc(core->completions.list->size, sizeof(*core->completions.list->entries));
+    if (!core->completions.list->entries) {
+        free(core->completions.list);
         type->tp_free((PyObject *)core);
         return NULL;
     }
 
-    if (object_cache_create(&core->event_cache, sizeof(core_event_t))) {
-        free(core->completions->entries);
-        free(core->completions);
+    if (object_cache_create(&core->events.event_cache, sizeof(core_event_t))) {
+        free(core->completions.list->entries);
+        free(core->completions.list);
         type->tp_free((PyObject *)core);
         return NULL;
     }
@@ -454,21 +471,21 @@ static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
         LIST_INIT(&self->objects[type]);
 
     for (event = 0; event < OBJECT_EVENT_MAX; event++) {
-        pthread_mutex_init(&self->event_handlers[event].lock, NULL);
-        STAILQ_INIT(&self->event_handlers[event].list);
+        pthread_mutex_init(&self->events.handlers[event].lock, NULL);
+        STAILQ_INIT(&self->events.handlers[event].list);
     }
 
-    pthread_mutex_init(&self->events.lock, NULL);
-    STAILQ_INIT(&self->events.list);
+    pthread_mutex_init(&self->events.event_lock, NULL);
+    STAILQ_INIT(&self->events.events);
 
-    pthread_mutex_init(&self->cmds.lock, NULL);
-    STAILQ_INIT(&self->cmds.list);
+    pthread_mutex_init(&self->commands.cmd_lock, NULL);
+    STAILQ_INIT(&self->commands.cmds);
 
-    pthread_mutex_init(&self->submitted.lock, NULL);
-    STAILQ_INIT(&self->submitted.list);
+    pthread_mutex_init(&self->commands.submit_lock, NULL);
+    STAILQ_INIT(&self->commands.submitted);
 
-    self->completions->head = 0;
-    self->completions->tail = 0;
+    self->completions.list->head = 0;
+    self->completions.list->tail = 0;
 
     return 0;
 }
@@ -499,9 +516,9 @@ static void vortex_core_dealloc(core_t *self) {
             dlclose(self->object_libs[type]);
     }
 
-    free(self->completions->entries);
-    free(self->completions);
-    object_cache_destroy(self->event_cache);
+    free(self->completions.list->entries);
+    free(self->completions.list);
+    object_cache_destroy(self->events.event_cache);
 
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
@@ -538,10 +555,10 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
 
     if (!PyArg_ParseTuple(args, "HKKKO|p", &arch, &ctlr_frequency,
                           &timer_frequency, &update_frequency,
-                          &core->python_complete_cb, &set_priority))
+                          &core->completions.python_complete_cb, &set_priority))
         return NULL;
 
-    if (!PyCallable_Check(core->python_complete_cb)) {
+    if (!PyCallable_Check(core->completions.python_complete_cb)) {
         PyErr_Format(VortexCoreError, "Completion callback is not callable");
         return NULL;
     }
@@ -552,7 +569,7 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    Py_INCREF(core->python_complete_cb);
+    Py_INCREF(core->completions.python_complete_cb);
 
     thread_args.update.tick_frequency = ctlr_frequency;
     thread_args.update.update_frequency = timer_frequency;
@@ -570,8 +587,24 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     }
 
     thread_args.worker.frequency = update_frequency;
-    thread_args.worker.callback = core_process_work;
-    thread_args.worker.data = self;
+    thread_args.worker.callback = core_process_commands;
+    thread_args.worker.data = &core->commands;
+    if (core_thread_create(CORE_THREAD_TYPE_WORKER, &thread_args)) {
+        core_threads_destroy();
+        PyErr_Format(VortexCoreError, "Failed to create processing thread");
+        return NULL;
+    }
+
+    thread_args.worker.callback = core_process_completions;
+    thread_args.worker.data = &core->completions;
+    if (core_thread_create(CORE_THREAD_TYPE_WORKER, &thread_args)) {
+        core_threads_destroy();
+        PyErr_Format(VortexCoreError, "Failed to create processing thread");
+        return NULL;
+    }
+
+    thread_args.worker.callback = core_process_events;
+    thread_args.worker.data = &core->events;
     if (core_thread_create(CORE_THREAD_TYPE_WORKER, &thread_args)) {
         core_threads_destroy();
         PyErr_Format(VortexCoreError, "Failed to create processing thread");
@@ -625,69 +658,69 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
     core_threads_stop();
     Py_END_ALLOW_THREADS;
 
-    pthread_mutex_lock(&core->cmds.lock);
-    if (!STAILQ_EMPTY(&core->cmds.list)) {
+    pthread_mutex_lock(&core->commands.cmd_lock);
+    if (!STAILQ_EMPTY(&core->commands.cmds)) {
         core_command_t *cmd, *cmd_next;
 
-        cmd = STAILQ_FIRST(&core->cmds.list);
+        cmd = STAILQ_FIRST(&core->commands.cmds);
         while (cmd) {
             cmd_next = STAILQ_NEXT(cmd, entry);
-            STAILQ_REMOVE(&core->cmds.list, cmd, core_command, entry);
+            STAILQ_REMOVE(&core->commands.cmds, cmd, core_command, entry);
             object_cache_free(cmd->command.args);
             free(cmd);
             cmd = cmd_next;
         }
     }
-    pthread_mutex_unlock(&core->cmds.lock);
+    pthread_mutex_unlock(&core->commands.cmd_lock);
 
-    pthread_mutex_lock(&core->submitted.lock);
-    if (!STAILQ_EMPTY(&core->submitted.list)) {
+    pthread_mutex_lock(&core->commands.submit_lock);
+    if (!STAILQ_EMPTY(&core->commands.submitted)) {
         core_command_t *cmd, *cmd_next;
 
-        cmd = STAILQ_FIRST(&core->submitted.list);
+        cmd = STAILQ_FIRST(&core->commands.submitted);
         while (cmd) {
             cmd_next = STAILQ_NEXT(cmd, entry);
-            STAILQ_REMOVE(&core->submitted.list, cmd, core_command, entry);
+            STAILQ_REMOVE(&core->commands.submitted, cmd, core_command, entry);
             object_cache_free(cmd->command.args);
             free(cmd);
             cmd = cmd_next;
         }
     }
-    pthread_mutex_unlock(&core->submitted.lock);
+    pthread_mutex_unlock(&core->commands.submit_lock);
 
-    pthread_mutex_lock(&core->events.lock);
-    if (!STAILQ_EMPTY(&core->events.list)) {
+    pthread_mutex_lock(&core->events.event_lock);
+    if (!STAILQ_EMPTY(&core->events.events)) {
         core_event_t *event, *event_next;
 
-        event = STAILQ_FIRST(&core->events.list);
+        event = STAILQ_FIRST(&core->events.events);
         while (event) {
             event_next = STAILQ_NEXT(event, entry);
-            STAILQ_REMOVE(&core->events.list, event, event, entry);
+            STAILQ_REMOVE(&core->events.events, event, event, entry);
             object_cache_free(event->data);
             object_cache_free(event);
             event = event_next;
         }
     }
-    pthread_mutex_unlock(&core->events.lock);
+    pthread_mutex_unlock(&core->events.event_lock);
 
     for (type = 0; type < OBJECT_EVENT_MAX; type++) {
-        pthread_mutex_lock(&core->event_handlers[type].lock);
-        if (!STAILQ_EMPTY(&core->event_handlers[type].list)) {
+        pthread_mutex_lock(&core->events.handlers[type].lock);
+        if (!STAILQ_EMPTY(&core->events.handlers[type].list)) {
             event_subscription_t *subscription, *next;
 
-            subscription = STAILQ_FIRST(&core->event_handlers[type].list);
+            subscription = STAILQ_FIRST(&core->events.handlers[type].list);
             while (subscription) {
                 next = STAILQ_NEXT(subscription, entry);
-                STAILQ_REMOVE(&core->event_handlers[type].list, subscription,
+                STAILQ_REMOVE(&core->events.handlers[type].list, subscription,
                               event_subscription, entry);
                 free(subscription);
                 subscription = next;
             }
         }
-        pthread_mutex_unlock(&core->event_handlers[type].lock);
+        pthread_mutex_unlock(&core->events.handlers[type].lock);
     }
 
-    Py_XDECREF(core->python_complete_cb);
+    Py_XDECREF(core->completions.python_complete_cb);
     Py_XINCREF(Py_None);
     return Py_None;
 }
@@ -993,9 +1026,9 @@ static int core_object_event_register(const core_object_type_t object_type,
     subscription->is_python = false;
     subscription->core.handler = handler;
     subscription->core.object = object;
-    pthread_mutex_lock(&core->event_handlers[event].lock);
-    STAILQ_INSERT_TAIL(&core->event_handlers[event].list, subscription, entry);
-    pthread_mutex_unlock(&core->event_handlers[event].lock);
+    pthread_mutex_lock(&core->events.handlers[event].lock);
+    STAILQ_INSERT_TAIL(&core->events.handlers[event].list, subscription, entry);
+    pthread_mutex_unlock(&core->events.handlers[event].lock);
     return 0;
 }
 
@@ -1008,18 +1041,18 @@ static int core_object_event_unregister(const core_object_type_t object_type,
     event_subscription_t *next;
     core_object_t *obj = core_object_find(object_type, name, core);
 
-    pthread_mutex_lock(&core->event_handlers[event].lock);
-    subscription = STAILQ_FIRST(&core->event_handlers[event].list);
-    pthread_mutex_unlock(&core->event_handlers[event].lock);
+    pthread_mutex_lock(&core->events.handlers[event].lock);
+    subscription = STAILQ_FIRST(&core->events.handlers[event].list);
+    pthread_mutex_unlock(&core->events.handlers[event].lock);
     while (subscription != NULL) {
         next = STAILQ_NEXT(subscription, entry);
         if (subscription->object_type == object_type &&
             (subscription->object_id == CORE_OBJECT_ID_INVALID ||
              (object && subscription->object_id == core_object_to_id(obj)))) {
-            pthread_mutex_lock(&core->event_handlers[event].lock);
-            STAILQ_REMOVE(&core->event_handlers[event].list, subscription,
+            pthread_mutex_lock(&core->events.handlers[event].lock);
+            STAILQ_REMOVE(&core->events.handlers[event].list, subscription,
                           event_subscription, entry);
-            pthread_mutex_unlock(&core->event_handlers[event].lock);
+            pthread_mutex_unlock(&core->events.handlers[event].lock);
             free(subscription);
             return 0;
         }
@@ -1038,7 +1071,7 @@ static int __core_object_event_submit(const core_object_event_type_t event_type,
     core_event_t *event;
     core_object_t *object = (core_object_t *)id;
 
-    event = object_cache_alloc(core->event_cache);
+    event = object_cache_alloc(core->events.event_cache);
     if (!event)
         return -1;
 
@@ -1050,9 +1083,9 @@ static int __core_object_event_submit(const core_object_event_type_t event_type,
     event->object_id = id;
     event->data = event_data;
     event->should_free = should_free;
-    pthread_mutex_lock(&core->events.lock);
-    STAILQ_INSERT_TAIL(&core->events.list, event, entry);
-    pthread_mutex_unlock(&core->events.lock);
+    pthread_mutex_lock(&core->events.event_lock);
+    STAILQ_INSERT_TAIL(&core->events.events, event, entry);
+    pthread_mutex_unlock(&core->events.event_lock);
     return 0;
 }
 
@@ -1082,9 +1115,9 @@ static uint64_t core_object_command_submit(core_object_t *source,
     cmd->handler = cb;
     core_log(LOG_LEVEL_DEBUG, "submitting command for %u, id: %lu, cmd: %u",
              target_id, cmd->command.command_id, obj_cmd_id);
-    pthread_mutex_lock(&core->cmds.lock);
-    STAILQ_INSERT_TAIL(&core->cmds.list, cmd, entry);
-    pthread_mutex_unlock(&core->cmds.lock);
+    pthread_mutex_lock(&core->commands.cmd_lock);
+    STAILQ_INSERT_TAIL(&core->commands.cmds, cmd, entry);
+    pthread_mutex_unlock(&core->commands.cmd_lock);
     return (uint64_t)cmd;
 }
 
@@ -1122,9 +1155,9 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
     subscription->object_type = object_type;
     subscription->is_python = true;
     subscription->python.handler = callback;
-    pthread_mutex_lock(&core->event_handlers[type].lock);
-    STAILQ_INSERT_TAIL(&core->event_handlers[type].list, subscription, entry);
-    pthread_mutex_unlock(&core->event_handlers[type].lock);
+    pthread_mutex_lock(&core->events.handlers[type].lock);
+    STAILQ_INSERT_TAIL(&core->events.handlers[type].list, subscription, entry);
+    pthread_mutex_unlock(&core->events.handlers[type].lock);
     Py_RETURN_TRUE;
 }
 
@@ -1148,19 +1181,19 @@ static PyObject *vortex_core_python_event_unregister(PyObject *self,
             object_id = core_object_to_id(object);
     }
 
-    pthread_mutex_lock(&core->event_handlers[type].lock);
-    subscription = STAILQ_FIRST(&core->event_handlers[type].list);
-    pthread_mutex_unlock(&core->event_handlers[type].lock);
+    pthread_mutex_lock(&core->events.handlers[type].lock);
+    subscription = STAILQ_FIRST(&core->events.handlers[type].list);
+    pthread_mutex_unlock(&core->events.handlers[type].lock);
 
     while (subscription != NULL) {
         next = STAILQ_NEXT(subscription, entry);
         if (subscription->object_type == object_type &&
             (subscription->object_id == CORE_OBJECT_ID_INVALID ||
              subscription->object_id == object_id)) {
-            pthread_mutex_lock(&core->event_handlers[type].lock);
-            STAILQ_REMOVE(&core->event_handlers[type].list, subscription,
+            pthread_mutex_lock(&core->events.handlers[type].lock);
+            STAILQ_REMOVE(&core->events.handlers[type].list, subscription,
                           event_subscription, entry);
-            pthread_mutex_unlock(&core->event_handlers[type].lock);
+            pthread_mutex_unlock(&core->events.handlers[type].lock);
             if (subscription->is_python)
                 Py_DECREF(subscription->python.handler);
             free(subscription);

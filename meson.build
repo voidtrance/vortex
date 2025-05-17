@@ -17,6 +17,10 @@ project('vortex', 'c', version: files('version.txt'),
         default_options: ['warning_level=1', 'werror=true'])
 add_global_arguments('-Wunused', language: 'c')
 
+cache = run_command('getconf', 'LEVEL1_DCACHE_LINESIZE', capture: true, check: true)
+cacheline_size = cache.stdout().strip()
+add_project_arguments('-DCACHELINE_SIZE=' + cacheline_size, language: 'c')
+
 py = import('python').find_installation(pure: false)
 root = meson.project_source_root()
 

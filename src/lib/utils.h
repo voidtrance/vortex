@@ -18,9 +18,11 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 #include <stdint.h>
+#include <stddef.h>
 
 #define likely(x) (__builtin_expect(!!(x), 1))
 #define unlikely(x) (__builtin_expect(!!(x), 0))
+#define container_of(ptr, type, member) ((type *)((unsigned long)(ptr) - offsetof(type, member)))
 
 #define SEC_TO_MSEC(x) ((uint64_t)(x)*1000)
 #define MSEC_TO_USEC(x) SEC_TO_MSEC(x)
