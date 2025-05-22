@@ -234,7 +234,7 @@ class KlipperFrontend(BaseFrontend):
         self._fd.write(bytearray(packet))
         self._fd.flush()
 
-    def _find_object(self, pin, *klasses):
+    def find_object_from_pin(self, pin, *klasses):
         if not klasses:
             klasses = ObjectTypes
         for klass in klasses:
@@ -314,7 +314,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_analog_in(self, cmd, oid, pin):
-        obj_id, klass = self._find_object(pin, ObjectTypes.THERMISTOR)
+        obj_id, klass = self.find_object_from_pin(pin, ObjectTypes.THERMISTOR)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -330,7 +330,7 @@ class KlipperFrontend(BaseFrontend):
 
     def config_digital_out(self, cmd, oid, pin, value, default_value,
                            max_duration):
-        obj_id, klass = self._find_object(pin)
+        obj_id, klass = self.find_object_from_pin(pin)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -372,7 +372,7 @@ class KlipperFrontend(BaseFrontend):
 
     def config_stepper(self, cmd, oid, step_pin, dir_pin, invert_step,
                        step_pulse_ticks):
-        obj_id, klass = self._find_object(step_pin, ObjectTypes.STEPPER)
+        obj_id, klass = self.find_object_from_pin(step_pin, ObjectTypes.STEPPER)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -409,7 +409,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_endstop(self, cmd, oid, pin, pull_up):
-        obj_id, klass = self._find_object(pin, ObjectTypes.ENDSTOP,
+        obj_id, klass = self.find_object_from_pin(pin, ObjectTypes.ENDSTOP,
                                           ObjectTypes.PROBE)
         if obj_id is None:
             return False
@@ -453,7 +453,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_spi(self, cmd, oid, pin, cs_active_high):
-        obj_id, klass = self._find_object(pin)
+        obj_id, klass = self.find_object_from_pin(pin)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -484,7 +484,7 @@ class KlipperFrontend(BaseFrontend):
 
     def buttons_add(self, cmd, oid, pos, pin, pull_up):
         buttons = self._oid_map[oid]
-        button, klass = self._find_object(pin, ObjectTypes.DIGITAL_PIN,
+        button, klass = self.find_object_from_pin(pin, ObjectTypes.DIGITAL_PIN,
                                           ObjectTypes.ENCODER)
         if button is None:
             return False
