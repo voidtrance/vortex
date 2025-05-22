@@ -13,7 +13,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-r = run_command(py, root / 'tools/find_modules.py', root, check: true)
+r = run_command(py, root / 'tools/find_modules.py', '--root',
+                 root, 'modules', check: true)
 objects = r.stdout().strip().split()
 
 auto_gen_types = custom_target('auto-types.h', output: 'auto-types.h',
@@ -29,7 +30,10 @@ cc = meson.get_compiler('c')
 math = cc.find_library('m')
 
 foreach object : objects
-    r = run_command(py, root / 'tools/find_modules.py', meson.current_source_dir(), object, check: true)
+    r = run_command(py, root / 'tools/find_modules.py',
+                    '--object', object,
+                    '--root', meson.current_source_dir(),
+                    'files', check: true)
     sources = r.stdout().strip().split()
     library(object, sources + [auto_gen_types, auto_gen_events],
             include_directories: [core_include, core_include_general, core_atomics_inc],

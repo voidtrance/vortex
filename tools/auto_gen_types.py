@@ -91,7 +91,7 @@ def gen_types(output_file, types):
                             f"[OBJECT_TYPE_{x.upper()}] = \"{x.lower()}\",\n" \
                             for x in types]
 
-    with open(top / output_file, 'w') as fd:
+    with open(output_file, 'w') as fd:
         fd.write("".join(content))
 
 def gen_events(output_file, events):
@@ -111,7 +111,7 @@ def gen_events(output_file, events):
                             for x in events]
                 
 
-    with open(top / output_file, 'w') as fd:
+    with open(output_file, 'w') as fd:
         fd.write("".join(content))
 
 objects = find_virtual_objects()

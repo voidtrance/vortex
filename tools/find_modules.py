@@ -15,8 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import re
-import sys
 import os
+import argparse
 
 def find_hw_objects(source_path):
     object_reg = re.compile(r'^class (?P<klass>[^\(]+)\(ObjectDef\):$', re.MULTILINE)
@@ -29,12 +29,22 @@ def find_hw_objects(source_path):
             objects.append(match.group("klass").strip().lower())
     return objects
 
-if len(sys.argv) == 2:
-    for object in find_hw_objects(sys.argv[1]):
-        print(object)
-elif len(sys.argv) > 2:
-    files = os.listdir(sys.argv[1])
-    for object in sys.argv[2:]:
-        for filename in files:
-            if filename.startswith(object) and filename.endswith(".c"):
-                print(filename)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=str)
+    parser.add_argument("--object", type=str, nargs="*")
+    parser.add_argument("mode", choices=["modules", "files"])
+
+    opts = parser.parse_args()
+
+    if opts.mode == "modules":
+        for object in find_hw_objects(opts.root):
+            print(object)
+    elif opts.mode == "files":
+        files = os.listdir(opts.root)
+        for object in opts.object:
+            for filename in files:
+                if filename.startswith(object) and filename.endswith(".c"):
+                    print(filename)
+
+main()

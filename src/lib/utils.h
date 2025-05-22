@@ -20,6 +20,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#define __stringify(x) #x
+#define stringify(x) __stringify(x)
+
 #define likely(x) (__builtin_expect(!!(x), 1))
 #define unlikely(x) (__builtin_expect(!!(x), 0))
 #define container_of(ptr, type, member) ((type *)((unsigned long)(ptr) - offsetof(type, member)))

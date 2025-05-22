@@ -69,5 +69,4 @@ gdb:
 
 clean:
 	rm -rf build dist builddir
-	rm -f src/core/auto-events.h src/core/objects/auto-types.h \
-		src/core/logging.h compile_commands.json version.txt
+	rm -f compile_commands.json version.txt

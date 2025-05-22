@@ -41,7 +41,7 @@ HEADER = """/*
 """
 FOOTER = "\n#endif\n"
 ROOT = sys.argv[1]
-OUTPUT = os.path.join(ROOT, sys.argv[2])
+OUTPUT = os.path.join(sys.argv[2])
 
 spec = importlib.util.spec_from_file_location("ll",
                                               os.path.join(ROOT, "lib", "logging.py"))

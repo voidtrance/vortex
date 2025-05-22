@@ -17,10 +17,8 @@
  */
 #ifndef __AUTO_OBJECT_DEFS_H__
 #define __AUTO_OBJECT_DEFS_H__
+#include <utils.h>
 #include "auto-types.h"
-
-#define _stringify(x) #x
-#define stringify(x) _stringify(x)
 
 typedef enum {
     OBJECT_TYPE_NONE,
