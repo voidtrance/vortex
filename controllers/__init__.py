@@ -248,6 +248,8 @@ class Controller(core.VortexCore):
                 obj_conf = self.object_factory[klass].config()
                 if klass == core.ObjectTypes.THERMISTOR:
                     options.adc_max = self.ADC_MAX
+                if klass == core.ObjectTypes.PWM:
+                    options.pwm_max = self.PWM_MAX
                 options = vortex.lib.ctypes_helpers.expand_substruct_config(options,
                                                                             obj_conf)
                 try:

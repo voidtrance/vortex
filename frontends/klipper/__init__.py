@@ -46,6 +46,9 @@ STATIC_STRINGS = [
     "Stepper initialization failure",
     "Missed scheduling of next digital out event",
     "Scheduled digital out event will exceed max duration",
+    "Failed to set PWM duty cycle",
+    "PWM move exceeds max duration",
+    "Missed scheduling of next PWM out event",
 ]
 
 class MoveQueue:
@@ -189,6 +192,7 @@ class KlipperFrontend(BaseFrontend):
         if self.query_hw("HEATER_COUNT") or self.query_hw("PWM_COUNT"):
             self._add_commands(proto.KLIPPER_PROTOCOL.pwmcmds)
             self.identity["config"]["ADC_MAX"] = self.query_hw("ADC_MAX")
+            self.identity["config"]["PWM_MAX"] = self.query_hw("PWM_MAX")
 
         if len(self.query_hw("SPI")):
             self._add_commands(proto.KLIPPER_PROTOCOL.spicmds)
@@ -554,6 +558,27 @@ class KlipperFrontend(BaseFrontend):
         buttons = self._oid_map[oid]
         buttons.ack(count)
         return True
+
+    def config_pwm_out(self, cmd, oid, pin, cycle_ticks, value, default_value, max_duration):
+        obj_id, klass = self.find_object_from_pin(pin, ObjectTypes.PWM)
+        pin_id, _ = self.find_object_from_pin(pin, ObjectTypes.DIGITAL_PIN)
+        if obj_id is None or pin_id is None:
+            return False
+        name = self.get_object_name(klass, obj_id)
+        pwm = PWM(self, oid, obj_id, klass, name)
+        if pwm.set_params(cycle_ticks, value, default_value, max_duration):
+            return False
+        self._oid_map[oid] = pwm
+        return True
+
+    def queue_pwm_out(self, cmd, oid, clock, value):
+        pwm = self._oid_map[oid]
+        if not pwm.queue(clock, value):
+            return False
+        return True
+
+    def set_pwm_out(self, cmd, oid, pin, cycle_ticks, value):
+        return self.config_pwm_out(cmd, oid, pin, cycle_ticks, value, 0, 0)
 
     def _process_command(self, data):
         self.serial_data += data

@@ -36,5 +36,6 @@ class STM32F446(Controller):
     ENDSTOP_COUNT = 5
     THERMISTOR_COUNT = 5
     ADC_MAX = 4095
+    PWM_MAX = 255
     def __init__(self, config):
         super().__init__(config)

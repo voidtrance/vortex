@@ -206,3 +206,25 @@ class Toolhead(ObjectDef):
     def __init__(self):
         super().__init__(ObjectTypes.TOOLHEAD)
         self.events = {ObjectEvents.TOOLHEAD_ORIGIN: self.ToolheadEventOrigin}
+
+class Pwm(ObjectDef):
+    class PwmConfig(ctypes.Structure):
+        _fields_ = [("pwm_max", ctypes.c_uint8),
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE)]
+    class PwmSetObject(ctypes.Structure):
+        _fields_ = [("klass", ctypes.c_int),
+                    ("name", ctypes.c_char * OBJECT_NAME_SIZE)]
+    class PwmSetParams(ctypes.Structure):
+        _fields_ = [("prescaler", ctypes.c_uint16)]
+    class PwmSetDutyCycle(ctypes.Structure):
+        _fields_ = [("duty_cycle", ctypes.c_uint32)]
+    class PwmStatus(ctypes.Structure):
+        _fields_ = [("counter", ctypes.c_uint32),
+                    ("duty_cycle", ctypes.c_uint32),
+                    ("on", ctypes.c_bool),
+                    ("pin", ctypes.c_char * PIN_NAME_SIZE)]
+    def __init__(self):
+        super().__init__(ObjectTypes.PWM)
+        self.commands = [(0, "set_params", self.PwmSetParams, (0, )),
+                         (1, "set_object", self.PwmSetObject, (0, )),
+                         (2, "set_duty_cycle", self.PwmSetDutyCycle, (0, ))]

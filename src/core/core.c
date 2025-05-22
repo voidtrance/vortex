@@ -45,6 +45,7 @@
 #include "objects/stepper.h"
 #include "objects/thermistor.h"
 #include "objects/toolhead.h"
+#include "objects/pwm.h"
 
 static const char *module_path = NULL;
 static PyObject *VortexCoreError;
@@ -1073,6 +1074,9 @@ static PyObject *vortex_core_get_status(PyObject *self, PyObject *args) {
             break;
         case OBJECT_TYPE_TOOLHEAD:
             state = calloc(1, sizeof(toolhead_status_t));
+            break;
+        case OBJECT_TYPE_PWM:
+            state = calloc(1, sizeof(pwm_state_t));
             break;
         default:
             break;

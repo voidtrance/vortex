@@ -283,3 +283,15 @@ that phase offset of the two pins.
 | :--- | :---: | :--- |
 | pin_a | string | The first pin in the encoder. |
 | pin_b | string | The second pin in the encoder. |
+
+### PWM
+```ini
+[pwm pwmname]
+pin:
+```
+
+The PWM object emulates PWM control done by the HW controller (instead of software).
+
+| Setting | Type | Description |
+| :- | :-: | :- |
+| pin | string | The name of the pin controlled by the PWM object. |

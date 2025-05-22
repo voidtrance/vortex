@@ -23,7 +23,7 @@ from vortex.frontends.lib import div_round_up
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
-           "Stepper", "TRSync", "SPI", "Buttons"]
+           "Stepper", "TRSync", "SPI", "Buttons", "PWM"]
 
 class HelperException(Exception):
     pass
@@ -702,3 +702,72 @@ class Buttons(HelperBase):
             if self._retransmit_state.value & ButtonsState.NO_RETRANSMIT:
                 buttons_task.report()
         return self.frontend.timers.to_time(ticks + self._rest_ticks)
+
+class PWM(HelperBase):
+    PWMMove = namedtuple("PWMMove", ["clock", "value"])
+    def __init__(self, *args):
+        super().__init__(*args)
+        self._log = logging.getLogger(f"vortex.frontend.pwm.{self.name}")
+        self._log.add_prefix(f"[{self.oid}]")
+        self.timer = self.frontend.timers.new()
+        self.timer.callback = self.handler
+        self.event_func = None
+        self.waketime = 0
+    def finish_config(self):
+        status = self.frontend.query([self.id])[self.id]
+        self.pin_name = status["pin"]
+        pin_id, pin_klass = self.frontend.find_object_from_pin(self.pin_name, ObjectTypes.DIGITAL_PIN)
+        obj_name = self.frontend.get_object_name(ObjectTypes.DIGITAL_PIN, pin_id)
+        cmd_id = self.frontend.queue_command(self.klass, self.id, "set_object",
+                                             {"klass": pin_klass, "name": obj_name})
+        if cmd_id == -1:
+            raise HelperException("Failed to set PWM object id.")
+        result = self.frontend.wait_for_command(cmd_id)[0]
+        if result != 0:
+            raise HelperException(f"Failed command to set PWM object id ({result})")
+        self.pin = DigitalPin(self.frontend, -1, pin_id, ObjectTypes.DIGITAL_PIN, obj_name)
+        self.pin.set_max_duration(self.pin_max_duration)
+        self.pin.set_initial_value(self.pin_value, self.pin_default)
+    def set_params(self, ticks, value, default, max_duration):
+        self.ticks = ticks
+        self.pin_value = value
+        self.pin_default = default
+        self.pin_max_duration = max_duration
+        max_pwm = self.frontend.query_hw("PWM_MAX")
+        prescaler = self.ticks / (2 * (max_pwm - 1))
+        cmd_id = self.frontend.queue_command(self.klass, self.id, "set_params",
+                                             {"prescaler": prescaler})
+        if cmd_id == -1:
+            return -1
+        return 0
+    def queue(self, clock, value):
+        move = self.PWMMove(clock, value)
+        if self.move_queue.put(self.oid, move) == 1:
+            self.waketime = clock
+            self.event_func = self.event
+            self.timer.timeout = clock
+    def handler(self, ticks):
+        if self.event_func is not None:
+            return self.event_func(ticks)
+    def event(self, ticks):
+        move = self.move_queue.get(self.oid)
+        value = move.value
+        cmd_id = self.frontend.queue_command(self.klass, self.id, "set_duty_cycle",
+                                             {"duty_cycle": value})
+        if cmd_id == -1 or self.frontend.wait_for_command(cmd_id)[0] != 0:
+            self.frontend.shutdown("Failed to set PWM duty cycle")
+            return 0
+        if self.move_queue.empty(self.oid):
+            if move.value == self.pin_default or not self.pin_max_duration:
+                return 0
+            self.event_func = self.event_end
+            return self.waketime + self.pin_max_duration
+        move = self.move_queue.peek(self.oid)
+        if value != self.pin_default and self.pin_max_duration and \
+            self.frontend.timers.is_before(self.waketime + self.pin_max_duration, move.clock):
+            self.frontend.shutdown("PWM move exceeds max duration")
+            return 0
+        self.waketime = move.clock
+        return self.waketime
+    def event_end(self, ticks):
+        self.frontend.shutdown("Missed scheduling of next PWM event")

@@ -123,6 +123,16 @@ def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser
         econfig.set("axis axisZ", "stepper", steppers)
     return True
 
+def generate_pwm(section : str, kconfig : Type[configparser.ConfigParser],
+                 econfig : Type[configparser.ConfigParser]) -> None:
+    klass, _, name = section.partition(" ")
+    if not name:
+        name = klass
+    if kconfig.get(section, "hardware_pwm", fallback=False):
+        s = f"pwm {name.upper()}"
+        econfig.add_section(s)
+        econfig.set(s, "pin", parse_pin(kconfig.get(section, "pin")))
+
 def generate_thermistor(section : str, name : str,
                         kconfig : Type[configparser.ConfigParser],
                         econfig : Type[configparser.ConfigParser]) -> bool:
@@ -244,10 +254,6 @@ def generate_heater_config(section : str, kconfig : Type[configparser.ConfigPars
     generate_thermistor(section, name, kconfig, econfig)
     return
 
-def generate_dpin_config(section : str, kconfig : Type[configparser.ConfigParser],
-                         econfig : Type[configparser.ConfigParser]) -> None:
-    return
-
 def generate_probe_config(section : str, kconfig : Type[configparser.ConfigParser],
                           econfig : Type[configparser.ConfigParser]) -> None:
     print(f"Generating config for section '{section}'...")
@@ -346,6 +352,15 @@ def generate_display_config(section : str, kconfig : Type[configparser.ConfigPar
                         kconfig, econfig)
     return
 
+def generate_fan_config(section : str, kconfig : Type[configparser.ConfigParser],
+                        econfig : Type[configparser.ConfigParser]) -> None:
+    print(f"Generating fan config for section '{section}'...")
+    klass, _, name = section.partition(" ")
+    if not name:
+        name = klass
+    generate_digital_pin(section, name, kconfig.get(section, "pin"), kconfig, econfig)
+    generate_pwm(section, kconfig, econfig)
+
 def generate_kinematics_config(kconfig : Type[configparser.ConfigParser],
                                econfig : Type[configparser.ConfigParser]) -> bool:
     econfig.add_section("kinematics")
@@ -389,7 +404,7 @@ KLIPPER_SECTION_HANDLERS = {
     "stepper" : generate_stepper_config,
     "extruder": generate_heater_config,
     "heater": generate_heater_config,
-    "fan": generate_dpin_config,
+    "fan": generate_fan_config,
     "temperature_sensor": generate_thermistor_config,
     "button": generate_digital_pin_config,
     "display": generate_display_config,

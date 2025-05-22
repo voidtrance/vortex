@@ -230,6 +230,47 @@ The toolhead object does not support any commands.
 | axes | A list of the axis to which the toolhead is attached. The list has 7 elements, one for each axis type. Valid entries will have one of the axis types above. Invalid entries will have the value of `AXIS_TYPE_MAX` (`7`). |
 | position | The toolhead's position along each of the 7 axis. |
 
+### PWM
+
+PWM objects emulates HW PWM controllers. It is configured with a frequency defined by the HW controller
+being used. The frequency, in combination with a configured duty cycle, define the PWM cycle.
+
+#### Available Commands
+
+<table>
+  <thead><tr><th colspan=3>set_params prescaler=&lt;int&gt;</th></tr></thead>
+  <tr><td>Description</td><td colspan=2>Set PWM parameters.</td></tr>
+  <tr><td rowspan=2>Arguments</td><td>prescaler</td><td>This prescaler is used to define the controller clock ticks and increment the PWM's internal counters.</td></tr>
+</table>
+
+<table>
+  <thead><tr><th colspan=3>set_object klass=&lt;int&gt; name=&lt;string&gt;</th></tr></thead>
+  <tr><td>Description</td><td colspan=2>Set the object controller by the PWM object.</td></tr>
+  <tr><td rowspan=3>Arguments</td><td>klass</td><td>The klass of the object. This should be a
+  digital pin object klass.</td></tr>
+  <tr><td>name</td><td>The name of the object.</td></tr>
+</table>
+
+<table>
+  <thead><tr><th colspan=3>set_duty_cycle duty_cycle=&lt;int&gt;</th></tr></thead>
+  <tr><td>Description</td><td colspan=2>Set PWM's duty cycle. The duty cycle is the number of counts
+  of the internal PWM counter for which the controlled pin will be set to ON.</td></tr>
+  <tr><td rowspan=2>Arguments</td><td>duty_cycle</td><td>The duty cycle value.</td></tr>
+</table>
+
+#### Events
+
+The PWM object does not support any events.
+
+#### Status
+
+| Field | Description |
+| :- | :- |
+| counter | The maximum value that the internal counter can reach before resetting to 0. |
+| duty_cycle | The current duty_cycle of the PWM control. |
+| on | Is the controller pin current ON. |
+| pin | The name of the pin being controlled by the PWM object. |
+
 ## Virtual Objects
 
 ### Display
