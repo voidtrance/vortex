@@ -20,6 +20,7 @@ import vortex.lib.logging as logging
 import vortex.core.lib.atomics as atomics
 from collections import namedtuple
 from vortex.core import ObjectTypes
+from vortex.frontends.lib import div_round_up
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",

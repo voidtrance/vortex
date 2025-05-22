@@ -20,6 +20,7 @@ from vortex.core import ObjectTypes
 from vortex.frontends import BaseFrontend
 from vortex.frontends.klipper.helpers import *
 from vortex.lib.utils import Counter, parse_frequency
+from vortex.frontends.lib import div_round_up
 import vortex.frontends.klipper.msgproto as msgproto
 import vortex.frontends.klipper.klipper_proto as proto
 
@@ -45,9 +46,6 @@ STATIC_STRINGS = [
     "Missed scheduling of next digital out event",
     "Scheduled digital out event will exceed max duration",
 ]
-
-def div_round_up(x, y):
-    return (x + y - 1) // y
 
 class KlipperFrontend(BaseFrontend):
     STATS_SUMSQ_BASE = 256
