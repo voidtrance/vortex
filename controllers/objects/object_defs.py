@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from argparse import Namespace
 from vortex.core import ObjectTypes, ObjectEvents
-from vortex.core import PIN_NAME_SIZE, ENDSTOP_NAME_SIZE, MOTOR_NAME_SIZE, \
+from vortex.core import PIN_NAME_SIZE, OBJECT_NAME_SIZE, ENDSTOP_NAME_SIZE, MOTOR_NAME_SIZE, \
                         TOOLHEAD_NAME_SIZE, HEATER_NAME_SIZE, \
                         HEAT_SENSOR_NAME_SIZE
 from vortex.emulator.kinematics import AxisType

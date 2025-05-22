@@ -25,6 +25,9 @@ auto_gen_events = custom_target('auto-events.h', output: 'auto-events.h',
                          input : root / 'tools/auto_gen_types.py',
                          command : [py, '@INPUT@', '-e', root, '@OUTPUT@'])
 
+auto_gen_vobj = custom_target('vobj_defs.h', output: 'vobj_defs.h',
+                         input: root / 'tools/generate_vobj_defs.py',
+                         command: [py, '@INPUT@', '--root', root, '@OUTPUT@'])
 
 cc = meson.get_compiler('c')
 math = cc.find_library('m')
@@ -35,7 +38,7 @@ foreach object : objects
                     '--root', meson.current_source_dir(),
                     'files', check: true)
     sources = r.stdout().strip().split()
-    library(object, sources + [auto_gen_types, auto_gen_events],
+    library(object, sources + [auto_gen_types, auto_gen_events, auto_gen_vobj],
             include_directories: [core_include, core_include_general, core_atomics_inc],
             dependencies: [core_utils_dep, core_kinematics_dep, math, core_atomics_dep],
             name_prefix: '',

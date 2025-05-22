@@ -94,6 +94,7 @@ class _Objects:
 Object = namedtuple("Object", ["klass", "name", "id"])
 class ObjectKlassInvalid(Exception): pass
 class ObjectNotFound(Exception): pass
+
 class ObjectLookUp:
     def __init__(self, object_list):
         self.__dict__.update({"__objects": object_list})
@@ -235,7 +236,11 @@ class Controller(core.VortexCore):
                                                  self.virtual_command_complete,
                                                  self.event_submit)
                 self.object_defs[klass] = obj.__class__
-                object_id = self.register_virtual_object(klass, name)
+                object_id = self.register_virtual_object(klass, name, self.vobj_cmd_exec,
+                                                         self.vobj_get_state)
+                if object_id == vortex.core.INVALID_OBJECT_ID:
+                    self.log.error(f"Failed to register virtual object {klass}:{name}")
+                    continue
                 obj._id = object_id
                 self._virtual_objects[object_id] = obj
             else:
@@ -264,7 +269,8 @@ class Controller(core.VortexCore):
                 if not pin_set:
                     return False, value
         return True, None
-    def start(self, timer_frequency, update_frequency, set_priority, completion_cb):
+    def start(self, timer_frequency, update_frequency, set_priority, vobj_exec_cb, completion_cb):
+        self._virtual_object_exec_command = vobj_exec_cb
         self._completion_callback = completion_cb
         cur_freq = get_host_cpu_frequency()
         max_freq = get_host_cpu_frequency("max")
@@ -278,6 +284,25 @@ class Controller(core.VortexCore):
         return self.FREQUENCY
     def virtual_command_complete(self, cmd_id, status):
         self._completion_callback(cmd_id, status)
+    def virtual_object_opts_convert(self, obj_id, obj_cmd_id, opts):
+        if obj_id not in self._virtual_objects:
+            return -1
+        vobj = self._virtual_objects[obj_id]
+        args_struct = [cmd[2] for cmd in vobj.commands if cmd[0] == obj_cmd_id]
+        if not args_struct:
+            raise -1
+        args_ptr = ctypes.cast(opts, ctypes.POINTER(args_struct[0])).contents
+        args = vortex.lib.ctypes_helpers.parse_ctypes_struct(args_ptr)
+        return args
+    def vobj_cmd_exec(self, klass, obj_id, cmd_id, cmd, opts):
+        return self._virtual_object_exec_command(klass, obj_id, cmd_id, cmd, opts)
+    def vobj_get_state(self, klass, obj_id):
+        if obj_id not in self._virtual_objects:
+            return 0
+        state = self._virtual_objects[obj_id].get_status()
+        struct = self._virtual_objects[obj_id].state()
+        vortex.lib.ctypes_helpers.fill_ctypes_struct(struct, state)
+        return struct
     def get_param(self, param):
         if param == "commands":
             cmds = {x: [] for x in core.ObjectTypes}
@@ -349,21 +374,16 @@ class Controller(core.VortexCore):
         if command.opts is None:
             return None
         opts_defaults = command.defaults
+        opts_struct = command.opts()
+        # TODO: Use the default values to initial the structs
+        try:
+            vortex.lib.ctypes_helpers.fill_ctypes_struct(opts_struct, opts)
+        except TypeError as e:
+            self.log.error(f"Failed to convert command options: {str(e)}")
         if not klass_def.virtual:
-            opts_struct = command.opts()
-            # TODO: Use the default values to initial the structs
-            try:
-                vortex.lib.ctypes_helpers.fill_ctypes_struct(opts_struct, opts)
-            except TypeError as e:
-                self.log.error(f"Failed to convert command options: {str(e)}")
             return opts_struct
         else:
-            for opt, value in opts.items():
-                for cmd_opt in command.opts:
-                    if cmd_opt[0] == opt:
-                        value = cmd_opt[1](value)
-                opts[opt] = value
-            return opts
+            return vortex.lib.ctypes_helpers.parse_ctypes_struct(opts_struct)
     def exec_command(self, command_id, object_id, subcommand_id, opts=None):
         object = self.objects.object_by_id(object_id)
         if opts is not None:

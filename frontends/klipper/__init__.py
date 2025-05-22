@@ -311,6 +311,8 @@ class KlipperFrontend(BaseFrontend):
 
     def finalize_config(self, cmd, crc):
         self.config_crc = crc
+        for obj in self._oid_map.values():
+            obj.finish_config()
         return True
 
     def config_analog_in(self, cmd, oid, pin):

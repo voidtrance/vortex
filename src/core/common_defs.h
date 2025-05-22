@@ -45,6 +45,8 @@ typedef struct {
     event_register_t event_unregister;
     event_submit_t event_submit;
     cmd_submit_cb_t cmd_submit;
+    void *v_cmd_exec;
+    void *v_get_state;
     void *logger;
     log_cb_t log;
     void *cb_data;

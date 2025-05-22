@@ -23,7 +23,7 @@ import threading
 import vortex.lib.logging as logging
 from vortex.core import ObjectTypes
 from vortex.frontends.lib import create_pty
-from vortex.frontends.queues import CommandQueue
+from vortex.frontends.queues import CommandQueue, Command
 from vortex.frontends.proto import *
 
 class BaseFrontend:
@@ -185,7 +185,7 @@ class BaseFrontend:
                 completed = set(self._command_results.keys())
         return [self._command_results[i] for i in cmd_set]
 
-    def queue_command(self, klass, object, cmd, opts, callback=None):
+    def _command_check(self, klass, object, cmd):
         if self.is_reset:
             return False
         if isinstance(object, int):
@@ -208,6 +208,13 @@ class BaseFrontend:
                 return False
         else:
             return False
+        return (obj_id, cmd_id)
+
+    def queue_command(self, klass, object, cmd, opts, callback=None):
+        check = self._command_check(klass, object, cmd)
+        if check is False:
+            return False
+        obj_id, cmd_id = check
         if isinstance(opts, str):
             opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
         elif not isinstance(opts, dict):
@@ -220,6 +227,22 @@ class BaseFrontend:
         if self._run_sequential:
             self.wait_for_command(cmd_id)
         return cmd_id
+
+    def queue_virtual_object_command(self, klass, object, cmd_id, cmd, opts, callback=None):
+        check = self._command_check(klass, object, cmd)
+        if check is False:
+            return False
+        obj_id, obj_cmd_id = check
+        opts = self._controller.virtual_object_opts_convert(obj_id, obj_cmd_id, opts)
+        self.log.debug(f"Submitting virtual object command: {self.get_object_name(klass, obj_id)} {obj_cmd_id} {opts}")
+        with self._command_completion_lock:
+            cmd = Command(obj_id, obj_cmd_id, opts)
+            cmd.id = cmd_id
+            self._queue.put(cmd)
+            self._command_completion[cmd_id] = (cmd, callback)
+        if self._run_sequential:
+            self.wait_for_command(cmd_id)
+        return True
 
     def complete_command(self, id, result):
         with self._command_completion_lock:

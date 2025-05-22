@@ -14,11 +14,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.core import ObjectTypes
+from vortex.core import ObjectTypes, PIN_NAME_SIZE
+import ctypes
+
+class DigitalPinSetArgs(ctypes.Structure):
+    _fields_ = [("state", ctypes.c_bool)]
+
+class DigitalPinState(ctypes.Structure):
+    _fields_ = [("state", ctypes.c_bool),
+                ("pin", ctypes.c_char * PIN_NAME_SIZE)]
 
 class DigitalPin(vobj.VirtualObjectBase):
     type = ObjectTypes.DIGITAL_PIN
-    commands = [(0, "set", [("state", bool)], None)]
+    commands = [(0, "set", DigitalPinSetArgs, None)]
+    state = DigitalPinState
     def __init__(self, *args):
         super().__init__(*args)
         self._state = False

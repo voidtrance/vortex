@@ -74,7 +74,7 @@ def fill_ctypes_struct(instance, data):
     elif issubclass(t, ctypes.Union):
         logging.error("Unions are not supported in object configuration")
     elif issubclass(t, ctypes.Array):
-        if not isinstance(data, list):
+        if not isinstance(data, list) and not isinstance(data, bytes):
             raise TypeError("'data' should be a list")
         for i, val in enumerate(data):
             if is_simple(t._type_):

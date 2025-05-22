@@ -14,15 +14,26 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.core import ObjectTypes
+from vortex.core import ObjectTypes, PIN_NAME_SIZE
 import vortex.lib.logging as logging
+import ctypes
 import time
 
 logger = logging.getLogger("vortex.core.objects.encoder")
 
+class EncoderPulsesArgs(ctypes.Structure):
+    _fields_ = [("count", ctypes.c_uint32),
+                ("direction", ctypes.c_uint8)]
+
+class EncoderState(ctypes.Structure):
+    _fields_ = [("pin_a", ctypes.c_char * PIN_NAME_SIZE),
+                ("pin_b", ctypes.c_char * PIN_NAME_SIZE),
+                ("state", ctypes.c_bool * 2)]
+
 class Encoder(vobj.VirtualObjectBase):
     type = ObjectTypes.ENCODER
-    commands = [(0, "pulses", [("count", int), ("direction", int)], None)]
+    commands = [(0, "pulses", EncoderPulsesArgs, None)]
+    status = EncoderState
     def __init__(self, config, lookup, query, complete, submit):
         super().__init__(config, lookup, query, complete, submit)
         self.state = {config.pin_a: False, config.pin_b: False}

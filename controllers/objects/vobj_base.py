@@ -38,9 +38,6 @@ class VirtualObjectBase:
                 break
         if not command:
             return -errno.EINVAL
-        for opt, type in command[2]:
-            if opts.get(opt, None) is None:
-                return -errno.EINVAL
         return 0
     def event_submit(self, event, data):
         self._event_submit(event, self._id, data)

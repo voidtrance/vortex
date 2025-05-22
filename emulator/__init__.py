@@ -94,6 +94,7 @@ class Emulator:
         try:
            self._controller.start(self._timer_frequency, self._update_frequency,
                                   self._controller_thread_priority,
+                                  self._frontend.queue_virtual_object_command,
                                   self._frontend.complete_command)
         except VortexCoreError as e:
             logging.error(str(e))

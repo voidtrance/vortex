@@ -14,16 +14,41 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.core import ObjectTypes
+from vortex.core import ObjectTypes, PIN_NAME_SIZE
 import vortex.lib.logging as logging
+import ctypes
 
 logger = logging.getLogger("vortex.core.objects.display")
 
+class DisplayReadArgs(ctypes.Structure):
+    _fields_ = [("len", ctypes.c_uint16)]
+
+class DisplayWriteArgs(ctypes.Structure):
+    _fields_ = [("is_data", ctypes.c_bool),
+                ("len", ctypes.c_uint),
+                ("data", ctypes.c_uint8 * 256)]
+
+class DisplayResetArgs(ctypes.Structure):
+    _fields_ = []
+
+class DisplayState(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_char * 16),
+                ("cs_pin", ctypes.c_char * PIN_NAME_SIZE),
+                ("reset_pin",  ctypes.c_char * PIN_NAME_SIZE),
+                ("data_pin", ctypes.c_char * PIN_NAME_SIZE),
+                ("spi_miso_pin", ctypes.c_char * PIN_NAME_SIZE),
+                ("spi_mosi_pin", ctypes.c_char * PIN_NAME_SIZE),
+                ("spi_sclk_pin", ctypes.c_char * PIN_NAME_SIZE),
+                ("width", ctypes.c_uint16),
+                ("height", ctypes.c_uint16),
+                ("data", ctypes.c_uint8 * 1024)]
+
 class Display(vobj.VirtualObjectBase):
     type = ObjectTypes.DISPLAY
-    commands = [(0, "read", [("len", int)], None),
-                (1, "write", [("is_data", bool), ("data", bytes)], None),
-                (2, "reset", [], None)]
+    commands = [(0, "read", DisplayReadArgs, None),
+                (1, "write", DisplayWriteArgs, None),
+                (2, "reset", DisplayResetArgs, None)]
+    state  = DisplayState
     def get_status(self):
         return vars(self.config)
     def exec_command(self, cmd_id, cmd, opts):
@@ -82,10 +107,12 @@ class UC1701(Display):
         if cmd == 0:
             self._cmd_complete(cmd_id, 0)
         elif cmd == 1:
+            data = opts.get("data")
+            len = opts.get("len")
             if opts.get("is_data", False):
-                self.process_data(opts.get("data"))
+                self.process_data(data[:len])
             else:
-                self.process_commands(opts.get("data"))
+                self.process_commands(data[:len])
             self._cmd_complete(cmd_id, 0)
         elif cmd == 2:
             self.reset()

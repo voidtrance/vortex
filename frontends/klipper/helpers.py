@@ -50,6 +50,8 @@ class HelperBase:
         self.id = obj_id
         self.klass = klass
         self.name = name
+    def finish_config(self):
+        return
     def shutdown(self):
         if hasattr(self, "timer"):
             self.timer.remove()
@@ -595,13 +597,19 @@ class SPI(HelperBase):
             return pin
         return None
     def send(self, data, with_response=False):
-        cmd_id = self.frontend.queue_command(self.klass, self.name, "write",
-                                             {"is_data": self._data_enabled, "data": data})
-        if cmd_id is False:
-            return -1
-        result = self.frontend.wait_for_command(cmd_id)[0]
-        if result < 0:
-            return result
+        chunk_len = 256
+        for i in range(div_round_up(len(data), chunk_len)):
+            s = i * chunk_len
+            e = (i + 1) * chunk_len
+            cmd_id = self.frontend.queue_command(self.klass, self.name, "write",
+                                             {"is_data": self._data_enabled,
+                                              "len": min(len(data) - s, chunk_len),
+                                              "data": data[s:e]})
+            if cmd_id is False:
+                return -1
+            result = self.frontend.wait_for_command(cmd_id)[0]
+            if result < 0:
+                return result
         if with_response:
             status = self.frontend.query_object([self.id])[self.id]
             return status["response"]
@@ -613,8 +621,7 @@ class SPI(HelperBase):
         if cmd_id is False:
             return -1
         result = self.frontend.wait_for_command(cmd_id)[0]
-        if result < 0:
-            return result
+        return result
 
 class ButtonsState(enum.IntEnum):
     NONE = 0
