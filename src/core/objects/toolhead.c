@@ -118,7 +118,6 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
     toolhead_origin_event_data_t *event;
     coordinates_t axis_positions = { 0 };
     axis_status_t status;
-    bool at_origin = true;
     size_t i;
 
     for (i = 0; i < toolhead->n_axes; i++) {
@@ -137,7 +136,7 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
 
     log_debug(toolhead, "position: %.15f, %.15f, %.15f", toolhead->position.x,
               toolhead->position.y, toolhead->position.z);
-    if (at_origin) {
+    if (toolhead->position.x == 0.0 && toolhead->position.y == 0.0 && toolhead->position.z == 0.0) {
         event = object_cache_alloc(toolhead_event_cache);
         if (event) {
             memcpy(event->position, &toolhead->position,
