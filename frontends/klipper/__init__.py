@@ -160,7 +160,8 @@ class KlipperFrontend(BaseFrontend):
             object_status = self.query_object(objects)
             for obj_id, status in object_status.items():
                 for k, v in status.items():
-                    if k == "pin" or "_pin" in k or "pin_" in k:
+                    if (k == "pin" or "_pin" in k or "pin_" in k) and \
+                        "addr" not in k and "pins" not in k:
                         pmap[klass][v] = obj_id
         return pmap
 
