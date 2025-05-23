@@ -15,7 +15,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import enum
 import ctypes
-from threading import Lock
 import vortex.lib.logging as logging
 import vortex.core.lib.atomics as atomics
 from collections import namedtuple
@@ -26,30 +25,17 @@ from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOC
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
            "Stepper", "TRSync", "SPI", "Buttons"]
 
-class MoveQueue:
-    def __init__(self, size):
-        self._size = size
-        self._queue = []
-        self._lock = Lock()
-    def put(self, item):
-        with self._lock:
-            self._queue.append(item)
-    def get(self):
-        with self._lock:
-            if self._queue:
-                return self._queue.pop(0)
-            return None
-    def clear(self):
-        with self._lock:
-            self._queue.clear()
+class HelperException(Exception):
+    pass
 
 class HelperBase:
-    def __init__(self, frontend, oid, obj_id, klass, name=""):
+    def __init__(self, frontend, queue, oid, obj_id, klass, name=""):
         self.frontend = frontend
         self.oid = oid
         self.id = obj_id
         self.klass = klass
         self.name = name
+        self.move_queue = queue
     def finish_config(self):
         return
     def shutdown(self):
@@ -60,8 +46,8 @@ class HelperBase:
         self.shutdown()
 
 class AnalogPin(HelperBase):
-    def __init__(self, frontend, oid, obj_id, klass, name):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self.timer = None
         self._log = logging.getLogger(f"vortex.frontend.analog.{name}")
         self._log.add_prefix(f"[{oid}]")
@@ -117,8 +103,8 @@ class DigitalPin(HelperBase):
         def __init__(self, waketime, duration):
             self.waketime = waketime
             self.duration = duration
-    def __init__(self, frontend, oid, obj_id, klass, name):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self.end_time = 0
         self.flags = 0
         self.max_duration = 0
@@ -234,8 +220,8 @@ class DigitalPin(HelperBase):
         return waketime
 
 class HeaterPin(DigitalPin):
-    def __init__(self, frontend, oid, obj_id, klass, name):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         status = frontend.query([obj_id])[obj_id]
         self.heater_max_temp = status["max_temp"]
         cmd_id = self.frontend.queue_command(ObjectTypes.HEATER,
@@ -269,8 +255,8 @@ class StepperMasks(enum.IntEnum):
     EN_DIR = (StepperPins.ENABLE | StepperPins.DIR)
 
 class StepperEnablePin(DigitalPin):
-    def __init__(self, frontend, oid, obj_id, klass, name, word):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name, word):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self.word = word
     def _set_pin(self, value):
         if value:
@@ -289,8 +275,8 @@ class CurrentMove:
         return f"interval={self.interval}, count={self.count}, increment={self.increment}, dir={self.dir}"
 
 class Stepper(HelperBase):
-    def __init__(self, frontend, oid, obj_id, klass, name):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self._log = logging.getLogger(f"vortex.frontend.stepper.{name}")
         self._log.add_prefix(f"[{oid}]")
         status = self.frontend.query([obj_id])[obj_id]
@@ -298,7 +284,6 @@ class Stepper(HelperBase):
                      "dir": status.get("dir_pin"),
                      "step": status.get("step_pin")}
         self.oid_handlers = {}
-        self.move_queue = MoveQueue(self.frontend._queue.max_size)
         self.next_dir = 0
         self.next_step_time = 0
         self.timer = self.frontend.timers.new()
@@ -320,7 +305,8 @@ class Stepper(HelperBase):
             if pin != obj_pin:
                 continue
             if name == "enable":
-                pin = StepperEnablePin(self.frontend, oid, self.id, self.klass,
+                pin = StepperEnablePin(self.frontend, self.move_queue, oid,
+                                       self.id, self.klass,
                                        self.name, self.pin_word)
                 setattr(self, f"{name}_pin", pin)
                 return pin
@@ -340,7 +326,7 @@ class Stepper(HelperBase):
             self.frontend.shutdown("Invalid count parameter")
             return
         move = StepperMove(interval, count, add, self.next_dir)
-        self.move_queue.put(move)
+        self.move_queue.put(self.oid, move)
         if not self.move.active:
             timeout = self._next_move(0)
             self.timer.timeout = timeout
@@ -350,7 +336,7 @@ class Stepper(HelperBase):
         self.timer.timeout = 0
         self.move.count = 0
         self.move.active = False
-        self.move_queue.clear()
+        self.move_queue.clear(self.oid)
     def _change_direction(self, dir):
         # Only switch direction if the current set of
         # steps have been finished by the stepper.
@@ -361,7 +347,7 @@ class Stepper(HelperBase):
         while (self.pin_word.value >> StepperPinShift.DIR) & 0x1 != dir:
             continue
     def _next_move(self, ticks):
-        move = self.move_queue.get()
+        move = self.move_queue.get(self.oid)
         if not move:
             self.move.active = False
             return 0
@@ -415,8 +401,8 @@ class Stepper(HelperBase):
 # event. However, Klipper wants the endstop pin valus to
 # match for a certain sample count before triggering.
 class EndstopPin(HelperBase):
-    def __init__(self, frontend, oid, obj_id, klass, name):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self.timer = None
         self.sample_time = 0
         self.sample_count = 0
@@ -477,8 +463,8 @@ class TRSyncFlags(enum.IntFlag):
     CAN_TRIGGER = enum.auto()
 
 class TRSync(HelperBase):
-    def __init__(self, frontend, oid, obj_id, klass, name=""):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name=""):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self.triger_reason = 0
         self.expire_reason = 0
         self.report_ticks = 0
@@ -547,21 +533,21 @@ class TRSync(HelperBase):
             pass
 
 class SPIDataPin(DigitalPin):
-    def __init__(self, frontend, oid, obj_id, klass, name, device):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name, device):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self._spi_dev = device
     def _set_pin(self, value):
         self._spi_dev.enable_data(value)
 class SPIResetPin(DigitalPin):
-    def __init__(self, frontend, oid, obj_id, klass, name, device):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name, device):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self._spi_dev = device
     def _set_pin(self, value):
         self._spi_dev.reset(value)
 
 class SPI(HelperBase):
-    def __init__(self, frontend, oid, obj_id, klass, name, pin, cs_high=False):
-        super().__init__(frontend, oid, obj_id, klass, name)
+    def __init__(self, frontend, queue, oid, obj_id, klass, name, pin, cs_high=False):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         status = self.frontend.query_object([obj_id])[obj_id]
         self._pins = {k: v for k, v in status.items() if "pin" in k}
         self.klass = klass
@@ -586,11 +572,11 @@ class SPI(HelperBase):
             if pin != obj_pin:
                 continue
             if name == "data_pin":
-                pin = SPIDataPin(self.frontend, oid, self.id, self.klass,
-                                 self.name, self)
+                pin = SPIDataPin(self.frontend, self.move_queue, oid, self.id,
+                                 self.klass, self.name, self)
             elif name == "reset_pin":
-                pin = SPIResetPin(self.frontend, oid, self.id, self.klass,
-                                  self.name, self)
+                pin = SPIResetPin(self.frontend, self.move_queue, oid, self.id,
+                                  self.klass, self.name, self)
             else:
                 return None
             setattr(self, name, pin)
@@ -652,9 +638,9 @@ class ButtonsTask:
 buttons_task = None
 
 class Buttons(HelperBase):
-    def __init__(self, frontend, oid, obj_id, klass, name, count):
+    def __init__(self, frontend, queue, oid, obj_id, klass, name, count):
         global buttons_task
-        super().__init__(frontend, oid, obj_id, klass, name)
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
         self._count = count
         self._buttons = [None] * self._count
         self._pressed = self._last_pressed = 0

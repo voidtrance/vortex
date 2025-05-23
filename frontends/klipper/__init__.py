@@ -16,6 +16,7 @@
 import zlib
 import json
 import vortex.lib.logging as logging
+from threading import Lock
 from vortex.core import ObjectTypes
 from vortex.frontends import BaseFrontend
 from vortex.frontends.klipper.helpers import *
@@ -47,6 +48,54 @@ STATIC_STRINGS = [
     "Scheduled digital out event will exceed max duration",
 ]
 
+class MoveQueue:
+    def __init__(self, size):
+        self._size = size
+        self._elems = 0
+        self._queue = {}
+        self._lock = Lock()
+    def _get_move_locked(self, oid):
+        if oid not in self._queue or not self._queue[oid]:
+            return None
+        return self._queue[oid][0]
+    def put(self, oid, item):
+        with self._lock:
+            if oid not in self._queue:
+                self._queue[oid] = []
+            if self._elems < self._size:
+                self._queue[oid].append(item)
+                self._elems += 1
+            return self._elems
+    def get(self, oid):
+        with self._lock:
+            move = self._get_move_locked(oid)
+            if move is not None:
+                self._queue[oid].remove(move)
+                self._elems -= 1
+            return move
+    def peek(self, oid):
+        with self._lock:
+            return self._get_move_locked(oid)
+    def empty(self, oid=None):
+        with self._lock:
+            if oid is not None:
+                return oid not in self._queue or not self._queue[oid]
+            return self._elems == 0
+    def clear(self, oid=None):
+        with self._lock:
+            if oid is not None:
+                self._queue.clear()
+                self._elems = 0
+            else:
+                if oid in self._queue:
+                    self._elems -= len(self._queue[oid])
+                    self._queue[oid].clear()
+    def size(self):
+        with self._lock:
+            return self._elems
+    def __len__(self):
+        return self.size()
+
 class KlipperFrontend(BaseFrontend):
     STATS_SUMSQ_BASE = 256
     def __init__(self):
@@ -54,6 +103,7 @@ class KlipperFrontend(BaseFrontend):
         self.next_sequence = 1
         self.serial_data = bytes()
         self.mp = msgproto.MessageParser()
+        self.move_queue = MoveQueue(1024)
         # Skip first two values used by default messages
         self.counter = Counter(2)
         self.all_commands = {}
@@ -320,7 +370,7 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        self._oid_map[oid] = AnalogPin(self, oid, obj_id, klass, name)
+        self._oid_map[oid] = AnalogPin(self, self.move_queue, oid, obj_id, klass, name)
         return True
     
     def query_analog_in(self, cmd, oid, clock, sample_ticks, sample_count,
@@ -337,7 +387,7 @@ class KlipperFrontend(BaseFrontend):
             return False
         name = self.get_object_name(klass, obj_id)
         if klass == ObjectTypes.HEATER:
-            pin = HeaterPin(self, oid, obj_id, klass, name)
+            pin = HeaterPin(self, self.move_queue, oid, obj_id, klass, name)
         elif klass == ObjectTypes.STEPPER:
             stepper = self.find_existing_object(obj_id)
             if stepper is None or not stepper.owns_pin(pin):
@@ -349,7 +399,7 @@ class KlipperFrontend(BaseFrontend):
                 return False
             pin = display.configure_pin(oid, pin)
         else:
-            pin = DigitalPin(self, oid, obj_id, klass, name)
+            pin = DigitalPin(self, self.move_queue, oid, obj_id, klass, name)
         if not isinstance(pin, DigitalPin):
             return False
         pin.set_initial_value(value, default_value)
@@ -379,7 +429,7 @@ class KlipperFrontend(BaseFrontend):
             return False
         name = self.get_object_name(klass, obj_id)
         try:
-            self._oid_map[oid] = Stepper(self, oid, obj_id, klass, name)
+            self._oid_map[oid] = Stepper(self, self.move_queue, oid, obj_id, klass, name)
         except ValueError:
             self.shutdown("Stepper initialization failed")
         return True
@@ -416,7 +466,7 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        self._oid_map[oid] = EndstopPin(self, oid, obj_id, klass, name)
+        self._oid_map[oid] = EndstopPin(self, self.move_queue, oid, obj_id, klass, name)
         return True
 
     def endstop_home(self, cmd, oid, clock, sample_ticks, sample_count, rest_ticks,
@@ -435,7 +485,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_trsync(self, cmd, oid):
-        self._oid_map[oid] = TRSync(self, oid, -1, ObjectTypes.NONE)
+        self._oid_map[oid] = TRSync(self, self.move_queue, oid, -1, ObjectTypes.NONE)
         return True
 
     def trsync_start(self, cmd, oid, report_clock, report_ticks, expire_reason):
@@ -459,7 +509,8 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        self._oid_map[oid] = SPI(self, oid, obj_id, klass, name, pin, cs_active_high)
+        self._oid_map[oid] = SPI(self, self.move_queue, oid, obj_id, klass, name,
+                                 pin, cs_active_high)
         return True
 
     def spi_set_software_bus(self, cmd, oid, miso_pin, mosi_pin, sclk_pin, mode, rate):
@@ -481,7 +532,8 @@ class KlipperFrontend(BaseFrontend):
             return result >= 0
 
     def config_buttons(self, cmd, oid, button_count):
-        self._oid_map[oid] = Buttons(self, oid, -1, ObjectTypes.NONE, "", button_count)
+        self._oid_map[oid] = Buttons(self, self.move_queue, oid, -1, ObjectTypes.NONE,
+                                     "", button_count)
         return True
 
     def buttons_add(self, cmd, oid, pos, pin, pull_up):
