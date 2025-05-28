@@ -108,7 +108,10 @@ static void axis_reset(core_object_t *object) {
             break;
         case KINEMATICS_DELTA:
             start = axis->min;
+            spmm = axis->motors[0].steps_per_mm;
+            break;
         default:
+            start = random_double_limit(axis->min, axis->max);
             spmm = axis->motors[0].steps_per_mm;
         }
 
