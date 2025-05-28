@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 cc = meson.get_compiler('c')
 math = cc.find_library('m')
-core_kinematics_inc = include_directories('.')
+core_kinematics_include = include_directories('.')
 core_kinematics = library('kinematics',
                                 ['cartesian.c', 'corexy.c', 'delta.c',
                                 'kinematics.c'],
@@ -24,7 +24,7 @@ core_kinematics = library('kinematics',
                                 install: true,
                                 install_dir: py.get_install_dir(pure: false) / 'vortex/core/kinematics')
 core_kinematics_dep = declare_dependency(link_with: core_kinematics,
-                                            include_directories: core_kinematics_inc)
+                                            include_directories: core_kinematics_include)
 
 py_kinematics = custom_target('_vortex_kinematics', output: '_vortex_kinematics.so',
                         input : root / 'src/core/kinematics/_vortex_kinematics.py',

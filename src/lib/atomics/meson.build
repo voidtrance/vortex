@@ -13,12 +13,12 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-core_atomics_inc = include_directories('.')
+core_atomics_include = include_directories('.')
 core_atomics = library('atomics', ['atomics.c'],
                         install: true,
                         install_dir: py.get_install_dir(pure: false) / 'vortex/core/lib/atomics')
 core_atomics_dep = declare_dependency(link_with: core_atomics,
-                                            include_directories: core_atomics_inc)
+                                            include_directories: core_atomics_include)
 
 cc = meson.get_compiler('c')
 py_atomics = custom_target('_vortex_atomics', output: '_vortex_atomics.so',

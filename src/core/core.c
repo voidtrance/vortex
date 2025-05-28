@@ -29,7 +29,6 @@
 #include <structmember.h>
 #include <sys/queue.h>
 #include <utils.h>
-#include <kinematics.h>
 #include <threads.h>
 
 #include "events.h"
