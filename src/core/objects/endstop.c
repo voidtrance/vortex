@@ -54,7 +54,7 @@ typedef struct {
     bool triggered;
 } endstop_t;
 
-static object_cache_t *endstop_event_cache;
+static object_cache_t *endstop_event_cache = NULL;
 
 static void endstop_update(core_object_t *object, uint64_t ticks,
                            uint64_t runtime);

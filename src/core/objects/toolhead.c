@@ -44,7 +44,7 @@ typedef struct {
     size_t n_axes;
 } toolhead_t;
 
-static object_cache_t *toolhead_event_cache;
+static object_cache_t *toolhead_event_cache = NULL;
 
 static inline void set_axis_position(coordinates_t *positions, axis_type_t type,
                                      double position) {
