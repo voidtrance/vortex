@@ -13,7 +13,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.lib.logging as logging
 from vortex.frontends import BaseFrontend
 from vortex.controllers import ObjectTypes
 from vortex.frontends.proto import CommandStatus, Completion
@@ -24,7 +23,7 @@ class DirectFrontend(BaseFrontend):
 
     def _process_command(self, data):
         cmd = data.decode().strip()
-        logging.debug(f"Received command: {cmd}")
+        self.log.debug(f"Received command: {cmd}")
         try:
             parts = cmd.split(':', maxsplit=4)
             klass, object, cmd = parts[:3]
@@ -42,19 +41,19 @@ class DirectFrontend(BaseFrontend):
                 else:
                     super().respond(CommandStatus.FAIL, False)
             else:
-                logging.error(f"Unable to parse command: {e}")
+                self.log.error(f"Unable to parse command: {e}")
             return
 
         klass = ObjectTypes[klass]
         cmd_id = self.queue_command(klass, object, cmd, opts)
         if cmd_id is False:
-            logging.error("Failed to queue command")
+            self.log.error("Failed to queue command")
             super().respond(CommandStatus.FAIL, False)
         else:
             super().respond(CommandStatus.QUEUED, cmd_id)
 
     def complete_command(self, id, result):
-        logging.debug(f"Command {id} complete: {result}")
+        self.log.debug(f"Command {id} complete: {result}")
         super().complete_command(id, result)
         super().respond(CommandStatus.COMPLETE, Completion(id, result))
 

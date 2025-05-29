@@ -17,9 +17,9 @@
  */
 #ifndef __OBJECTS_COMMON_DEFS_H__
 #define __OBJECTS_COMMON_DEFS_H__
+#include <logging.h>
 #include "objects/object_defs.h"
 #include "events.h"
-#include "logging.h"
 
 #define __maybe_unused __attribute__((__unused__))
 
@@ -33,7 +33,7 @@ typedef core_object_t **(*object_list_cb_t)(const core_object_type_t, void *);
 typedef void (*complete_cb_t)(uint64_t, int64_t, void *);
 typedef uint64_t (*cmd_submit_cb_t)(core_object_t *, core_object_id_t, uint16_t,
 				    void *, complete_cb_t, void *);
-typedef void (*log_cb_t)(void *logger, core_log_level_t, const char *, ...);
+
 /*
  * Data structure given to all the objects.
  */
@@ -47,8 +47,7 @@ typedef struct {
     cmd_submit_cb_t cmd_submit;
     void *v_cmd_exec;
     void *v_get_state;
-    void *logger;
-    log_cb_t log;
+    vortex_logger_t *logger;
     void *cb_data;
 } core_call_data_t;
 
@@ -178,6 +177,22 @@ static inline core_object_t *core_id_to_object(core_object_id_t id) {
         ((core_object_t *)(obj)), core_object_to_id(target), (cmd_id),	\
         ((void *)(args)), (handler),                                    \
         ((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_LOG(obj, level, fmt, ...)                                      \
+    (vortex_logger_log(((core_object_t *)(obj))->call_data.logger, (level), \
+                       __FILE__, __LINE__, (fmt), ##__VA_ARGS__))
+
+#define log_debug(obj, fmt, ...) \
+    CORE_LOG(obj, LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
+#define log_verbose(obj, fmt, ...) \
+    CORE_LOG(obj, LOG_LEVEL_VERBOSE, fmt, ##__VA_ARGS__)
+#define log_info(obj, fmt, ...) \
+    CORE_LOG(obj, LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
+#define log_warning(obj, fmt, ...) \
+    CORE_LOG(obj, LOG_LEVEL_WARNING, fmt, ##__VA_ARGS__)
+#define log_error(obj, fmt, ...) \
+    CORE_LOG(obj, LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
+#define log_critical(obj, fmt, ...) \
+    CORE_LOG(obj, LOG_LEVEL_CRITICAL, fmt, ##__VA_ARGS__)
 
 static inline void core_object_destroy(core_object_t *object) {
     free((char *)object->name);

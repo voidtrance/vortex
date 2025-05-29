@@ -21,7 +21,7 @@ import errno
 import traceback
 import vortex.emulator
 import vortex.emulator.config
-import vortex.lib.logging as logging
+import vortex.core.lib.logging as logging
 
 def create_arg_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -57,8 +57,8 @@ def create_arg_parser():
                             performance as the emulator will take up more
                             CPU cycles.""")
     debug = parser.add_argument_group("Debug Options")
-    debug_levels = [logging.get_logging_level_names()[x] for x in sorted(logging.get_logging_level_names().keys())]
-    debug.add_argument("-d", "--debug", choices=debug_levels,
+    debug_levels = sorted(logging.LOG_LEVELS.values())
+    debug.add_argument("-d", "--debug", choices=debug_levels, metavar="LEVEL",
                         default="INFO",
                         help="""Set logging level. Higher logging levels will
                         provide more information but will also affect
@@ -93,8 +93,9 @@ def main():
     parser = create_arg_parser()
     opts = parser.parse_args()
 
-    logging.setup_vortex_logging(opts.debug, opts.logfile, opts.extended_logging,
-                                 opts.filter)
+    logging.init(opts.logfile, opts.extended_logging)
+    logging.set_level(opts.debug)
+    logging.add_filter(opts.filter)
 
     config = vortex.emulator.config.Configuration()
     try:

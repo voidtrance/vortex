@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.vobj_base as vobj
 from vortex.core import ObjectTypes, PIN_NAME_SIZE
-import vortex.lib.logging as logging
+import vortex.core.lib.logging as logging
 import ctypes
 import time
 

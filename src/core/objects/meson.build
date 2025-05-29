@@ -39,9 +39,9 @@ foreach object : objects
                     'files', check: true)
     sources = r.stdout().strip().split()
     library(object, sources + [auto_gen_types, auto_gen_events, auto_gen_vobj],
-            include_directories: [core_include, core_include_general, core_atomics_include,
-                                  core_kinematics_include],
-            dependencies: [core_utils_dep, core_kinematics_dep, math, core_atomics_dep],
+            include_directories: [core_include, core_include_general],
+            dependencies: [core_utils_dep, core_kinematics_dep, math, core_atomics_dep,
+                           core_logging_dep],
             name_prefix: '',
             install: true,
             install_dir: py.get_install_dir(pure: false) / 'vortex/core/objects',

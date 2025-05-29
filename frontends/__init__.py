@@ -20,7 +20,7 @@ import os
 import time
 import pickle
 import threading
-import vortex.lib.logging as logging
+import vortex.core.lib.logging as logging
 from vortex.core import ObjectTypes
 from vortex.frontends.lib import create_pty
 from vortex.frontends.queues import CommandQueue, Command

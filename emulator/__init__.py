@@ -16,8 +16,7 @@
 import inspect
 import importlib
 from os import strerror
-from argparse import Namespace
-import vortex.lib.logging as logging
+import vortex.core.lib.logging as logging
 from vortex.lib.utils import parse_frequency
 from vortex.core import VortexCoreError
 import vortex.emulator.remote.server as remote_server

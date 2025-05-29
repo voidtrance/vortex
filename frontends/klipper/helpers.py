@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import enum
 import ctypes
-import vortex.lib.logging as logging
+import vortex.core.lib.logging as logging
 import vortex.core.lib.atomics as atomics
 from collections import namedtuple
 from vortex.core import ObjectTypes

@@ -13,11 +13,13 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+pthreads = dependency('threads')
+
 core_threads_include = include_directories('.')
 math = cc.find_library(('m'))
 core_threads = library('threads', ['threads.c'],
                      install: true,
-                     dependencies: [math],
+                     dependencies: [math, pthreads],
                      include_directories: [core_utils_include, core_include_general],
                      install_dir: py.get_install_dir(pure: false) / 'vortex/core/threads')
 core_threads_dep = declare_dependency(link_with: core_threads,

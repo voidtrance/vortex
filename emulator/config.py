@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import configparser
 from argparse import Namespace
-import vortex.lib.logging as logging
+import vortex.core.lib.logging as logging
 from vortex.core import ObjectTypes
 
 class Configuration:

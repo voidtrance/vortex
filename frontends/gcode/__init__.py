@@ -14,13 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import time
-import vortex.lib.logging as logging
-import vortex.frontends.lib
 import vortex.frontends.gcode.gcmd as gcmd
 import vortex.lib.constants as constants
 import vortex.lib.ext_enum as enum
 from vortex.frontends import BaseFrontend
-from vortex.controllers import ObjectTypes, EventTypes
+from vortex.controllers import ObjectTypes, ObjectEvents
 from vortex.emulator.kinematics import AxisType
 from vortex.frontends.proto import CommandStatus, Completion
 
@@ -41,9 +39,9 @@ class GCodeFrontend(BaseFrontend):
         cmd = data.decode()
         cmd = gcmd.GCodeCommand(cmd)
         handler = getattr(self, cmd.command, None)
-        logging.debug(f"Command {cmd} handler {handler}")
+        self.log.debug(f"Command {cmd} handler {handler}")
         if not handler:
-            logging.error(f"No handler for command {cmd.command}")
+            self.log.error(f"No handler for command {cmd.command}")
             return
         status = handler(cmd)
         if not isinstance(status, CommandStatus):
@@ -53,7 +51,7 @@ class GCodeFrontend(BaseFrontend):
             super().respond(status, data)
 
     def complete_command(self, id, result):
-        logging.debug(f"Command {id} complete: {result}")
+        self.log.debug(f"Command {id} complete: {result}")
         super().complete_command(id, result)
         super().respond(CommandStatus.COMPLETE, Completion(id, result))
 
@@ -81,7 +79,7 @@ class GCodeFrontend(BaseFrontend):
                                         "move",
                                         f"steps={abs(distance)},direction={direction}")
             if cmd_id is False:
-                logging.error("Failed to submit move command")
+                self.log.error("Failed to submit move command")
                 continue
             move_cmds.append(cmd_id)
         return move_cmds
@@ -114,7 +112,7 @@ class GCodeFrontend(BaseFrontend):
             axis_type = AxisType(axes_status[axes[axis.name.lower()]]["type"].upper())
             axis_id = [x for x in axes_status if axes_status[x]["type"] == axis_type]
             if len(axis_id) == 0:
-                logging.error(f"Did not find axis of type '{axis.name.upper()}")
+                self.log.error(f"Did not find axis of type '{axis.name.upper()}")
                 return CommandStatus.FAIL
             axis_id = axis_id[0]
             if coordinates == CoordinateType.RELATIVE:
@@ -149,7 +147,7 @@ class GCodeFrontend(BaseFrontend):
                                                 for x in axes_ids}
         endstop_status = self.query_object(axis_endstop_ids.values())
         for axis in axes_ids:
-            logging.debug(f"Homing axis {AxisType(status[axis]["type"])}")
+            self.log.debug(f"Homing axis {AxisType(status[axis]["type"])}")
             motor_ids = {}
             for motor in [x for x in status[axis]["motors"] if x]:
                 motor_ids[motor] = self.get_object_id(ObjectTypes.STEPPER, motor)
@@ -159,7 +157,7 @@ class GCodeFrontend(BaseFrontend):
                     cmd_id = self.queue_command(ObjectTypes.STEPPER, motor, "enable",
                                               "enable=1")
                     if cmd_id is False:
-                        logging.error("Failed to enable motor")
+                        self.log.error("Failed to enable motor")
                     self.wait_for_command(cmd_id)
             if endstop_status[axis_endstop_ids[axis]]["type"] == "max":
                 cmds = self.move_to_position(axis, status[axis]["length"])
@@ -214,7 +212,7 @@ class GCodeFrontend(BaseFrontend):
                                         "set_temperature",
                                         f"temperature={temp.value}")
             if cmd_id is False:
-                logging.error("Failed to queue command")
+                self.log.error("Failed to queue command")
                 return CommandStatus.FAIL
             if cmd.command_code == 109:
                 self.wait_for_command(cmd_id)
@@ -227,7 +225,7 @@ class GCodeFrontend(BaseFrontend):
             speed = cmd.get_param("S")
             if self.queue_command(ObjectTypes.FAN, object,
                                   "set_speed", f"speed={speed.value}") is False:
-                logging.error("Failed to queue command")
+                self.log.error("Failed to queue command")
                 return CommandStatus.FAIL
             return CommandStatus.SUCCESS
         return CommandStatus.FAIL
@@ -249,7 +247,7 @@ class GCodeFrontend(BaseFrontend):
                                         "set_temperature",
                                         f"temperature={temp.value}")
             if cmd_id is False:
-                logging.error("Failed to queue command")
+                self.log.error("Failed to queue command")
                 return CommandStatus.FAIL
             if cmd.command_code == 190:
                 self.wait_for_command(cmd_id)
@@ -274,7 +272,7 @@ class GCodeFrontend(BaseFrontend):
                                       "set_accel",
                                       f"accel={accel.value},decel=0")
                 if cmd_id is False:
-                    logging.error("Failed to queue command")
+                    self.log.error("Failed to queue command")
                     return CommandStatus.FAIL
                 cmds.append(cmd_id)
         self.wait_for_commands(cmds)

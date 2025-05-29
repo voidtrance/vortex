@@ -14,22 +14,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 core_include = include_directories('.')
-pthreads = dependency('threads')
-
-auto_gen_logging = custom_target('logging.h', output: 'logging.h',
-                        input : root / 'tools/auto_gen_logging.py',
-                        command : [py, '@INPUT@', root, '@OUTPUT@'])
 
 subdir('kinematics')
 subdir('objects')
 
 py.extension_module('_vortex_core',
-                    ['core.c', 'timers.c', auto_gen_events,
-                             auto_gen_types, auto_gen_logging],
+                    ['core.c', 'timers.c', auto_gen_events, auto_gen_types],
                     dependencies: [core_utils_dep, core_threads_dep,
-                                   core_atomics_dep, pthreads],
+                                   core_atomics_dep, core_logging_dep],
                     include_directories: [core_include_general, core_include,
-                                          core_threads_include, core_atomics_include,
                                           core_kinematics_include],
                     install: true,
                     install_dir: py.get_install_dir(pure: false) / 'vortex/core',

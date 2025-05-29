@@ -30,6 +30,7 @@
 #include <sys/queue.h>
 #include <utils.h>
 #include <threads.h>
+#include <logging.h>
 
 #include "events.h"
 #include "common_defs.h"
@@ -102,11 +103,7 @@ typedef struct core_command {
     void *caller_data;
 } core_command_t;
 
-typedef struct {
-    PyObject *module;
-    PyObject *logger;
-    uint8_t level;
-} core_logging_data_t;
+static vortex_logger_t *logger;
 
 #define CMD_ID_MAKE_ERROR(x) ((int64_t)(((uint64_t)CMD_ERROR_PREFIX << 32) | x))
 
@@ -178,14 +175,11 @@ static uint64_t core_object_command_submit(core_object_t *source,
                                            uint16_t obj_cmd_id, void *args,
                                            complete_cb_t handler,
                                            void *user_data);
-static void __core_log(void *logger, core_log_level_t level, const char *fmt,
-                       ...);
 
 #define core_log(level, fmt, ...) \
-    __core_log(logging.logger, level, fmt, ##__VA_ARGS__)
+    vortex_logger_log(logger, level, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 static core_call_data_t core_call_data = { 0 };
-static core_logging_data_t logging;
 
 static void core_process_commands(void *arg) {
     core_process_commands_args_t *cmds = (core_process_commands_args_t *)arg;
@@ -455,7 +449,6 @@ static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
     core_call_data.event_unregister = core_object_event_unregister;
     core_call_data.event_submit = core_object_event_submit;
     core_call_data.cmd_submit = core_object_command_submit;
-    core_call_data.log = __core_log;
     core_call_data.cb_data = core;
 
     return (PyObject *)core;
@@ -469,8 +462,6 @@ static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i", kws, &debug_level))
         return -1;
-
-    logging.level = debug_level;
 
     for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++)
         LIST_INIT(&self->objects[type]);
@@ -788,9 +779,7 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
     obj->call_data = core_call_data;
     snprintf(logger_name, sizeof(logger_name), "vortex.core.%s.%s",
              ObjectTypeNames[klass], name);
-    obj->call_data.logger =
-        PyObject_CallMethod(logging.module, "getLogger", "s", logger_name);
-    if (!obj->call_data.logger) {
+    if (vortex_logger_create(logger_name, &obj->call_data.logger)) {
         core_log(LOG_LEVEL_ERROR, "Failed to create logger for %s %s",
                  ObjectTypeNames[klass], name);
         free((char *)obj->name);
@@ -1471,31 +1460,6 @@ static PyObject *vortex_core_compare_timer(PyObject *self, PyObject *args) {
     return py_result;
 }
 
-static void __core_log(void *logger, core_log_level_t level, const char *fmt,
-                       ...) {
-    PyObject *_logger = (PyObject *)logger;
-    PyObject *ret;
-    va_list args;
-    PyGILState_STATE state;
-    char msg_str[4096];
-
-    if (level < logging.level)
-        return;
-
-    va_start(args, fmt);
-    vsnprintf(msg_str, sizeof(msg_str), fmt, args);
-    va_end(args);
-
-    state = PyGILState_Ensure();
-    ret = PyObject_CallMethod(_logger, log_methods[level], "s", msg_str);
-    if (ret == NULL)
-        PyErr_Print();
-    else
-        Py_DECREF(ret);
-
-    PyGILState_Release(state);
-}
-
 void upper(char *str, const char *name) {
     size_t len = strlen(name);
     size_t i;
@@ -1681,14 +1645,10 @@ static int vortex_core_module_exec(PyObject *module) {
     if (!ctypes)
         goto fail;
 
-    logging.module = PyImport_ImportModule("vortex.lib.logging");
-    if (!logging.module)
+    if (vortex_logger_create("vortex.core", &logger)) {
+        PyErr_SetString(VortexCoreError, "Failed to create logger");
         goto fail;
-
-    logging.logger =
-        PyObject_CallMethod(logging.module, "getLogger", "s", "vortex.core");
-    if (!logging.logger)
-        goto fail;
+    }
 
     return 0;
 

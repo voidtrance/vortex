@@ -24,7 +24,7 @@ import vortex.core
 import vortex.lib.ctypes_helpers
 from vortex.lib.utils import Counter, parse_frequency
 from vortex.lib.constants import hz_to_nsec, khz_to_hz
-import vortex.lib.logging as logging
+import vortex.core.lib.logging as logging
 import vortex.controllers.timers as timers
 
 class PinError(Exception): pass
@@ -167,7 +167,7 @@ class Controller(core.VortexCore):
     _Command = namedtuple("Command", ['id', 'name', 'opts', 'defaults'])
     def __init__(self, config):
         self.log = logging.getLogger("vortex.core")
-        debug_level = logging.logger.getEffectiveLevel()
+        debug_level = logging.get_level()
         if debug_level <= logging.DEBUG:
             self.log.warning("With DEBUG and higher logging levels")
             self.log.warning("controller timing will be imprecise!")
@@ -258,7 +258,7 @@ class Controller(core.VortexCore):
                     self.log.error("Could not create object configuration!")
                     self.log.error(f"   klass={klass}, name={name}: {str(e)}")
                     continue
-                if self.log.isEnabledFor(logging.DEBUG):
+                if logging.get_level() == logging.DEBUG:
                     vortex.lib.ctypes_helpers.show_struct(obj_conf, self.log.debug)
                 self.log.verbose(f"Creating object {klass}:{name}")
                 object_id = self.create_object(klass, name, ctypes.addressof(obj_conf))

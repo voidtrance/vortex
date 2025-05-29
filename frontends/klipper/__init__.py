@@ -15,9 +15,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import zlib
 import json
-import vortex.lib.logging as logging
 from threading import Lock
 from vortex.core import ObjectTypes
+from vortex.core.lib.logging import get_level, DEBUG
 from vortex.frontends import BaseFrontend
 from vortex.frontends.klipper.helpers import *
 from vortex.lib.utils import Counter, parse_frequency
@@ -249,7 +249,7 @@ class KlipperFrontend(BaseFrontend):
         return ticks + self.timers.from_us(100000)
 
     def run(self):
-        if self.log.getEffectiveLevel() <= logging.DEBUG:
+        if get_level() <= DEBUG:
             self.log.warning("Klipper host is very dependent on controller")
             self.log.warning("timing, High levels of debug output will affect")
             self.log.warning("controller timer performance and as a result,")
