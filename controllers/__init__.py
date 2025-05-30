@@ -426,3 +426,10 @@ class Controller(core.VortexCore):
         pointer = ctypes.cast(data, ctypes.POINTER(event_data_def))
         content = vortex.lib.ctypes_helpers.parse_ctypes_struct(pointer.contents)
         handler(klass, event_type, object_name, content)
+    def cleanup(self):
+        for obj in self._virtual_objects.values():
+            del obj
+        self._virtual_objects.clear()
+        for klass in core.ObjectTypes:
+            for obj in self.objects.object_by_klass(klass):
+                self.destory_object(obj.id)

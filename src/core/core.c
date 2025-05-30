@@ -815,6 +815,29 @@ static PyObject *vortex_core_create_object(PyObject *self, PyObject *args,
     return id;
 }
 
+static PyObject *vortex_core_destroy_object(PyObject *self, PyObject *args) {
+    core_object_id_t object_id;
+    core_object_t *object;
+
+    if (!PyArg_ParseTuple(args, "k", &object_id))
+        return NULL;
+
+    object = core_id_to_object(object_id);
+    if (!object) {
+        PyErr_Format(VortexCoreError, "Invalid object id %lu", object_id);
+        return NULL;
+    }
+
+    core_log(LOG_LEVEL_DEBUG, "Destroying object %s of type %s: %p",
+             object->name, ObjectTypeNames[object->type], object->destroy);
+    if (object->destroy)
+        object->destroy(object);
+    else
+        core_object_destroy(object);
+
+    Py_RETURN_NONE;
+}
+
 static int core_vobj_exec_command(core_object_t *object,
                                   core_object_command_t *cmd) {
     int ret = 0;
@@ -1536,6 +1559,8 @@ static PyMethodDef VortexCoreMethods[] = {
     { "stop", vortex_core_stop, METH_NOARGS, "Stop the emulator core thread" },
     { "create_object", (PyCFunction)vortex_core_create_object,
       METH_VARARGS | METH_KEYWORDS, "Create core object" },
+    { "destory_object", vortex_core_destroy_object, METH_VARARGS,
+      "Destory core HW object" },
     { "register_virtual_object", vortex_core_register_virtual_object,
       METH_VARARGS, "Register a virtual object_with the core." },
     { "exec_command", (PyCFunction)vortex_core_exec_command,

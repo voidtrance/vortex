@@ -114,4 +114,6 @@ class Emulator:
             self._server.stop()
         self._frontend.stop()
         self._controller.stop()
-        
+
+    def __del__(self):
+        self._controller.cleanup()
