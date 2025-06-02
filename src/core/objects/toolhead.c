@@ -46,6 +46,28 @@ typedef struct {
 
 static object_cache_t *toolhead_event_cache = NULL;
 
+static inline double get_axis_position(const coordinates_t *positions,
+                                       axis_type_t type) {
+    switch (type) {
+    case AXIS_TYPE_X:
+        return positions->x;
+    case AXIS_TYPE_Y:
+        return positions->y;
+    case AXIS_TYPE_Z:
+        return positions->z;
+    case AXIS_TYPE_A:
+        return positions->a;
+    case AXIS_TYPE_B:
+        return positions->b;
+    case AXIS_TYPE_C:
+        return positions->c;
+    case AXIS_TYPE_E:
+        return positions->e;
+    default:
+        return 0.0; // Invalid axis type
+    }
+}
+
 static inline void set_axis_position(coordinates_t *positions, axis_type_t type,
                                      double position) {
     switch (type) {
@@ -118,6 +140,7 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
     toolhead_origin_event_data_t *event;
     coordinates_t axis_positions = { 0 };
     axis_status_t status;
+    bool at_origin = true;
     size_t i;
 
     for (i = 0; i < toolhead->n_axes; i++) {
@@ -134,9 +157,19 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
         return;
     }
 
-    log_debug(toolhead, "position: %.15f, %.15f, %.15f", toolhead->position.x,
-              toolhead->position.y, toolhead->position.z);
-    if (toolhead->position.x == 0.0 && toolhead->position.y == 0.0 && toolhead->position.z == 0.0) {
+    log_debug(toolhead, "position: %.5f, %.5f, %.5f, %.5f, %.5f, %.5f, %.5f",
+              toolhead->position.x, toolhead->position.y, toolhead->position.z,
+              toolhead->position.a, toolhead->position.b, toolhead->position.c,
+              toolhead->position.e);
+    for (i = 0; i < toolhead->n_axes; i++) {
+        if (get_axis_position(&toolhead->position, toolhead->axes[i].type) !=
+            0.0) {
+            at_origin = false;
+            break;
+        }
+    }
+
+    if (at_origin) {
         event = object_cache_alloc(toolhead_event_cache);
         if (event) {
             memcpy(event->position, &toolhead->position,
