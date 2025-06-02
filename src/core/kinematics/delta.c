@@ -24,7 +24,6 @@
 
 #define SQ(x) ((x) * (x))
 #define TOLERANCE (1e-6)
-#define DEG2RAD(angle) ((angle) * M_PI / 180.0f)
 
 typedef enum {
     TOWER_A,

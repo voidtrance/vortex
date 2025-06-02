@@ -24,6 +24,7 @@
 #include <logging.h>
 #include <common_defs.h>
 #include <events.h>
+#include <kinematics.h>
 #include "axis.h"
 #include "endstop.h"
 #include "object_defs.h"
@@ -72,6 +73,7 @@ typedef struct {
 typedef int (*command_func_t)(core_object_t *object, void *args);
 
 static object_cache_t *axis_event_cache = NULL;
+static coordinates_t randomized_motor_position = { 0 };
 
 static void axis_event_handler(core_object_t *object, const char *name,
                                const core_object_event_type_t event,
@@ -107,7 +109,42 @@ static void axis_reset(core_object_t *object) {
                 spmm = axis->motors[1].steps_per_mm;
             break;
         case KINEMATICS_DELTA:
-            start = axis->min;
+            if (randomized_motor_position.a == 0.0 &&
+                randomized_motor_position.b == 0.0 &&
+                randomized_motor_position.c == 0.0) {
+                delta_kinematics_config_t *delta_config =
+                    (delta_kinematics_config_t *)kinematics_get_config();
+                float max_x = delta_config->radius * sin(DEG2RAD(45));
+                float max_y = delta_config->radius * cos(DEG2RAD(45));
+                coordinates_t position = { 0 };
+
+                log_debug(axis, "Axis X min/max: %f/%f", -max_x, max_x);
+                log_debug(axis, "Axis Y min/max: %f/%f", -max_y, max_y);
+                position.x = random_float_limit(-max_x, max_x);
+                log_debug(axis, "Position X: %f", position.x);
+                position.y = random_float_limit(-max_y, max_y);
+                log_debug(axis, "Position Y: %f", position.y);
+                position.z = random_float_limit(0.0, delta_config->z_length);
+                log_debug(axis, "Position Z: %f", position.z);
+
+                kinematics_get_motor_movement(&position,
+                                              &randomized_motor_position);
+            }
+
+            switch (axis->type) {
+            case AXIS_TYPE_A:
+                start = randomized_motor_position.a;
+                break;
+            case AXIS_TYPE_B:
+                start = randomized_motor_position.b;
+                break;
+            case AXIS_TYPE_C:
+                start = randomized_motor_position.c;
+                break;
+            default:
+                start = 0.0; // Should not happen
+            }
+
             spmm = axis->motors[0].steps_per_mm;
             break;
         default:

@@ -57,6 +57,8 @@ typedef struct {
     axis_limits_t limits[AXIS_TYPE_MAX];
 } cartesian_kinematics_config_t;
 
+#define DEG2RAD(angle) ((angle) * M_PI / 180.0f)
+
 typedef struct {
     axis_limits_t limits[AXIS_TYPE_MAX];
     float arm_length;
