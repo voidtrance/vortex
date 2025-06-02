@@ -191,10 +191,8 @@ class KlassFrame(Gtk.Frame):
         self.set_margin_end(5)
         self.top_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(self.top_box)
-        self.events = Gtk.Expander(label="Events")
-        self.top_box.pack_end(self.events, True, True, 3)
-        self.commands = Gtk.Expander(label="Commands")
-        self.top_box.pack_end(self.commands, True, True, 3)
+        self.events = None
+        self.commands = None
         self._objects = {}
     def add_object(self, obj_id, name, obj):
         scroll = Gtk.ScrolledWindow()
@@ -204,9 +202,17 @@ class KlassFrame(Gtk.Frame):
         self.top_box.pack_start(scroll, True, True, 3)
         self._objects[obj_id] = obj
     def add_commands(self, cmds):
+        if not self.commands:
+            self.commands = Gtk.Expander(label="Commands")
+            self.top_box.pack_end(self.commands, True, True, 3)
         self.commands.add(cmds)
+        self.show_all()
     def add_events(self, events):
+        if not self.events:
+            self.events = Gtk.Expander(label="Events")
+            self.top_box.pack_end(self.events, True, True, 3)
         self.events.add(events)
+        self.show_all()
     def remove(self, obj):
         self.top_box.remove(obj)
         for i, o in self._objects.items():
