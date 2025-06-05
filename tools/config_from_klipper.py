@@ -278,7 +278,7 @@ def generate_probe_config(section : str, kconfig : Type[configparser.ConfigParse
                kconfig.get(section, "z_offset")]
     econfig.set(s, "offsets", ",".join(offsets))
     econfig.set(s, "pin", kconfig.get(section, "pin"))
-    econfig.set(s, "range", "0.005")
+    econfig.set(s, "range", "0.01")
     # Klipper probes are only relative to the Z axis
     econfig.set(s, "axes", "z")
     return

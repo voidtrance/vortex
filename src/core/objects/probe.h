@@ -26,6 +26,7 @@ typedef struct {
     float offsets[AXIS_TYPE_MAX];
     double position[AXIS_TYPE_MAX];
     char pin[PIN_NAME_SIZE];
+    float range;
     unsigned long pin_addr;
 } probe_status_t;
 

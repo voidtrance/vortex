@@ -48,7 +48,6 @@ typedef struct {
     double position[AXIS_TYPE_MAX];
     bool axis_valid[AXIS_TYPE_MAX];
     float range;
-    float fuzz;
     char pin[PIN_NAME_SIZE];
     uint8_t pin_word;
     bool triggered;
@@ -68,7 +67,6 @@ static int probe_init(core_object_t *object) {
         return -ENOENT;
     }
 
-    probe->fuzz = random_float_limit(0, probe->range);
     return 0;
 }
 
@@ -82,6 +80,7 @@ static void probe_get_state(core_object_t *object, void *state) {
     pthread_mutex_lock(&probe->lock);
     memcpy(s->position, probe->position, sizeof(s->position));
     s->triggered = probe->triggered;
+    s->range = probe->range;
     s->pin_addr = (unsigned long)&probe->pin_word;
     pthread_mutex_unlock(&probe->lock);
 }
@@ -102,7 +101,7 @@ static void probe_update(core_object_t *object, uint64_t ticks,
 
         probe->position[i] =
             ((double *)&status.position)[i] + probe->offsets[i];
-        probe->triggered &= ((double *)&status.position)[i] <= probe->fuzz;
+        probe->triggered &= ((double *)&status.position)[i] <= probe->range;
     }
 
     probe->pin_word = !!probe->triggered;
@@ -116,8 +115,6 @@ static void probe_update(core_object_t *object, uint64_t ticks,
             memcpy(data->position, probe->position, sizeof(data->position));
             CORE_EVENT_SUBMIT(probe, OBJECT_EVENT_PROBE_TRIGGERED, data);
         }
-    } else if (!probe->triggered && state) {
-        probe->fuzz = random_float_limit(0, probe->range);
     }
 }
 

@@ -188,6 +188,7 @@ class Probe(ObjectDef):
                     ("offsets", ctypes.c_float * len(AxisType)),
                     ("position", ctypes.c_double * len(AxisType)),
                     ("pin", ctypes.c_char * PIN_NAME_SIZE),
+                    ("range", ctypes.c_float),
                     ("pin_addr", ctypes.c_ulong)]
     class ProbeEventTriggered(ctypes.Structure):
         _fields_ = [("position", ctypes.c_double * len(AxisType))]
