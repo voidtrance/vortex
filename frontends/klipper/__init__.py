@@ -565,7 +565,7 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None or pin_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        pwm = PWM(self, oid, obj_id, klass, name)
+        pwm = PWM(self, self.move_queue, oid, obj_id, klass, name)
         if pwm.set_params(cycle_ticks, value, default_value, max_duration):
             return False
         self._oid_map[oid] = pwm
