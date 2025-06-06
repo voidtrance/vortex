@@ -1,5 +1,5 @@
 # Vortex GCode Emulator
-![logo](/docs/vortex.png)
+![logo](/docs/images/vortex.png)
 
 ## Overview
 Vortex is a software-define CNC machine emulator. It provides a set
@@ -12,7 +12,8 @@ ultimate goal is for it to be able to emulate any CNC machine.
 ## Documentation
 1. [Installation Guide](/docs/Installation.md)
 2. [Quick Start Guide](/docs/QuickStart.md)
-3. User Guides
+3. Guides
+   * [User Guide](/docs/UserGuide.md)
    * [Configuration Guide](/docs/Configuration.md)
    * [Object Reference](/docs/ObjectReference.md)
    * [Klipper Documentation](/docs//Klipper/Klipper.md)

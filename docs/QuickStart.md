@@ -33,9 +33,8 @@ the emulator (including other HW objects) can subscribe to.
 The Vortex emulator executable supports the following command line options:
 
 ```
-usage: vortex.py [-h] [-f FRONTEND] [-s] [-c CONTROLLER] [-F FREQUENCY] [-T TIMER_FREQUENCY] [-P]
-                 [-d {NOTSET,DEBUG,VERBOSE,INFO,WARNING,ERROR,CRITICAL}] [--filter FILTER] [-l LOGFILE] [--extended-logging] [-R]
-                 -C CONFIG
+usage: vortex_run.py [-h] [-f FRONTEND] [-s] [-c CONTROLLER] [-F FREQUENCY] [-T PROCESS_FREQUENCY] [-P] [-d LEVEL] [--filter FILTER]
+                     [-l LOGFILE] [--extended-logging] [-R] -C CONFIG
 
 options:
   -h, --help            show this help message and exit
@@ -44,85 +43,50 @@ options:
 Frontend Options:
   -f, --frontend FRONTEND
                         The frontend that will be started for the emulation. (default: direct)
-  -s                    Enable sequential mode. In this mode, the frontent will execute one command at a time rather than submit
-                        commands to the command queue as they are received. (default: False)
+  -s                    Enable sequential mode. In this mode, the frontent will execute one command at a time rather than submit commands
+                        to the command queue as they are received. (default: False)
 
 Controller Options:
   -c, --controller CONTROLLER
                         The HW controller to be used for the emulation. This argument is required. (default: None)
   -F, --frequency FREQUENCY
-                        This is the frequency with which the object updates will run. (default: 100kHZ)
-  -T, --timer-frequency TIMER_FREQUENCY
-                        Frequency of time control loop. The time control loop is the main emulator control loop. It's the on that
-                        updates controller clock and emulation runtime. Higher values provide more precise emulation but at the cost
-                        of CPU load. (default: 1MHz)
-  -P, --set-priority    Set the priority of the emulator to real-time. This will make the emulator run with higher priority than
-                        other processes on the system. This is useful for more precise emulation but may affect system performance
-                        as the emulator will take up more CPU cycles. (default: False)
+                        Frequency of control loop. This control loop is the main emulator control loop. It's the one that updates
+                        controller clock and emulation runtime. Higher values provide more precise emulation, at the cost of CPU load.
+                        (default: 1MHz)
+  -T, --process-frequency PROCESS_FREQUENCY
+                        This is the frequency with which the core's event processing threads updates will run. The event processing
+                        thread are responsible for processing command submission and completion, event processing, etc. (default: 100KHz)
+  -P, --set-priority    Set the priority of the emulator to real-time. This will make the emulator run with higher priority than other
+                        processes on the system. This is useful for more precise emulation but may affect system performance as the
+                        emulator will take up more CPU cycles. (default: False)
 
 Debug Options:
-  -d, --debug {NOTSET,DEBUG,VERBOSE,INFO,WARNING,ERROR,CRITICAL}
-                        Set logging level. Higher logging levels will provide more information but will also affect conroller timing
+  -d, --debug LEVEL     Set logging level. Higher logging levels will provide more information but will also affect conroller timing
                         more. (default: INFO)
   --filter FILTER       Filter log messages by the specified module/object. Filter format is a dot-separated hierarchy of
-                        modules/objects. For example, the filter 'core.stepper.X' will only show log messages from the core HW
-                        stepper object with name 'X'. '*' can be used to match all modules/objects at the particular level. This
-                        option can be used multiple times to filter multiple modules. The filter is applied to the module name and
-                        not the logger name. (default: [])
+                        modules/objects. For example, the filter 'vortex.core.stepper.X' will only show log messages from the core HW
+                        stepper object with name 'X'. '*' can be used to match all modules/objects at the particular level. This option
+                        can be used multiple times to filter multiple modules. The filter is applied to the module name and not the
+                        logger name. (default: [])
   -l, --logfile LOGFILE
                         Log messages are sent to the file specified by this option. (default: None)
-  --extended-logging    Enable extended debugging. When enabled, log messages will also contain the source of the message (filename
-                        and line number). (default: False)
-  -R, --remote          Start remote API server thread. This thread processes requests from the monitoring application. (default:
-                        False)
+  --extended-logging    Enable extended debugging. When enabled, log messages will also contain the source of the message (filename and
+                        line number). (default: False)
+  -R, --remote          Start remote API server thread. This thread processes requests from the monitoring application. (default: False)
 ```
 
-## How To Use The Emulator
-The first thing that is required in order to use the emulator is a configuration
-file listing all of the objects that the emulator is to create. For further
-information about creating configuration files and object configuration, see the
-[configuration guide](/docs/Configuration.md).
-
-Once the configuration file has been created, the emulator can be started using
-the desired HW controller and frontend.
-
-When it starts, the frontend will create a serial interface at `/tmp/vortex`.
-Please note that frontend are free to change the path to the serial interface in
-order to provide a path that the emulator client can interface with.
-
-This serial interface can be used to send command data to the frontend. Depending
-of the frontend used, the command data can be simple GCode commands, direct HW
-onject commands, or any data that the instantiated frontend can process.
-
-For detailed information on the emulator's operation, see the 
-[architecture description](/docs/Architecture.md) document.
-
-## Available Tools
-Vortex includes a couple of useful tools when using or, even, developing the
-emulator:
-
-### *monitor.py*
-
-This is a graphical tool that shows state, available commands and events for
-all emulated objects. It can be used to monitor the state of the emulator in
-real time.
-
-### *emulator_track.py*
-This tool is designed to query the emulator for the position of the toolhead
-and heater temperature values and then create graphs displaying that information.
-
-It was created in order to visually see whether the Klipper firmware emulation
-was doing what it was supposed todo - emulate printing of objects. When the
-print emulation is done, the graph can be used to check if the shape of the
-"printed" object matches expectations.
-
+## Examples
+To start the emulator using the GCode frontend with `VERBOSE` logging level:
 ```
-usage: emulator_track.py [-h] [--graph GRAPH] [--csv CSV] [--data DATA] [--real-time]
+vortex_run.py -f gcode -d VERBOSE -C config.cfg
+```
 
-options:
-  -h, --help     show this help message and exit
-  --graph GRAPH  Graph filename
-  --csv CSV      Output file for toolhead coordinates
-  --data DATA    Toolhead coordinates data
-  --real-time    Create dynamic graph
+To start the emulator with the Klipper frontend, with control loop frequency of 1KHz:
+```
+vortex_run.py -f klipper -F 1KHz -C config.cfg
+```
+
+To start the emulator which `DEBUG` logging level and display only stepper messages:
+```
+vortex_run.py -f klipper -d DEBUG --filter vortex.core.stepper
 ```

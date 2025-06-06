@@ -39,15 +39,18 @@ def create_arg_parser():
     controller.add_argument("-c", "--controller", default=None,
                             help="""The HW controller to be used for the
                             emulation. This argument is required.""")
-    controller.add_argument("-F", "--frequency", default="100kHZ",
-                            help="""This is the frequency with which the
-                            object updates will run.""")
-    controller.add_argument("-T", "--timer-frequency", default="1MHz",
-                            help="""Frequency of time control loop. The time
+    controller.add_argument("-F", "--frequency", default="1MHz",
+                            help="""Frequency of control loop. This
                             control loop is the main emulator control loop. It's
-                            the on that updates controller clock and emulation
+                            the one that updates controller clock and emulation
                             runtime. Higher values provide more precise
-                            emulation but at the cost of CPU load.""")
+                            emulation, at the cost of CPU load.""")
+    controller.add_argument("-T", "--process-frequency", default="100KHz",
+                            help="""This is the frequency with which the
+                            core's event processing threads updates will run.
+                            The event processing thread are responsible for
+                            processing command submission and completion,
+                            event processing, etc.""")
     controller.add_argument("-P", "--set-priority", action="store_true",
                             help="""Set the priority of the emulator to
                             real-time. This will make the emulator run
@@ -67,7 +70,7 @@ def create_arg_parser():
                        help="""Filter log messages by the specified
                        module/object. Filter format is a dot-separated
                        hierarchy of modules/objects. For example, the filter
-                       'core.stepper.X' will only show log messages from
+                       'vortex.core.stepper.X' will only show log messages from
                        the core HW stepper object with name 'X'. '*' can
                        be used to match all modules/objects at the particular
                        level. This option can be used multiple times to
@@ -113,7 +116,7 @@ def main():
         print(err)
         return errno.ENOENT
     
-    emulation.set_frequency(opts.timer_frequency, opts.frequency)
+    emulation.set_frequency(opts.frequency, opts.process_frequency)
     emulation.set_thread_priority_change(opts.set_priority)
     if opts.remote:
         emulation.start_remote_server()
