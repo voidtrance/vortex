@@ -503,10 +503,13 @@ static void vortex_core_dealloc(core_t *self) {
             object_next = LIST_NEXT(object, entry);
             Py_XDECREF(object->call_data.v_cmd_exec);
             Py_XDECREF(object->call_data.v_get_state);
-            if (object->destroy)
+            if (object->destroy) {
                 object->destroy(object);
-            else
+            } else {
                 core_object_destroy(object);
+                free(object);
+            }
+
             object = object_next;
         }
 
@@ -830,10 +833,13 @@ static PyObject *vortex_core_destroy_object(PyObject *self, PyObject *args) {
 
     core_log(LOG_LEVEL_DEBUG, "Destroying object %s of type %s: %p",
              object->name, ObjectTypeNames[object->type], object->destroy);
-    if (object->destroy)
+    LIST_REMOVE(object, entry);
+    if (object->destroy) {
         object->destroy(object);
-    else
+    } else {
         core_object_destroy(object);
+        free(object);
+    }
 
     Py_RETURN_NONE;
 }
