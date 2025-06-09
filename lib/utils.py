@@ -50,3 +50,6 @@ def parse_frequency(frequency):
         logging.error("Invalid frequency format")
         raise ValueError("Invalid frequency format")
     return frequency
+
+def div_round_up(x, y):
+    return (x + y - 1) // y

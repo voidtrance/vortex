@@ -40,6 +40,3 @@ def create_pty(filename):
     tcattr[6][termios.VTIME] = 0
     termios.tcsetattr(master, termios.TCSAFLUSH, tcattr)
     return (master, slave)
-
-def div_round_up(x, y):
-    return (x + y - 1) // y

@@ -20,8 +20,7 @@ from vortex.core import ObjectTypes
 from vortex.core.lib.logging import get_level, DEBUG
 from vortex.frontends import BaseFrontend
 from vortex.frontends.klipper.helpers import *
-from vortex.lib.utils import Counter, parse_frequency
-from vortex.frontends.lib import div_round_up
+from vortex.lib.utils import Counter, parse_frequency, div_round_up
 import vortex.frontends.klipper.msgproto as msgproto
 import vortex.frontends.klipper.klipper_proto as proto
 
