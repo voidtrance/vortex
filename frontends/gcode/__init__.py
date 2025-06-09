@@ -50,10 +50,10 @@ class GCodeFrontend(BaseFrontend):
             data = True if status == CommandStatus.SUCCESS else False
             super().respond(status, data)
 
-    def complete_command(self, id, result):
+    def complete_command(self, id, result, data=None):
         self.log.debug(f"Command {id} complete: {result}")
-        super().complete_command(id, result)
-        super().respond(CommandStatus.COMPLETE, Completion(id, result))
+        super().complete_command(id, result, data)
+        super().respond(CommandStatus.COMPLETE, Completion(id, result, data))
 
     def event_handler(self, klass, event, owner, data):
         print("gcode handler:", klass, event, owner, data)

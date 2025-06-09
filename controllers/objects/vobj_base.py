@@ -41,7 +41,7 @@ class VirtualObjectBase:
         return 0
     def event_submit(self, event, data):
         self._event_submit(event, self._id, data)
-    def complete_command(self, cmd_id, status):
-        self._cmd_complete(cmd_id, status)
+    def complete_command(self, cmd_id, status, data=None):
+        self._cmd_complete(cmd_id, status, data)
     def get_status(self):
         return {}

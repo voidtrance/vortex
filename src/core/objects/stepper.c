@@ -28,6 +28,7 @@
 #include <string.h>
 #include <utils.h>
 #include <atomics.h>
+#include <errno.h>
 
 typedef struct {
     uint32_t steps_per_rotation;
@@ -224,7 +225,8 @@ static void *pin_monitor_thread(void *args) {
 
 static int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
     stepper_t *stepper = (stepper_t *)object;
-    struct stepper_use_pin_args *opts = (struct stepper_use_pin_args *)args;
+    struct stepper_use_pins_args *opts = (struct stepper_use_pins_args *)args;
+    struct stepper_use_pins_data *data = NULL;
     int ret = 0;
 
     if (opts->enable && !stepper->use_pins) {
@@ -237,13 +239,21 @@ static int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
                                  pin_monitor_thread, stepper);
 
         pthread_attr_destroy(&attrs);
+
+        if (!ret) {
+            data = calloc(1, sizeof(*data));
+            if (data)
+                data->pin_addr = (unsigned long)&stepper->pin_word;
+            else
+                ret = -ENOMEM;
+        }
     } else if (!opts->enable) {
         // This will also stop the thread.
         stepper->use_pins = false;
         pthread_join(stepper->pin_thread, NULL);
     }
 
-    CORE_CMD_COMPLETE(stepper, id, ret);
+    CORE_CMD_COMPLETE(stepper, id, ret, data);
     return ret;
 }
 
@@ -290,7 +300,7 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
         goto done;
 
     if (stepper->current_cmd->object_cmd_id != STEPPER_COMMAND_MOVE) {
-        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
+        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
         stepper->current_cmd = NULL;
         goto done;
     }
@@ -329,7 +339,7 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
     } else if (stepper->current_cmd->object_cmd_id == STEPPER_COMMAND_MOVE) {
         stepper_move_comeplete_event_data_t *data;
 
-        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0);
+        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
         stepper->current_cmd = NULL;
         stepper->steps = 0.0;
         stepper->move_steps = 0.0;

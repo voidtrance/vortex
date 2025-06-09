@@ -228,10 +228,9 @@ class HeaterPin(DigitalPin):
                                              self.name, "use_pins",
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)[0]
-        if result < 0:
+        if result[0] < 0:
             raise ValueError(f"Heater {self.name} pin enable error")
-        status = self.frontend.query_object([self.id])[self.id]
-        self.pin_word = ctypes.cast(status["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
+        self.pin_word = ctypes.cast(result[1]["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
     def _set_pin(self, value):
         self.pin_word.contents.value = int(not (not (Flags.ON & value)))
     def shutdown(self):
@@ -294,10 +293,9 @@ class Stepper(HelperBase):
                                              self.name, "use_pins",
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)[0]
-        if result < 0:
+        if result[0] < 0:
             raise ValueError(f"Stepper {self.name} pin enable error")
-        status = self.frontend.query_object([self.id])[self.id]
-        self.pin_word = atomics.Atomic(32, var=status["pin_addr"])
+        self.pin_word = atomics.Atomic(32, var=result[1]["pin_addr"])
     def owns_pin(self, pin):
         return pin in self.pins.values()
     def configure_pin(self, oid, pin):
@@ -594,7 +592,7 @@ class SPI(HelperBase):
             if cmd_id is False:
                 return -1
             result = self.frontend.wait_for_command(cmd_id)[0]
-            if result < 0:
+            if result[0] < 0:
                 return result
         if with_response:
             status = self.frontend.query_object([self.id])[self.id]
@@ -607,7 +605,7 @@ class SPI(HelperBase):
         if cmd_id is False:
             return -1
         result = self.frontend.wait_for_command(cmd_id)[0]
-        return result
+        return result[0]
 
 class ButtonsState(enum.IntEnum):
     NONE = 0
@@ -754,7 +752,7 @@ class PWM(HelperBase):
         value = move.value
         cmd_id = self.frontend.queue_command(self.klass, self.id, "set_duty_cycle",
                                              {"duty_cycle": value})
-        if cmd_id == -1 or self.frontend.wait_for_command(cmd_id)[0] != 0:
+        if cmd_id == -1 or self.frontend.wait_for_command(cmd_id)[0][0] != 0:
             self.frontend.shutdown("Failed to set PWM duty cycle")
             return 0
         if self.move_queue.empty(self.oid):

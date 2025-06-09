@@ -99,7 +99,7 @@ static int pwm_exec(core_object_t *object, core_object_command_t *cmd) {
         pwm->duty_cycle = args->duty_cycle;
     }
 
-    CORE_CMD_COMPLETE(pwm, cmd->command_id, 0);
+    CORE_CMD_COMPLETE(pwm, cmd->command_id, 0, NULL);
     return 0;
 }
 

@@ -26,6 +26,7 @@
 #include "heater.h"
 #include <cache.h>
 #include <atomics.h>
+#include <errno.h>
 
 typedef struct {
     uint16_t power;
@@ -122,7 +123,7 @@ static int heater_set_temp(heater_t *heater,
     heater->temp_data.target = args->temperature;
 
     if (heater->temp_data.current == heater->temp_data.target) {
-        CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
+        CORE_CMD_COMPLETE(heater, heater->command.command_id, 0, NULL);
         return 0;
     }
 
@@ -152,6 +153,7 @@ static void *pin_monitor_thread(void *args) {
 static int heater_use_pins(heater_t *heater,
                            struct heater_use_pins_args *args) {
     int ret = 0;
+    struct heater_use_pins_data *data = NULL;
 
     if (args->enable && !heater->use_pins) {
         pthread_attr_t attrs;
@@ -161,14 +163,20 @@ static int heater_use_pins(heater_t *heater,
         if (!ret)
             ret = pthread_create(&heater->pin_thread, &attrs,
                                  pin_monitor_thread, heater);
-
         pthread_attr_destroy(&attrs);
+        if (!ret) {
+            data = calloc(1, sizeof(*data));
+            if (data)
+                data->pin_addr = (unsigned long)&heater->pin_word;
+            else
+                ret = -ENOMEM;
+        }
     } else if (!args->enable) {
         heater->use_pins = false;
         pthread_join(heater->pin_thread, NULL);
     }
 
-    CORE_CMD_COMPLETE(heater, heater->command.command_id, ret);
+    CORE_CMD_COMPLETE(heater, heater->command.command_id, ret, data);
     heater->command.command_id = 0;
     return ret;
 }
@@ -179,7 +187,7 @@ static int heater_exec_cmd(core_object_t *object, core_object_command_t *cmd) {
 
     // If a command is still running, immediately complete it.
     if (heater->command.command_id)
-        CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
+        CORE_CMD_COMPLETE(heater, heater->command.command_id, 0, NULL);
 
     heater->command = *cmd;
 
@@ -229,7 +237,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
         if (heater->temp_data.current != heater->temp_data.target)
             return;
 
-        CORE_CMD_COMPLETE(heater, heater->command.command_id, 0);
+        CORE_CMD_COMPLETE(heater, heater->command.command_id, 0, NULL);
         heater->command.command_id = 0;
         heater->command.object_cmd_id = HEATER_COMMAND_MAX;
 

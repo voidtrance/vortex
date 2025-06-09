@@ -52,10 +52,10 @@ class DirectFrontend(BaseFrontend):
         else:
             super().respond(CommandStatus.QUEUED, cmd_id)
 
-    def complete_command(self, id, result):
+    def complete_command(self, id, result, data=None):
         self.log.debug(f"Command {id} complete: {result}")
-        super().complete_command(id, result)
-        super().respond(CommandStatus.COMPLETE, Completion(id, result))
+        super().complete_command(id, result, data)
+        super().respond(CommandStatus.COMPLETE, Completion(id, result, data))
 
     def event_handler(self, event, owner, timestamp, *args):
         super().event_handler(event, owner, timestamp, *args)

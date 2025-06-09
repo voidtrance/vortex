@@ -164,7 +164,7 @@ class Controller(core.VortexCore):
     FREQUENCY = 0
     ARCH = 0
     _libc = ctypes.CDLL("libc.so.6")
-    _Command = namedtuple("Command", ['id', 'name', 'opts', 'defaults'])
+    _Command = namedtuple("Command", ['id', 'name', 'opts', 'data', 'defaults'])
     def __init__(self, config):
         self.log = logging.getLogger("vortex.core")
         debug_level = logging.get_level()
@@ -181,6 +181,7 @@ class Controller(core.VortexCore):
         self._completion_callback = None
         self._event_handlers = {}
         self._timer_factory = timers.Factory(self)
+        self._exec_cmd_map = {}
         self._load_objects(config)
         if not self.init_objects():
             raise core.VortexCoreError("Failed to initialize objects.")
@@ -281,11 +282,24 @@ class Controller(core.VortexCore):
         self.log.info(f"Current CPU frequency: {cur_freq} Hz, max {max_freq} Hz")
         self.log.info(f"Emulation running at {timer_frequency} Hz ({hz_to_nsec(timer_frequency)} ns / tick)")
         super().start(self.ARCH, self.FREQUENCY, timer_frequency, update_frequency,
-                      self._completion_callback, set_priority)
+                      self.command_complete, set_priority)
     def get_frequency(self):
         return self.FREQUENCY
-    def virtual_command_complete(self, cmd_id, status):
-        self._completion_callback(cmd_id, status)
+    def command_complete(self, cmd_id, status, data_addr):
+        obj_id, obj_cmd = self._exec_cmd_map.pop(cmd_id, (None, None))
+        obj = self.objects.object_by_id(obj_id)
+        data = None
+        if data_addr:
+            cmd = [x for x in self.object_factory[obj.klass].commands if x[0] == obj_cmd]
+            if not cmd or len(cmd) != 1:
+                self._completion_callback(cmd_id, -255)
+            cmd_data = cmd[0][3]
+            if cmd_data is not None and issubclass(cmd_data, ctypes.Structure):
+                data = ctypes.cast(data_addr, ctypes.POINTER(cmd_data)).contents
+                data = vortex.lib.ctypes_helpers.parse_ctypes_struct(data)
+        self._completion_callback(cmd_id, status, data)
+    def virtual_command_complete(self, cmd_id, status, data=None):
+        self._completion_callback(cmd_id, status, data)
     def virtual_object_opts_convert(self, obj_id, obj_cmd_id, opts):
         if obj_id not in self._virtual_objects:
             return -1
@@ -394,7 +408,10 @@ class Controller(core.VortexCore):
             args = 0
             if opts is not None:
                 args = ctypes.addressof(opts)
-            return super().exec_command(command_id, object_id, subcommand_id, args)
+            ret = super().exec_command(command_id, object_id, subcommand_id, args)
+            if not ret:
+                self._exec_cmd_map[command_id] = (object_id, subcommand_id)
+            return ret
         else:
             return self._virtual_objects[object_id].exec_command(command_id,
                                                                  subcommand_id, opts)

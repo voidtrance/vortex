@@ -25,4 +25,4 @@ class CommandStatus(ExtIntEnum):
     COMPLETE = auto()
 
 Response = namedtuple("Response", ["status", "data"])
-Completion = namedtuple("Completion", ["id", "status"])
+Completion = namedtuple("Completion", ["id", "status", "data"])

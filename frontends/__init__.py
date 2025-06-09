@@ -171,20 +171,6 @@ class BaseFrontend:
             data = self._fd.read()
             self._process_command(data)
 
-    def wait_for_command(self, cmd_set):
-        if isinstance(cmd_set, int):
-            cmd_set = [cmd_set]
-        if not isinstance(cmd_set, (list, tuple, set)):
-            cmd_set = list(cmd_set)
-        cmd_set = set(cmd_set)
-        with self._command_completion_lock:
-            completed = set(self._command_results.keys())
-        while not cmd_set & completed:
-            time.sleep(0.01)
-            with self._command_completion_lock:
-                completed = set(self._command_results.keys())
-        return [self._command_results[i] for i in cmd_set]
-
     def _command_check(self, klass, object, cmd):
         if self.is_reset:
             return False
@@ -244,14 +230,27 @@ class BaseFrontend:
             self.wait_for_command(cmd_id)
         return True
 
-    def complete_command(self, id, result):
+    def complete_command(self, id, result, data=None):
         with self._command_completion_lock:
             self.log.debug(f"Completing command: {id} {result}")
             cmd, callback = self._command_completion.pop(id)
             if callback is not None:
-                callback(id, result)
+                callback(id, result, data)
             else:
-                self._command_results[id] = result
+                self._command_results[id] = (result, data)
+
+    def wait_for_command(self, cmd_set):
+        if isinstance(cmd_set, int):
+            cmd_set = [cmd_set]
+        if not isinstance(cmd_set, (list, tuple, set)):
+            cmd_set = list(cmd_set)
+        cmd_set = set(cmd_set)
+        completed = set()
+        while self._run and not cmd_set & completed:
+            time.sleep(0.01)
+            with self._command_completion_lock:
+                completed = set(self._command_results.keys())
+        return [self._command_results[i] for i in cmd_set & completed]
 
     def respond(self, code, data):
         response = Response(code, data)

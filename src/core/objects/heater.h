@@ -34,6 +34,10 @@ struct heater_use_pins_args {
     bool enable;
 };
 
+struct heater_use_pins_data {
+    unsigned long pin_addr;
+};
+
 typedef struct {
     float temperature;
     float max_temp;

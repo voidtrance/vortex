@@ -58,6 +58,7 @@ typedef struct {
     struct __comp_entry {
         uint64_t id;
         int64_t result;
+        void *data;
     } *entries;
     size_t size;
     size_t head;
@@ -157,7 +158,7 @@ static core_object_t **core_object_list(const core_object_type_t type,
 
 /* Object callbacks */
 static void core_object_command_complete(uint64_t command_id, int64_t result,
-                                         void *data);
+                                         void *, void *data);
 static int core_object_event_register(const core_object_type_t object_type,
                                       const core_object_event_type_t event,
                                       const char *name, core_object_t *object,
@@ -323,7 +324,7 @@ static void core_process_completions(void *arg) {
                 if (cmd->handler)
                     cmd->handler(comps->entries[comps->tail].id,
                                  comps->entries[comps->tail].result,
-                                 cmd->source);
+                                 comps->entries[comps->tail].data, cmd->source);
                 pthread_mutex_lock(&core->commands.submit_lock);
                 STAILQ_REMOVE(&core->commands.submitted, cmd, core_command, entry);
                 pthread_mutex_unlock(&core->commands.submit_lock);
@@ -332,6 +333,7 @@ static void core_process_completions(void *arg) {
                 handled = true;
                 break;
             }
+
             cmd = cmd_next;
         }
 
@@ -340,8 +342,9 @@ static void core_process_completions(void *arg) {
 
     python:
         state = PyGILState_Ensure();
-        args = Py_BuildValue("(kk)", comps->entries[comps->tail].id,
-                             comps->entries[comps->tail].result);
+        args = Py_BuildValue("kkk", comps->entries[comps->tail].id,
+                             comps->entries[comps->tail].result,
+                             comps->entries[comps->tail].data);
         if (!args) {
             PyErr_Print();
             goto next;
@@ -354,12 +357,13 @@ static void core_process_completions(void *arg) {
         PyGILState_Release(state);
 
     next:
-        comps->tail = (comps->tail + 1) % comps->size;
+            object_cache_free(comps->entries[comps->tail].data);
+            comps->tail = (comps->tail + 1) % comps->size;
     }
 }
 
 static void core_object_command_complete(uint64_t cmd_id, int64_t result,
-                                         void *data) {
+                                         void *completion_data, void *data) {
     core_t *core = (core_t *)data;
     core_object_completion_data_t *comps = core->completions.list;
 
@@ -367,6 +371,7 @@ static void core_object_command_complete(uint64_t cmd_id, int64_t result,
         (comps->head == comps->size && comps->tail != 0)) {
         comps->entries[comps->head].id = cmd_id;
         comps->entries[comps->head].result = result;
+        comps->entries[comps->head].data = completion_data;
         comps->head = (comps->head + 1) % comps->size;
     } else {
         void *ptr = realloc(comps->entries,

@@ -52,6 +52,8 @@ class Stepper(ObjectDef):
                     ("steps", ctypes.c_uint32)]
     class StepperUsePinsCommandOpts(ctypes.Structure):
         _fields_ = [("enable", ctypes.c_bool)]
+    class StepperUsePinsCommandData(ctypes.Structure):
+        _fields_ = [("pin_addr", ctypes.c_ulong)]
     class StepperStatus(ctypes.Structure):
         _fields_ = [("enabled", ctypes.c_bool),
                     ("use_pins", ctypes.c_bool),
@@ -64,17 +66,16 @@ class Stepper(ObjectDef):
                     ("steps_per_mm", ctypes.c_uint),
                     ("enable_pin", ctypes.c_char * PIN_NAME_SIZE),
                     ("dir_pin", ctypes.c_char * PIN_NAME_SIZE),
-                    ("step_pin", ctypes.c_char * PIN_NAME_SIZE),
-                    ("pin_addr", ctypes.c_ulong)]
+                    ("step_pin", ctypes.c_char * PIN_NAME_SIZE)]
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
         super().__init__(ObjectTypes.STEPPER)
-        self.commands = [(0, "enable", self.StepperEnableCommandOpts, (False,)),
-                         (1, "set_speed", self.StepperSetSpeedCommandOpts, (0.,)),
-                         (2, "set_accel", self.StepperSetAccelCommandOpts, (0.,)),
-                         (3, "move", self.StepperMoveCommandOpts, (0, 0)),
-                         (4, "use_pins", self.StepperUsePinsCommandOpts, (False,))]
+        self.commands = [(0, "enable", self.StepperEnableCommandOpts, None, (False,)),
+                         (1, "set_speed", self.StepperSetSpeedCommandOpts, None, (0.,)),
+                         (2, "set_accel", self.StepperSetAccelCommandOpts, None, (0.,)),
+                         (3, "move", self.StepperMoveCommandOpts, None, (0, 0)),
+                         (4, "use_pins", self.StepperUsePinsCommandOpts, self.StepperUsePinsCommandData, (False,))]
         self.events = {ObjectEvents.STEPPER_MOVE_COMPLETE: self.StepperMoveCompleteEvent}
 
 class ThermistorValueBeta(ctypes.Structure):
@@ -123,6 +124,8 @@ class Heater(ObjectDef):
         _fields_ = [("temperature", ctypes.c_float)]
     class HeaterUsePinsCommandOpts(ctypes.Structure):
         _fields_ = [("enable", ctypes.c_bool)]
+    class HeaterUsePinsCommandData(ctypes.Structure):
+        _fields_ = [("pin_addr", (ctypes.c_ulong))]
     class HeaterStatus(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float),
                     ("max_temp", ctypes.c_float),
@@ -132,8 +135,8 @@ class Heater(ObjectDef):
         _fields_ = [("temp", ctypes.c_float)]
     def __init__(self):
         super().__init__(ObjectTypes.HEATER)
-        self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, (0,)),
-                         (1, "use_pins", self.HeaterUsePinsCommandOpts, (False,))]
+        self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, None, (0,)),
+                         (1, "use_pins", self.HeaterUsePinsCommandOpts, self.HeaterUsePinsCommandData, (False,))]
         self.events = {ObjectEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
 
 class Endstop(ObjectDef):
@@ -226,6 +229,6 @@ class Pwm(ObjectDef):
                     ("pin", ctypes.c_char * PIN_NAME_SIZE)]
     def __init__(self):
         super().__init__(ObjectTypes.PWM)
-        self.commands = [(0, "set_params", self.PwmSetParams, (0, )),
-                         (1, "set_object", self.PwmSetObject, (0, )),
-                         (2, "set_duty_cycle", self.PwmSetDutyCycle, (0, ))]
+        self.commands = [(0, "set_params", self.PwmSetParams, None, (0, )),
+                         (1, "set_object", self.PwmSetObject, None, (0, )),
+                         (2, "set_duty_cycle", self.PwmSetDutyCycle, None, (0, ))]

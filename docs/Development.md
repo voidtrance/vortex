@@ -445,13 +445,16 @@ must not free this pointer.
 Return: A `uint64_t` command ID which can be used to identify the submitted
 command.
 
-##### CORE_CMD_COMPLETE(obj, id, status)
+##### CORE_CMD_COMPLETE(obj, id, status, data)
 Description: Send a command completion notification.
 
 Arguments:
 * `obj` is the object doing the lookup.
 * `id` is the command ID passed to the object through the `core_command_t` structure.
 * `status` is the status code with which the command has completed.
+* `data` is a pointer to a data structure for any data that the command needs to return.
+The data structure should be allocated on the heap and will be freed by the core when the
+completion is processed.
 
 Return: None
 

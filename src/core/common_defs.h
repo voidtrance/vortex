@@ -30,7 +30,7 @@
 typedef core_object_t *(*object_lookup_cb_t)(const core_object_type_t,
                                              const char *, void *);
 typedef core_object_t **(*object_list_cb_t)(const core_object_type_t, void *);
-typedef void (*complete_cb_t)(uint64_t, int64_t, void *);
+typedef void (*complete_cb_t)(uint64_t, int64_t, void *, void *);
 typedef uint64_t (*cmd_submit_cb_t)(core_object_t *, core_object_id_t, uint16_t,
 				    void *, complete_cb_t, void *);
 
@@ -150,33 +150,37 @@ static inline core_object_t *core_id_to_object(core_object_id_t id) {
     return NULL;
 }
 
-#define CORE_LOOKUP_OBJECT(obj, type, name)                 \
-    (((core_object_t *)(obj))->call_data.object_lookup(         \
+#define CORE_LOOKUP_OBJECT(obj, type, name)                             \
+    (((core_object_t *)(obj))->call_data.object_lookup(                 \
         (type), (name), ((core_object_t *)(obj))->call_data.cb_data))
 #define CORE_LIST_OBJECTS(obj, type)                                  \
     (((core_object_t *)(obj))->call_data.object_list(	                \
         (type), ((core_object_t *)(obj))->call_data.cb_data))
-#define CORE_CMD_COMPLETE(obj, id, status)                      \
-    (((core_object_t *)(obj))->call_data.completion_callback(		\
-        __atomic_exchange_n(&(id), 0,  __ATOMIC_SEQ_CST), (status),	\
-        ((core_object_t *)(obj))->call_data.cb_data))
-#define CORE_EVENT_REGISTER(obj, type, event, name, handler)  \
-    (((core_object_t *)(obj))->call_data.event_register(        \
-        (type), (event), (name), ((core_object_t *)(obj)), (handler),	\
-        ((core_object_t *)(obj))->call_data.cb_data))
-#define CORE_EVENT_UNREGISTER(obj, type, event, name)         \
-    (((core_object_t *)(obj))->call_data.event_unregister(      \
-        (type), (event), (name), ((core_object_t *)(obj)), (handler),	\
-        ((core_object_t *)(obj))->call_data.cb_data))
-#define CORE_EVENT_SUBMIT(obj, event, data)                 \
-    (((core_object_t *)(obj))->call_data.event_submit(			\
-        (event), core_object_to_id((core_object_t *)obj), (data),	\
-        ((core_object_t *)(obj))->call_data.cb_data))
-#define CORE_CMD_SUBMIT(obj, target, cmd_id, handler, args) \
-    (((core_object_t *)(obj))->call_data.cmd_submit(              \
-        ((core_object_t *)(obj)), core_object_to_id(target), (cmd_id),	\
-        ((void *)(args)), (handler),                                    \
-        ((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_CMD_COMPLETE(obj, id, status, data)                        \
+    (((core_object_t *)(obj))->call_data.completion_callback(           \
+        __atomic_exchange_n(&(id), 0, __ATOMIC_SEQ_CST), (status),      \
+        (data), ((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_EVENT_REGISTER(obj, type, event, name, handler)               \
+    (((core_object_t *)(obj))                                              \
+         ->call_data.event_register(                                       \
+             (type), (event), (name), ((core_object_t *)(obj)), (handler), \
+             ((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_EVENT_UNREGISTER(obj, type, event, name)                      \
+    (((core_object_t *)(obj))                                              \
+         ->call_data.event_unregister(                                     \
+             (type), (event), (name), ((core_object_t *)(obj)), (handler), \
+             ((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_EVENT_SUBMIT(obj, event, data)                            \
+    (((core_object_t *)(obj))                                          \
+         ->call_data.event_submit(                                     \
+             (event), core_object_to_id((core_object_t *)obj), (data), \
+             ((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_CMD_SUBMIT(obj, target, cmd_id, handler, args)          \
+    (((core_object_t *)(obj))                                        \
+         ->call_data.cmd_submit(((core_object_t *)(obj)),            \
+                                core_object_to_id(target), (cmd_id), \
+                                ((void *)(args)), (handler),         \
+                                ((core_object_t *)(obj))->call_data.cb_data))
 #define CORE_LOG(obj, level, fmt, ...)                                      \
     (vortex_logger_log(((core_object_t *)(obj))->call_data.logger, (level), \
                        __FILE__, __LINE__, (fmt), ##__VA_ARGS__))

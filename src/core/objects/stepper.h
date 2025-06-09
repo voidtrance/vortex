@@ -54,8 +54,12 @@ struct stepper_move_args {
     uint32_t steps;
 };
 
-struct stepper_use_pin_args {
+struct stepper_use_pins_args {
     bool enable;
+};
+
+struct stepper_use_pins_data {
+    unsigned long pin_addr;
 };
 
 typedef struct {
