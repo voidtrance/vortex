@@ -110,6 +110,11 @@ class VortexLogger:
 
 _baseLogger = None
 
+def _init_base_logger():
+    global _baseLogger
+    if _baseLogger is None:
+        _baseLogger = VortexLogger("vortex")
+
 def init(log_file=None, extended_logging=False):
     """
     Initialize the Vortex logging system.
@@ -118,8 +123,6 @@ def init(log_file=None, extended_logging=False):
     :param extended_logging: If True, enables extended logging which includes source file and line number.
     :return: 0 on success, or an error code on failure.
     """
-    global _baseLogger
-
     if log_file:
         log_file = log_file.encode("ascii")
     else:
@@ -129,9 +132,7 @@ def init(log_file=None, extended_logging=False):
         return status
     
     core_logging.lib.vortex_logging_set_extended(extended_logging)
-    if _baseLogger is None:
-        _baseLogger = VortexLogger("vortex")
-
+    _init_base_logger()
     atexit.register(core_logging.lib.vortex_logging_deinit)
     return 0
 
@@ -188,6 +189,7 @@ def getLogger(name):
     :param name: The name of the logger.
     :return: A VortexLogger instance.
     """
+    _init_base_logger()
     if not isinstance(name, str):
         raise TypeError("Logger name must be a string")
     return VortexLogger(name)
@@ -200,6 +202,7 @@ def debug(msg, *args, **kwargs):
     :param args: Additional arguments for formatting the message.
     :param kwargs: Additional keyword arguments for formatting the message.
     """
+    _init_base_logger()
     return _baseLogger.log(DEBUG, msg, *args, **kwargs)
 
 def verbose(msg, *args, **kwargs):
@@ -210,6 +213,7 @@ def verbose(msg, *args, **kwargs):
     :param args: Additional arguments for formatting the message.
     :param kwargs: Additional keyword arguments for formatting the message.
     """
+    _init_base_logger()
     return _baseLogger.log(VERBOSE, msg, *args, **kwargs)
 
 def error(msg, *args, **kwargs):
@@ -220,6 +224,7 @@ def error(msg, *args, **kwargs):
     :param args: Additional arguments for formatting the message.
     :param kwargs: Additional keyword arguments for formatting the message.
     """
+    _init_base_logger()
     return _baseLogger.log(ERROR, msg, *args, **kwargs)
 
 def warning(msg, *args, **kwargs):
@@ -230,6 +235,7 @@ def warning(msg, *args, **kwargs):
     :param args: Additional arguments for formatting the message.
     :param kwargs: Additional keyword arguments for formatting the message.
     """
+    _init_base_logger()
     return _baseLogger.log(WARNING, msg, *args, **kwargs)
 
 def critical(msg, *args, **kwargs):
@@ -240,4 +246,5 @@ def critical(msg, *args, **kwargs):
     :param args: Additional arguments for formatting the message.
     :param kwargs: Additional keyword arguments for formatting the message.
     """
+    _init_base_logger()
     return _baseLogger.log(CRITICAL, msg, *args, **kwargs)
