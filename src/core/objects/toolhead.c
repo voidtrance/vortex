@@ -23,13 +23,15 @@
 #include <utils.h>
 #include <kinematics.h>
 #include <common_defs.h>
+#include <debug.h>
 #include "object_defs.h"
 #include <events.h>
 #include "toolhead.h"
 #include "axis.h"
 
 typedef struct {
-    const char **axes;
+    const char axes[AXIS_TYPE_MAX];
+    const char attachment[AXIS_TYPE_MAX];
 } toolhead_config_params_t;
 
 typedef struct {
@@ -39,9 +41,11 @@ typedef struct {
 
 typedef struct {
     core_object_t object;
-    toolhead_axis_t *axes;
+    axis_type_t *axes;
+    toolhead_axis_t *attachment;
     coordinates_t position;
     size_t n_axes;
+    size_t n_attached;
 } toolhead_t;
 
 static object_cache_t *toolhead_event_cache = NULL;
@@ -110,22 +114,26 @@ static int toolhead_init(core_object_t *object) {
         return -ENOENT;
     }
 
-    for (i = 0; i < toolhead->n_axes; i++) {
+    for (i = 0; i < toolhead->n_attached; i++) {
         axis_ptr = axes;
         do {
             core_object_t *axis = *axis_ptr;
 
+            if (!axis)
+                break;
+
             axis->get_state(axis, &status);
-            if (status.type == toolhead->axes[i].type) {
-                toolhead->axes[i].obj = axis;
+            if (status.type == toolhead->attachment[i].type) {
+                toolhead->attachment[i].obj = axis;
                 break;
             }
+
             axis_ptr++;
         } while (axis_ptr);
 
-        if (!toolhead->axes[i].obj) {
+        if (!toolhead->attachment[i].obj) {
             log_error(toolhead, "Could not find axis of type %u",
-                      toolhead->axes[i].type);
+                      toolhead->attachment[i].type);
             return -1;
         }
     }
@@ -143,9 +151,9 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
     bool at_origin = true;
     size_t i;
 
-    for (i = 0; i < toolhead->n_axes; i++) {
-        core_object_t *axis = toolhead->axes[i].obj;
-        axis_type_t type = toolhead->axes[i].type;
+    for (i = 0; i < toolhead->n_attached; i++) {
+        core_object_t *axis = toolhead->attachment[i].obj;
+        axis_type_t type = toolhead->attachment[i].type;
 
         axis->get_state(axis, &status);
         set_axis_position(&axis_positions, type, status.position);
@@ -162,8 +170,7 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
               toolhead->position.a, toolhead->position.b, toolhead->position.c,
               toolhead->position.e);
     for (i = 0; i < toolhead->n_axes; i++) {
-        if (get_axis_position(&toolhead->position, toolhead->axes[i].type) !=
-            0.0) {
+        if (get_axis_position(&toolhead->position, toolhead->axes[i]) != 0.0) {
             at_origin = false;
             break;
         }
@@ -188,7 +195,7 @@ static void toolhead_status(core_object_t *object, void *status) {
     memcpy(&s->position, &toolhead->position, sizeof(toolhead->position));
     for (i = 0; i < ARRAY_SIZE(s->axes); i++) {
         if (i < toolhead->n_axes)
-            s->axes[i] = toolhead->axes[i].type;
+            s->axes[i] = toolhead->axes[i];
         else
             s->axes[i] = AXIS_TYPE_MAX;
     }
@@ -198,6 +205,8 @@ static void toolhead_destroy(core_object_t *object) {
     toolhead_t *toolhead = (toolhead_t *)object;
 
     object_cache_destroy(toolhead_event_cache);
+    free(toolhead->attachment);
+    free(toolhead->axes);
     core_object_destroy(object);
     free(toolhead);
 }
@@ -205,8 +214,7 @@ static void toolhead_destroy(core_object_t *object) {
 toolhead_t *object_create(const char *name, void *config_ptr) {
     toolhead_t *toolhead;
     toolhead_config_params_t *config = (toolhead_config_params_t *)config_ptr;
-    const char *axis;
-    size_t n_axis = 0;
+    size_t n_axis;
 
     toolhead = calloc(1, sizeof(*toolhead));
     if (!toolhead)
@@ -226,21 +234,32 @@ toolhead_t *object_create(const char *name, void *config_ptr) {
     toolhead->object.get_state = toolhead_status;
     toolhead->object.destroy = toolhead_destroy;
 
-    axis = *config->axes;
-    while (axis)
-        axis = config->axes[++n_axis];
-
-    toolhead->axes = calloc(n_axis, sizeof(*toolhead->axes));
+    toolhead->n_axes = strlen(config->axes);
+    toolhead->axes = calloc(toolhead->n_axes, sizeof(*toolhead->axes));
     if (!toolhead->axes) {
         free((char *)toolhead->object.name);
         free(toolhead);
         return NULL;
     }
 
-    toolhead->n_axes = n_axis;
     for (n_axis = 0; n_axis < toolhead->n_axes; n_axis++) {
-        toolhead->axes[n_axis].type =
-            kinematics_axis_type_from_char(*config->axes[n_axis]);
+        toolhead->axes[n_axis] =
+            kinematics_axis_type_from_char(config->axes[n_axis]);
+    }
+
+    toolhead->n_attached = strlen(config->attachment);
+    toolhead->attachment =
+        calloc(toolhead->n_attached, sizeof(*toolhead->attachment));
+    if (!toolhead->attachment) {
+        free(toolhead->axes);
+        free((char *)toolhead->object.name);
+        free(toolhead);
+        return NULL;
+    }
+
+    for (n_axis = 0; n_axis < toolhead->n_attached; n_axis++) {
+        toolhead->attachment[n_axis].type =
+            kinematics_axis_type_from_char(config->attachment[n_axis]);
     }
 
     return toolhead;

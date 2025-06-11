@@ -201,7 +201,8 @@ class Probe(ObjectDef):
 
 class Toolhead(ObjectDef):
     class ToolheadConfig(ctypes.Structure):
-        _fields_ = [("axes", ctypes.POINTER(ctypes.c_char_p))]
+        _fields_ = [("axes", ctypes.c_char * len(AxisType)),
+                    ("attachment", ctypes.c_char * len(AxisType))]
     class ToolheadStatus(ctypes.Structure):
         _fields_ = [("axes", ctypes.c_int * len(AxisType)),
                     ("position", ctypes.c_double * len(AxisType))]

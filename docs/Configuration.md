@@ -225,10 +225,12 @@ axes:
 ```ini
 [toolhead tool1]
 axes:
+attachement:
 ```
 | Setting | Type | Description |
 | :--- | :---: | :--- |
-| axes | list[char] | A comma-separated list of all the axes types the toolhead is attached to. See `type` setting of the [Axis object](#Axis). |
+| axes | list[char] | A comma-separated list of all the axes types in which the toolhead moves. See `type` setting of the [Axis object](#Axis). |
+| attachment | list[char] | A comma-separated list of all the axes types to which the toolhead is attached. See `type` setting of the [Axis object](#Axis). |
 
 ### Digital Pin
 ```ini

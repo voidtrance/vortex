@@ -37,6 +37,8 @@ def attempt_value_conversion(ctype, value):
         is_simple_char_array(ctype):
         if isinstance(value, bytes):
             return value
+        if isinstance(value, list):
+            value = "".join([str(v) for v in value])
         if value is None:
             value = ""
         return bytes(value, "ascii")
