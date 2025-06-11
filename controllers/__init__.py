@@ -278,6 +278,7 @@ class Controller(core.VortexCore):
         cur_freq = get_host_cpu_frequency()
         max_freq = get_host_cpu_frequency("max")
         tick_ns = hz_to_nsec(self.FREQUENCY)
+        timer_frequency = int(timer_frequency)
         self.log.info(f"Controller frequency: {self.FREQUENCY} Hz, tick is {round(tick_ns, 3)} ns")
         self.log.info(f"Current CPU frequency: {cur_freq} Hz, max {max_freq} Hz")
         self.log.info(f"Emulation running at {timer_frequency} Hz ({hz_to_nsec(timer_frequency)} ns / tick)")
