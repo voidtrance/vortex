@@ -119,6 +119,9 @@ class Heater(ObjectDef):
         _fields_ = [("power", ctypes.c_uint16),
                     ("pin", ctypes.c_char * PIN_NAME_SIZE),
                     ("max_temp", ctypes.c_float),
+                    ("kp", ctypes.c_float),
+                    ("ki", ctypes.c_float),
+                    ("kd", ctypes.c_float),
                     ("layers", HeaterLayer * 8)]
     class HeaterSetTempCommandOpts(ctypes.Structure):
         _fields_ = [("temperature", ctypes.c_float)]

@@ -91,3 +91,45 @@ options:
   --data DATA    Toolhead coordinates data
   --real-time    Create dynamic graph
 ```
+
+### *heater_sim.py*
+This tool is useful for simulation of heater configuration parameters. It can be
+used for:
+
+* simulating and graphing the heater's temperature graph based on the settings in a
+configuration file and constant maximum power input,
+* tuning PID control values for the heaters define in the configuration file
+based on their settings,
+* simulating and graphing heater behavior based on PID values.
+
+The PID tuning option should be used before running the emulator in order to get
+control values, which can be copied to the configuration file. If those values are
+not provided the heaters will fail to initialize.
+
+```
+usage: heater_sim.py [-h] -C CONFIG [--heater HEATER] [--compare COMPARE] [--output OUTPUT] [--runtime RUNTIME] [--down] [--pid-tune]
+                     [--target TARGET] [--steps STEPS] [--pid-control] [--temp TEMP] [--kp KP] [--ki KI] [--kd KD]
+
+options:
+  -h, --help         show this help message and exit
+  -C CONFIG          Emulator configuration file. This option is required so heater settings can be read.
+  --heater HEATER    Heater name to work with. If not specified the tool will use all heaters in the configuration file.
+  --compare COMPARE  With this option, the tool will compare temperatures read from a file with temperatures simulated based on
+                     configuration file values. This is useful for verifying heater behavior in the emulation. A graph with both curves
+                     will be generated
+  --output OUTPUT    Output graph filename.
+  --runtime RUNTIME  Simulation runtime in seconds. If comparing, the runtime will be computed based on the runtime in the file.
+  --down             If set, the simulation's power will be set to 0 half way through the runtime.
+  --pid-tune         Run PID tuning cycles and generate PID values.
+
+PID tuning parameters:
+  --target TARGET    Target temperature for PID tuning.
+  --steps STEPS      Cycle count
+
+PID control parameters:
+  --pid-control      Run PID control test. This will simulate heater behavior based on PID control values.
+  --temp TEMP        Temperate target to be maintained by the PID controller.
+  --kp KP            PID control KP value. If this value is given, it will override the value in the configuration file.
+  --ki KI            PID control KI value. If this value is given, it will override the value in the configuration file.
+  --kd KD            PID control KD value. If this value is given it will override the value in the configuration file.
+```

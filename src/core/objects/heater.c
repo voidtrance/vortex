@@ -26,21 +26,35 @@
 #include "heater.h"
 #include <cache.h>
 #include <atomics.h>
+#include <debug.h>
 #include <errno.h>
+
+typedef struct {
+    float kp; // Proportional gain
+    float ki; // Integral gain
+    float kd; // Derivative gain
+    float prev_error; // Previous error value
+    float integral; // Integral accumulator
+    float output_min; // Minimum output limit (anti-windup)
+    float output_max; // Maximum output limit (anti-windup)
+} heater_pid_control_t;
 
 typedef struct {
     uint16_t power;
     char pin[PIN_NAME_SIZE];
     float max_temp;
+    float kp;
+    float ki;
+    float kd;
     heater_layer_t layers[MAX_LAYER_COUNT];
 } heater_config_params_t;
 
 typedef struct {
-    double power; /* watts */
-    double max_temp;
-    double current; /* celsius */
-    double ambient; /* celsius */
-    double target; /* celsius */
+    float power; /* watts */
+    float max_temp;
+    float current; /* celsius */
+    float ambient; /* celsius */
+    float target; /* celsius */
     heater_data_t *compute;
 } temp_data_t;
 
@@ -53,6 +67,7 @@ typedef struct {
     bool use_pins;
     uint8_t pin_word;
     pthread_t pin_thread;
+    heater_pid_control_t pid_control;
 } heater_t;
 
 static object_cache_t *heater_event_cache = NULL;
@@ -65,8 +80,21 @@ static int heater_use_pins(heater_t *heater,
                            struct heater_use_pins_args *args);
 static int heater_exec_cmd(core_object_t *object, core_object_command_t *cmd);
 static void heater_status(core_object_t *object, void *status);
+static int heater_init(core_object_t *object);
 static void heater_reset(core_object_t *object);
 static void heater_destroy(core_object_t *object);
+
+// Initialize the PID controller
+static void pid_init(heater_pid_control_t *pid, float kp, float ki, float kd,
+                     float output_min, float output_max) {
+    pid->kp = kp;
+    pid->ki = ki;
+    pid->kd = kd;
+    pid->prev_error = 0.0;
+    pid->integral = 0.0;
+    pid->output_min = output_min;
+    pid->output_max = output_max;
+}
 
 heater_t *object_create(const char *name, void *config_ptr) {
     heater_t *heater;
@@ -79,6 +107,7 @@ heater_t *object_create(const char *name, void *config_ptr) {
     heater->object.type = OBJECT_TYPE_HEATER;
     heater->object.update = heater_update;
     heater->object.update_frequency = 25; /* 25 Hz */
+    heater->object.init = heater_init;
     heater->object.reset = heater_reset;
     heater->object.destroy = heater_destroy;
     heater->object.exec_command = heater_exec_cmd;
@@ -103,8 +132,24 @@ heater_t *object_create(const char *name, void *config_ptr) {
         return NULL;
     }
 
+    pid_init(&heater->pid_control, config->kp, config->ki, config->kd, 0.0,
+             100.0);
     heater_reset((core_object_t *)heater);
     return heater;
+}
+
+static int heater_init(core_object_t *object) {
+    heater_t *heater = (heater_t *)object;
+
+    if (heater->pid_control.kp == 0.0 || heater->pid_control.ki == 0.0 ||
+        heater->pid_control.kd == 0.0) {
+        log_error(heater, "Invalid PID parameters for heater %s",
+                  heater->object.name);
+        return -1;
+    }
+
+    heater_reset(object);
+    return 0;
 }
 
 static void heater_reset(core_object_t *object) {
@@ -126,12 +171,6 @@ static int heater_set_temp(heater_t *heater,
         CORE_CMD_COMPLETE(heater, heater->command.command_id, 0, NULL);
         return 0;
     }
-
-    if (heater->temp_data.target > heater->temp_data.current)
-        heater_compute_set_power(heater->temp_data.compute,
-                                 heater->temp_data.power);
-    else
-        heater_compute_set_power(heater->temp_data.compute, 0);
 
     return 0;
 }
@@ -213,6 +252,27 @@ static void heater_status(core_object_t *object, void *status) {
     s->pin_addr = heater->use_pins ? (unsigned long)&heater->pin_word : 0;
 }
 
+// Update the PID controller and compute the output
+static float pid_update(heater_pid_control_t *pid, float setpoint,
+                        float measurement, uint64_t delta) {
+    float error = setpoint - measurement;
+    float derivative;
+    float output;
+    double dt;
+
+    dt = (double)delta / SEC_TO_NSEC(1);
+    pid->integral += error * dt;
+    pid->integral = min(pid->integral, pid->output_max);
+    pid->integral = max(pid->integral, pid->output_min);
+    derivative = (error - pid->prev_error) / dt;
+    output = pid->kp * error + pid->ki * pid->integral + pid->kd * derivative;
+    output = min(output, pid->output_max);
+    output = max(output, pid->output_min);
+    pid->prev_error = error;
+
+    return output / pid->output_max;
+}
+
 static void heater_update(core_object_t *object, uint64_t ticks,
                           uint64_t timestep) {
     heater_t *heater = (heater_t *)object;
@@ -231,6 +291,13 @@ static void heater_update(core_object_t *object, uint64_t ticks,
 
     log_debug(heater, "heater %s temp: %f", heater->object.name,
               heater->temp_data.current);
+
+    if (!heater->use_pins) {
+        float power = pid_update(&heater->pid_control, heater->temp_data.target,
+                                 heater->temp_data.current, time_delta);
+        heater_compute_set_power(heater->temp_data.compute,
+                                 heater->temp_data.power * power);
+    }
 
     if (heater->command.command_id &&
         heater->command.object_cmd_id == HEATER_COMMAND_SET_TEMP) {

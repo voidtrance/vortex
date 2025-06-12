@@ -167,6 +167,8 @@ def generate_extruder_layers(section : str, esection : str,
     # Klipper config does not have a setting for the wattage of the heaters.
     # Make one up.
     econfig.set(esection, "power", "60")
+    for name in ("kp", "ki", "kd"):
+        econfig.set(esection, name, kconfig.get(section, f"pid_{name}"))
     # Generate extruder thermal layers
     econfig.set(esection, "layers_1_type", "1")
     econfig.set(esection, "layers_1_density", "1100000")
@@ -189,6 +191,8 @@ def generate_bed_layers(section : str, esection : str, name : str,
     # Klipper config does not have a setting for the wattage of the heaters.
     # Make one up.
     econfig.set(esection, "power", "400")
+    for name in ("kp", "ki", "kd"):
+        econfig.set(esection, name, kconfig.get(section, f"pid_{name}"))
     # Get axis sizes so we can infer bed size
     bed_size = dict.fromkeys(["x", "y", "z"], 0.)
     kin_type = econfig.get("kinematics", "type")

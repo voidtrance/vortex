@@ -62,12 +62,16 @@ class Configuration:
     def get_section(self, type, name):
         if not isinstance(type, ObjectTypes):
             raise TypeError("'type' must be a ObjectTypes enumeration value")
-        section = f"{str(type)} {name}"
+        section = f"{str(type).lower()} {name}"
         if self._parser.has_section(section):
             return self.__parse_section(section)
+        return None
 
     def override_controller(self, controller):
         self._parser.set("machine", "controller", controller)
+
+    def __contains__(self, section):
+        return self._parser.has_section(section)
 
     def __iter__(self):
         for section in self._parser.sections():

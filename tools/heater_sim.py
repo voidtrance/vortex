@@ -1,12 +1,36 @@
 #!/usr/bin/env python3
+# vortex - GCode machine emulator
+# Copyright (C) 2024-2025 Mitko Haralanov
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import sys
 import time
 import math
+import errno
 import argparse
 from functools import reduce
 from argparse import Namespace
 from collections import namedtuple
+from vortex.emulator import config
+from vortex.core import ObjectTypes
 import plotly.graph_objects as go
+
+SIMULATION_RESOLUTION = 0.005
+AMBIENT_TEMP = 25.0
+
+kSb = 0.0000000567
+emisivity_compensation = 0.85
 
 def make_graph(name, data):
     t_graph = go.Scatter(x=[x[0] for x in data],
@@ -70,15 +94,12 @@ class Layer:
         self.emissivity = emissivity
         self.resolution = resolution
         self.convection_top, self.convection_bottom = covection
-        self.size = Size._make([float(x) / 1000 for x in size.split(",")])
+        self.size = Size._make([x / 1000 for x in size])
         self.elems = Size(int(round(self.size.x / resolution)) or 1,
                           int(round(self.size.y / resolution)) or 1, 0)
     
 def elem(layer, x, y, z):
     return z * layer.elems.x * layer.elems.y + y * layer.elems.x + x
-
-kSb = 0.0000000567
-emisivity_compensation = 0.85
 
 def compute(data, dt):
     for x in range(len(data.dqs)):
@@ -244,22 +265,32 @@ def parse_convection(value):
         return [-1,-1]
     return [top, bottom]
 
-def create_layers(args):
-    convection = parse_convection(args.convection)
-    if convection[0] == -1:
-        print("Invalid convection value")
-        sys.exit(1)
+def create_layers(config):
+    hls = []
+    for i in range(1, 1000):
+        if not hasattr(config, f"layers_{i}_type"):
+            break
+        l = Layer(int(getattr(config, f"layers_{i}_density")),
+                  float(getattr(config, f"layers_{i}_capacity")),
+                  float(getattr(config, f"layers_{i}_conductivity")),
+                  float(getattr(config, f"layers_{i}_emissivity")),
+                  parse_convection(getattr(config, f"layers_{i}_convection")),
+                  getattr(config, f"layers_{i}_size"),
+                  SIMULATION_RESOLUTION)
+        ltype = int(getattr(config, f"layers_{i}_type"))
+        if ltype != 3:
+            hls.insert(ltype, l)
+        else:
+            hls.append(l)
+    return hls
 
-    return [Layer(1100000, 0.9, args.heater_conductivity, 0.9, [0, 0], args.heater, args.resolution),
-            Layer(2650000, 0.9, args.bed_conductivity, 0.2, convection, args.bed, args.resolution),
-            Layer(3700000, 0.9, 0.25, 0.9, [0,0], ",".join(args.bed.split(",")[:2] + ["1.2"]), args.resolution),
-            Layer(5500000, 0.6, 0.6, 0.9, [0,0], ",".join(args.bed.split(",")[:2] + ["0.75"]), args.resolution)]
-
-def run_simulation(args):
+def create_simulation_data(config):
     data = Namespace()
-    data.layers = create_layers(args)
-    data.power = args.power
-    data.ambient = args.ambient
+    data.layers = create_layers(config)
+    data.max_power = config.power
+    data.power = 0
+    data.ambient = AMBIENT_TEMP
+    data.iter_per_step = 25
     data.dqs = [0] * (data.layers[1].elems.x * data.layers[1].elems.y * len(data.layers))
     data.temp = [data.ambient] * len(data.dqs)
     data.sensor = Namespace()
@@ -271,31 +302,37 @@ def run_simulation(args):
         height += data.layers[idx].size.z
         if sensor_coords[2] < height:
             break
-    sensor_coords = [sensor_coords[0] / args.resolution, sensor_coords[1] / args.resolution, idx]
+    sensor_coords = [sensor_coords[0] / SIMULATION_RESOLUTION,
+                     sensor_coords[1] / SIMULATION_RESOLUTION, idx]
     sensor_coords = map(int, sensor_coords)
     data.sensor = Size._make(sensor_coords)
+    data.sensor_elem = elem(data.layers[1], data.sensor.x, data.sensor.y, data.sensor.z)
+    return data
 
-    if args.runtime == 0.:
-        args.runtime = 10 * 100
+def reset_simulation_data(data):
+    data.dqs = [0] * (data.layers[1].elems.x * data.layers[1].elems.y * len(data.layers))
+    data.temp = [data.ambient] * len(data.dqs)
 
-    sensor_elem = elem(data.layers[1], data.sensor.x, data.sensor.y, data.sensor.z)
+def run_simulation(data, runtime, down):
+    if runtime == 0.:
+        runtime = 10 * 100
+
     temps = []
     timer = 0
     timestep = 1
-    iter_per_step = 25
     start = time.time_ns()
-    time_delta = timestep / iter_per_step
-    while timer < args.runtime:
-        for i in range(iter_per_step):
+    time_delta = timestep / data.iter_per_step
+    while timer < runtime:
+        for i in range(data.iter_per_step):
             compute(data, time_delta)
-            temps.append((timer + i * time_delta, data.temp[sensor_elem]))
+            temps.append((timer + i * time_delta, data.temp[data.sensor_elem]))
         timer += 1
-    if args.down:
+    if down:
         data.power = 0
-        while timer < args.runtime * 2:
-            for i in range(iter_per_step):
+        while timer < runtime * 2:
+            for i in range(data.iter_per_step):
                 compute(data, time_delta)
-                temps.append((timer + i * time_delta, data.temp[sensor_elem]))
+                temps.append((timer + i * time_delta, data.temp[data.sensor_elem]))
             timer += 1
     end = time.time_ns()
     return temps, end - start
@@ -305,61 +342,215 @@ def create_graph_name(args):
         f"convection={args.convection},bed-conductivity={args.bed_conductivity},\n" + \
         f"heater-conductivity={args.heater_conductivity},resolution={args.resolution}"
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--compare", type=argparse.FileType("r"),
-                    help="When comparing temperatures, the file containting the data")
-parser.add_argument("--commands", type=argparse.FileType("r"),
-                    help="File containing list of arguments")
-parser.add_argument("--output", type=str, default="temp_graphs.html",
-                    help="Output graph filename.")
-parser.add_argument("--bed", type=str, default=None,
-                    help="Bed size (in mm): <width>,<depth>,<height>")
-parser.add_argument("--power", type=float, default=None,
-                    help="Heater power in watts")
-parser.add_argument("--resolution", type=float, default=0.005,
-                    help="Element resolution")
-parser.add_argument("--heater", type=str, default=None,
-                    help="The size of the heater. Format is same as --bed.")
-parser.add_argument("--ambient", type=float, default=25.0,
-                    help="Ambient temperature. Default is 25C")
-parser.add_argument("--runtime", type=float, default=0.0,
-                    help="""Simulation runtime in seconds. If comparing, the
-                    runtime will be computed based on the runtime in the file.""")
-parser.add_argument("--down", action="store_true",
-                    help="""If set, the simulation's power will be set to 0 half way
-                    through the runtime.""")
-sim_params = parser.add_argument_group("Simulation parameters")
-sim_params.add_argument("--convection", type=str, default="8,4",
-                        help="Bed convection values")
-sim_params.add_argument("--bed-conductivity", type=float, default=120,
-                        help="Bed thermal conductivity")
-sim_params.add_argument("--heater-conductivity", type=float, default=0.3,
-                        help="Heater thermal conductivity")
-args = parser.parse_args()
+def tune_pid(data, setpoint, steps=10):
+    """Tune PID values using grid search."""
+    get_temp = lambda d: d.temp[d.sensor_elem]
 
-graphs = []
-runtimes = []
-figure_runtime = None
-if args.commands:
-    for line in args.commands:
-        print(f"Simulation parameters: {line.strip()}")
-        args = parser.parse_args(line.split())
-        temps, duration = run_simulation(args)
-        graphs.append(make_graph(create_graph_name(args), temps))
-        runtimes.append((create_graph_name(args), duration))
-    figure = make_figure(graphs)
-    figure_runtime = make_runtime(runtimes)
-else:
-    if not args.bed or not args.power or not args.heater:
-        print("Arguments '--bed', '--heater', and '--power' are required")
-        sys.exit(1)
-    comp_temps = None
-    if args.compare:
-        comp_temps, args.runtime = parse_compare(args.compare, args.ambient)
-        print(f"Simulating {args.runtime} seconds")
-        graphs.append(make_graph("Compare", comp_temps))
-    temps, _ = run_simulation(args)
-    graphs.append(make_graph("Simulation", temps))
-    figure = make_figure(graphs)
+    ranges_top = []
+    ranges_bottom = []
+    sim_time = 0
+    time_delta = 1. / data.iter_per_step
+    for i in range(steps):
+        data.power = data.max_power
+        current_temp = get_temp(data)
+        done_heating = False
+        peak = 0
+        while current_temp < setpoint:
+            for i in range(data.iter_per_step):
+                compute(data, time_delta)
+                sim_time += time_delta
+                current_temp = get_temp(data)
+                if current_temp >= setpoint:
+                    peak = current_temp
+                    break
+        data.power = 0
+        while not done_heating:
+            for i in range(data.iter_per_step):
+                compute(data, time_delta)
+                sim_time += time_delta
+                current_temp = get_temp(data)
+                if current_temp > peak:
+                    peak = current_temp
+                else:
+                    done_heating = True
+                    break
+            if done_heating:
+                ranges_top.append((peak, sim_time))
+                break
+        while current_temp >= setpoint - 5:
+            for i in range(data.iter_per_step):
+                compute(data, time_delta)
+                sim_time += time_delta
+                current_temp = get_temp(data)
+                if current_temp <= setpoint - 5:
+                    ranges_bottom.append((current_temp, sim_time))
+                    break
+    cycles = [(ranges_top[p][1] - ranges_top[p-1][1], p) \
+              for p in range(1, len(ranges_top))]
+    mid = sorted(cycles)[len(cycles)//2][1]
+    temp_diff = ranges_top[mid][0] - ranges_bottom[mid][0]
+    time_diff = ranges_top[mid][1] - ranges_top[mid-1][1]
+    amplitude = .5 * abs(temp_diff)
+    Ku = 4. / (math.pi * amplitude)
+    Tu = time_diff
+    Ti = 0.5 * Tu
+    Td = 0.125 * Tu
+    Kp = 0.6 * Ku * 255
+    Ki = Kp / Ti
+    Kd = Kp * Td
+    return Kp, Ki, Kd
 
-output_graph({"Heater Simulation": figure, "Runtimes": figure_runtime}, args.output)
+def pid_update(pid, target, current, dt):
+    error = target - current
+    pid.integral += error * dt
+
+    pid.integral = min(pid.integral, pid.output_max)
+    pid.integral = max(pid.integral, pid.output_min)
+
+    derivative = (error - pid.prev_error) / dt
+    output = pid.kp * error + pid.ki * pid.integral + pid.kd * derivative;
+
+    output = min(output, pid.output_max)
+    output = max(output, pid.output_min)
+
+    pid.prev_error = error
+    return output
+
+def run_pid_simulation(data, runtime, target, kp, ki, kd):
+    if runtime == 0.:
+        runtime = 10 * 100
+
+    pid = Namespace()
+    pid.kp = kp
+    pid.ki = ki
+    pid.kd = kd
+    pid.prev_error = 0.
+    pid.integral = 0.
+    pid.output_min = 0.
+    pid.output_max = 1.
+
+    temps = []
+    timer = 0
+    start = time.time_ns()
+    time_delta = 1 / data.iter_per_step
+    get_temp = lambda d: d.temp[d.sensor_elem]
+    while timer < runtime:
+        for i in range(data.iter_per_step):
+            temp = get_temp(data)
+            data.power = data.max_power * pid_update(pid, target, temp, time_delta)
+            compute(data, time_delta)
+            temps.append((timer + i * time_delta, get_temp(data)))
+        timer += 1
+    end = time.time_ns()
+    return temps, end - start
+
+def parse_pid_pair(value):
+    min_val, max_val = [float(x.strip()) for x in value.split(",")]
+    return min_val, max_val
+
+def create_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-C", dest="config", type=str, required=True,
+                        help="""Emulator configuration file. This option is
+                        required so heater settings can be read.""")
+    parser.add_argument("--heater", action="append", default=[],
+                         help="""Heater name to work with. If not specified
+                         the tool will use all heaters in the configuration
+                         file.""")
+    parser.add_argument("--compare", type=argparse.FileType("r"),
+                        help="""With this option, the tool will compare temperatures
+                        read from a file with temperatures simulated based on 
+                        configuration file values. This is useful for verifying
+                        heater behavior in the emulation. A graph with both curves
+                        will be generated""")
+    parser.add_argument("--output", type=str, default="temp_graphs.html",
+                        help="Output graph filename.")
+    parser.add_argument("--runtime", type=float, default=0.0,
+                        help="""Simulation runtime in seconds. If comparing, the
+                        runtime will be computed based on the runtime in the file.""")
+    parser.add_argument("--down", action="store_true",
+                        help="""If set, the simulation's power will be set to 0 half way
+                        through the runtime.""")
+    pid_params = parser.add_argument_group("PID tuning parameters")
+    parser.add_argument("--pid-tune", action="store_true", dest="tune_pid",
+                                     help="Run PID tuning cycles and generate PID values.")
+    pid_params.add_argument("--target", type=float, default=60,
+                            help="Target temperature for PID tuning.")
+    pid_params.add_argument("--steps", type=int, default=5, help="Cycle count")
+    pid_run_params = parser.add_argument_group("PID control parameters")
+    pid_run_params.add_argument("--pid-control", action="store_true",
+                                help="""Run PID control test. This will simulate heater
+                                behavior based on PID control values.""")
+    pid_run_params.add_argument("--temp", type=float,
+                                help="Temperate target to be maintained by the PID controller.")
+    pid_run_params.add_argument("--kp", type=float,
+                                 help="""PID control KP value. If this value is given, it will
+                                 override the value in the configuration file.""")
+    pid_run_params.add_argument("--ki", type=float,
+                                 help="""PID control KI value. If this value is given, it will
+                                 override the value in the configuration file.""")
+    pid_run_params.add_argument("--kd", type=float,
+                                help="""PID control KD value. If this value is given it will
+                                override the value in the configuration file.""")
+    return parser
+
+def main():
+    parser = create_parser()
+    args = parser.parse_args()
+
+    conf = config.Configuration()
+    conf.read(args.config)
+
+    if not args.heater:
+        args.heater = [name for klass, name, c in conf if klass == ObjectTypes.HEATER]
+
+    heaters = args.heater[:]
+    for heater in heaters:
+        if f"{str(ObjectTypes.HEATER).lower()} {heater}" not in conf:
+            print(f"ERROR: Heater '{heater}' not found")
+            args.heater.remove(heater)
+
+    for heater in args.heater:
+        c = conf.get_section(ObjectTypes.HEATER, heater)
+        output = f"{heater}-{args.output}"
+        sim_data = create_simulation_data(c)
+        graphs = []
+        if args.tune_pid:
+            if not args.target:
+                print(f"ERROR: '--target' is required for PID tunning")
+                return errno.EINVAL
+            if args.target > c.max_temp:
+                print(f"ERROR: PID tune target temperature exceed maximum heater temperature")
+            print(f"Running PID tuning for heater '{heater}...")
+            params = tune_pid(sim_data, args.target, args.steps)
+            print(f"{heater} PID: Kp: {params[0]}, Ki: {params[1]}, Kd: {params[2]}")
+        elif args.pid_control:
+            if not args.temp:
+                print(f"ERROR: '--temp' is required for PID control")
+                return errno.EINVAL
+            if args.temp > c.max_temp:
+                print(f"ERROR: Target temperature exceed maximum heater temperature")
+            kp = args.kp if args.kp is not None else c.kp
+            ki = args.ki if args.ki is not None else c.ki
+            kd = args.kd if args.kd is not None else c.kd
+            temps, _ = run_pid_simulation(sim_data, args.runtime, args.temp,
+                                          kp, ki, kd)
+            graphs.append(make_graph("PID Simulation", temps))
+            figure = make_figure(graphs)
+            output_graph({f"Heater PID Control Simulation - {heater}": figure}, output)
+        else:
+            comp_temps = None
+            if args.compare:
+                comp_temps, args.runtime = parse_compare(args.compare, AMBIENT_TEMP)
+                print(f"Simulating {args.runtime} seconds")
+                graphs.append(make_graph("Compare", comp_temps))
+            else:
+                sim_data.power = sim_data.max_power
+                temps, _ = run_simulation(sim_data, args.runtime, args.down)
+                graphs.append(make_graph("Simulation", temps))
+                figure = make_figure(graphs)
+            output_graph({f"Heater Simulation - {heater}": figure}, output)
+
+    return 0
+
+sys.exit(main())

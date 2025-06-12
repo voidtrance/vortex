@@ -15,4 +15,5 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 install_data('config_from_klipper.py', 'emulator_track.py',
              'klipper_print_file.py', 'monitor.py',
+             'heater_sim.py',
              install_dir: get_option('bindir'))

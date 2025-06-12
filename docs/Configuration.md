@@ -168,6 +168,9 @@ Thermistor objects represent resistive temperature sensors.
 [heater heater1]
 power:
 max_temp:
+kp:
+ki:
+kd:
 pin:
 layers_<n>_type:
 layers_<n>_density:
@@ -195,6 +198,9 @@ configuration section.
 | :--- | :---: | :--- |
 | power | integer | The wattage of the heating element. This setting is used to compute how fast the element will heat up during the emulation. The calculation does not take into account any thermal mass of anything attached to the heating element. However, this setting can be used to emulate that. |
 | max_temp | integer | The maximum temperature that the heater can reach. |
+| kp | float | PID proportional gain value. This value can be computed using the [heater_sim.py](/docs/UserGuide.md#available-tools) tool. |
+| ki | float | PID integral gain value. This value can be computed using the [heater_sim.py](/docs/UserGuide.md#available-tools) tool. |
+| kd | float | PID derivative gain value. This value can be computed using the [heater_sim.py](/docs/UserGuide.md#available-tools) tool. |
 | pin | string | The heater's control pin name |
 | layer_\<n>_type | integer | Type of the layer: 1 - heating element, 2 - heated body, 3 - other |
 | layer_\<n>_density | float | Material density in g/m^3 |
