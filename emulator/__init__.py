@@ -116,4 +116,5 @@ class Emulator:
         self._controller.stop()
 
     def __del__(self):
-        self._controller.cleanup()
+        if self._controller:
+            self._controller.cleanup()
