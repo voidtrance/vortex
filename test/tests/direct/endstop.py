@@ -13,10 +13,9 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import testutils
 from vortex.emulator.kinematics import AxisType
 from math import ceil
-
-dependencies = ["axis_direct"]
 
 def kinematics_cartesian(distance, motors, axis_type):
     return distance * motors[list(motors)[0]]["spm"]
@@ -46,13 +45,12 @@ def compare_position(framework, actual, desired, spm):
     # It is possible that the axis cannot achieve the exact
     # desired position if the difference between the desired
     # and actual positions is less than one motor step.
-    if not framework.assertLT((desired - actual) * spm,  1.0):
-        return False
+    testutils.assertLT((desired - actual) * spm,  1.0)
     return True
 
+@testutils.object_test("endstop_test", "endstop", ["axis"])
 def test_endstop(framework, name, obj_id):
-    framework.begin(f"endstop_direct '{name}'")
-    kinematics = framework.get_machine_config().kinematics
+    kinematics = framework.get_kinematics_config().type
     endstop_status = framework.get_status(obj_id)[obj_id]
     endstop_axis_type = AxisType(endstop_status["axis"])
     axes = framework.get_objects("axis")
@@ -62,8 +60,7 @@ def test_endstop(framework, name, obj_id):
         if axis_status["type"] == endstop_axis_type:
             axis = a
             break
-    if not framework.assertNE(axis, None):
-        return framework.failed()
+    testutils.assertNE(axis, None)
     motors = framework.get_objects("stepper")
     motors = {x["name"]: x["id"] for x in motors}
     motors = {n: {"id": i} for n, i in motors.items() if n in axis_status["motors"]}
@@ -79,42 +76,34 @@ def test_endstop(framework, name, obj_id):
     axis_status = framework.get_status(axis["id"])[axis["id"]]
     axis_position = axis_status["position"]
     if (endstop_status["type"] == "min" and axis_position == 0) or \
-        (endstop_status["type"] == "max" and 
+        (endstop_status["type"] == "max" and
          axis_position == axis_status["length"]):
         initial_state = True
     else:
         initial_state = False
-    if not framework.assertEQ(endstop_status["triggered"], initial_state):
-        return framework.failed()
+    testutils.assertEQ(endstop_status["triggered"], initial_state)
     if axis_status["length"] == -1:
-        if not framework.assertEQ(axis_status["homed"], True):
-            return framework.failed()
+        testutils.assertEQ(axis_status["homed"], True)
     if initial_state is False:
         if endstop_status["type"] == "min":
             travel_distance = -axis_status["position"]
         else:
             travel_distance = axis_status["length"] - axis_status["position"]
         status = move_axis(framework, endstop_axis_type, travel_distance, kinematics, motors)
-        if not framework.assertEQ(status, 0):
-            return framework.failed()
+        testutils.assertEQ(status, 0)
         endstop_status = framework.get_status(obj_id)[obj_id]
-        if not framework.assertEQ(endstop_status["triggered"], True):
-            return framework.failed()
+        testutils.assertEQ(endstop_status["triggered"], True)
     travel_distance = 5
     if axis_status["length"] != -1 and endstop_status["type"] != "min":
         travel_distance *= -1
     status = move_axis(framework, endstop_axis_type, travel_distance, kinematics, motors)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     endstop_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(endstop_status["triggered"], False):
-        return framework.failed()
+    testutils.assertEQ(endstop_status["triggered"], False)
     status = move_axis(framework, endstop_axis_type, -travel_distance, kinematics, motors)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     endstop_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(endstop_status["triggered"], True):
-        return framework.failed()
+    testutils.assertEQ(endstop_status["triggered"], True)
     # Test that moving to the other end of the axis does not trigger
     # the endstop:
     axis_status = framework.get_status(axis["id"])[axis["id"]]
@@ -123,17 +112,7 @@ def test_endstop(framework, name, obj_id):
     else:
         travel_distance = axis_status["length"] - axis_status["position"]
     status = move_axis(framework, endstop_axis_type, travel_distance, kinematics, motors)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     endstop_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(endstop_status["triggered"], False):
-        return framework.failed()
-    return framework.passed()
-
-def run_test(framework):
-    if framework.frontend != "direct":
-        framework.begin("endstop_direct")
-        return framework.waive()
-    endstops = framework.get_objects("endstop")
-    for endstop in endstops:
-        test_endstop(framework, endstop["name"], endstop["id"])
+    testutils.assertEQ(endstop_status["triggered"], False)
+    return testutils.TestStatus.PASS

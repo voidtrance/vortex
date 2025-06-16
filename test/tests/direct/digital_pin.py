@@ -13,31 +13,20 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-dependencies = []
+import testutils
 
+@testutils.object_test("digital_pin_test", "digital_pin")
 def test_pin(framework, name, obj_id):
     pin_status = framework.get_status(obj_id)[obj_id]
     initial_state = pin_status["state"]
     cmd_id = framework.run_command(f"digital_pin:{name}:set:state={not initial_state}")
     status = framework.wait_for_completion(cmd_id)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     pin_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(pin_status["state"], not initial_state):
-        return framework.failed()
+    testutils.assertEQ(pin_status["state"], not initial_state)
     cmd_id = framework.run_command(f"digital_pin:{name}:set:state={not pin_status['state']}")
     status = framework.wait_for_completion(cmd_id)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     pin_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(pin_status["state"], initial_state):
-        return framework.failed()
-    return framework.passed()
-
-def run_test(framework):
-    framework.begin("digital_pin_direct")
-    if framework.frontend != "direct":
-        return framework.waive()
-    pins = framework.get_objects("digital_pin")
-    for pin in pins:
-        test_pin(framework, pin["name"], pin["id"])
+    testutils.assertEQ(pin_status["state"], initial_state)
+    return testutils.TestStatus.PASS

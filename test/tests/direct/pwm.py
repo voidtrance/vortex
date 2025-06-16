@@ -13,44 +13,29 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import testutils
 
-dependencies = []
-
+@testutils.object_test("pwm_test", "pwm")
 def test_pin(framework, name, obj_id):
     pin_status = framework.get_status(obj_id)[obj_id]
     initial_cycle = pin_status["cycle"]
-    if not framework.assertGE(initial_cycle, 0.0) or \
-        not framework.assertLE(initial_cycle, 1.0):
-        return framework.failed()
+    testutils.assertGE(initial_cycle, 0.0)
+    testutils.assertLE(initial_cycle, 1.0)
     cmd_id = framework.run_command(f"pwm_pin:{name}:set_cycle:cycle={initial_cycle + 30}")
     status = framework.wait_for_completion(cmd_id)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     pin_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(pin_status["cycle"], (initial_cycle + 30) / 100):
-        return framework.failed()
+    testutils.assertEQ(pin_status["cycle"], (initial_cycle + 30) / 100)
     cycle = pin_status["cycle"] * 100 - 10
     cmd_id = framework.run_command(f"pwm_pin:{name}:set_cycle:cycle={cycle}")
     status = framework.wait_for_completion(cmd_id)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     pin_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(pin_status["cycle"], cycle / 100):
-        return framework.failed()
+    testutils.assertEQ(pin_status["cycle"], cycle / 100)
     cmd_id = framework.run_command(f"pwm_pin:{name}:set_cycle:cycle=110")
     status = framework.wait_for_completion(cmd_id)
-    if not framework.assertNE(status, 0):
-        return framework.failed()
+    testutils.assertNE(status, 0)
     cmd_id = framework.run_command(f"pwm_pin:{name}:set_cycle:cycle=-10")
     status = framework.wait_for_completion(cmd_id)
-    if not framework.assertNE(status, 0):
-        return framework.failed()
+    testutils.assertNE(status, 0)
     return framework.passed()
-
-def run_test(framework):
-    framework.begin("pwm_direct")
-    if framework.frontend != "direct":
-        return framework.waive()
-    pins = framework.get_objects("pwm_pin")
-    for pin in pins:
-        test_pin(framework, pin["name"], pin["id"])

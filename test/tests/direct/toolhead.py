@@ -13,12 +13,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import testutils
 from vortex.emulator.kinematics import AxisType
-from framework import TestStatus
 from math import ceil
 from argparse import Namespace
-
-dependencies = ["toolhead_direct"]
 
 def kinematics_cartesian(distance, motors, axis_type):
     return distance * motors[0].spm
@@ -41,19 +39,14 @@ def move_axis(framework, toolhead, axis_type, distance):
             cmd_id  = framework.run_command(f"stepper:{motor.name}:move:steps={motor_steps},direction={direction}")
             move_cmds.append(cmd_id)
     for cmd_id in move_cmds:
-        s = framework.wait_for_completion(cmd_id)
-        if s != 0:
-            print(cmd_id, s)
-        #status |= framework.wait_for_completion(cmd_id)
-        status != s
+        status |= framework.wait_for_completion(cmd_id)
     return status
 
 def compare_position(framework, actual, desired, spm):
     # It is possible that the axis cannot achieve the exact
     # desired position if the difference between the desired
     # and actual positions is less than one motor step.
-    if not framework.assertLT((desired - actual) * spm,  1.0):
-        return False
+    testutils.assertLT((desired - actual) * spm,  1.0)
     return True
 
 def create_toolhead(framework, name):
@@ -64,11 +57,10 @@ def create_toolhead(framework, name):
         if t["name"] == name:
             toolhead_obj = t
             break
-    if not framework.assertNE(toolhead_obj, None):
-        return framework.failed()
+    testutils.assertNE(toolhead_obj, None)
     toolhead.id = toolhead_obj["id"]
     toolhead.name = toolhead_obj["name"]
-    toolhead.kinematics = framework.get_machine_config().kinematics
+    toolhead.kinematics = framework.get_kinematics_config().type
     toolhead.klass = framework.get_object_klass("toolhead")
     toolhead.config = framework.get_config_section(toolhead.klass, toolhead.name)
     toolhead.axes = {AxisType[x.upper()]: Namespace() for x in toolhead.config.axes}
@@ -91,28 +83,16 @@ def create_toolhead(framework, name):
                 motor.spm = motor_status["steps_per_mm"]
                 toolhead.axes[axis_status["type"]].motors.append(motor)
     for axis in toolhead.axes:
-        if not framework.assertNE(axis, None):
-            return framework.failed()
+        testutils.assertNE(axis, None)
     return toolhead
 
-def create_probe(framework, name, id):
-    probe = Namespace()
-    probe.name = name
-    probe.id = id
-    probe.klass = framework.get_object_klass("probe")
-    probe_config = framework.get_config_section(probe.klass, probe.name)
-    probe.range = probe_config.range
-    probe.toolhead = create_toolhead(framework, probe_config.toolhead)
-    if probe.toolhead == TestStatus.FAIL:
-        return probe.toolhead
-    return probe
-
-def test_probe(framework, name, obj_id, kinematics):
-    probe = create_probe(framework, name, obj_id)
-    if probe == TestStatus.FAIL:
-        return probe
-    for axis in probe.toolhead.axes:
-        for motor in probe.toolhead.axes[axis].motors:
+@testutils.object_test("toolhead_test", "toolhead", ["axis"])
+def test_toolhead(framework, name, toolhead_id):
+    toolhead = create_toolhead(framework, name)
+    if toolhead == testutils.TestStatus.FAIL:
+        return toolhead
+    for axis in toolhead.axes:
+        for motor in toolhead.axes[axis].motors:
             motor_status = framework.get_status(motor.id)[motor.id]
             if not motor_status["enabled"]:
                 cmd_id = framework.run_command(f"stepper:{motor.name}:enable:enable=1")
@@ -120,37 +100,16 @@ def test_probe(framework, name, obj_id, kinematics):
             # Increase motor speed to speed up the test
             cmd_id = framework.run_command(f"stepper:{motor.name}:set_speed:steps_per_second={50 * motor.spm}")
             framework.wait_for_completion(cmd_id)
-    probe_status = framework.get_status(probe.id)[probe.id]
-    toolhead_status = framework.get_status(probe.toolhead.id)[probe.toolhead.id]
-    should_be_triggered = True
-    for i, p in enumerate(probe_status["position"]):
-        should_be_triggered &= p <= probe_status["offsets"][i]
-    if not framework.assertEQ(probe_status["triggered"], should_be_triggered):
-        return framework.failed()
-    axis_set = [AxisType(x) for x in toolhead_status["axes"] if x != len(AxisType)]
-    for axis in axis_set:
-        if should_be_triggered:
-            # move out of trigger range
-            distance = probe_status["position"][int(axis)] - \
-                toolhead_status["position"][int(axis)] + 1
-        else:
-            distance = -toolhead_status["position"][int(axis)]
-        status = move_axis(framework, probe.toolhead, axis, distance)                       
-        if not framework.assertEQ(status, 0):
-            return framework.failed()
-    framework.log(0, "probe status query")
-    probe_status = framework.get_status(probe.id)[probe.id]
-    toolhead_status = framework.get_status(probe.toolhead.id)[probe.toolhead.id]
-    if not framework.assertEQ(probe_status["triggered"], not should_be_triggered):
-        return framework.failed()
-    return framework.passed()
-    
-def run_test(framework):
-    if framework.frontend != "direct":
-        framework.begin("probe_direct")
-        return framework.waive()
-    probes = framework.get_objects("probe")
-    kinematics = framework.get_machine_config().kinematics
-    for probe in probes:
-        framework.begin(f"probe_direct for '{probe['name']}'")
-        test_probe(framework, probe["name"], probe["id"], kinematics)
+    toolhead_status = framework.get_status(toolhead.id)[toolhead.id]
+    for axis in toolhead.axes:
+        travel_distance = 50
+        if toolhead_status["position"][int(axis)] + \
+            travel_distance > toolhead.axes[axis].length:
+            travel_distance *= -1
+        status = move_axis(framework, toolhead, axis, travel_distance)
+        testutils.assertEQ(status, 0)
+        axis_position = framework.get_status(toolhead.id)[toolhead.id]
+        testutils.assertEQ(axis_position["position"][int(axis)],
+                           toolhead_status["position"][int(axis)] +
+                           travel_distance)
+    return testutils.TestStatus.PASS

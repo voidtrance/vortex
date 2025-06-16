@@ -13,9 +13,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import testutils
 import time
-
-dependencies = []
 
 def wait_for_temp(framework, cmd_id, obj_id, start, target):
     temp = start
@@ -30,16 +29,16 @@ def wait_for_temp(framework, cmd_id, obj_id, start, target):
         heater_status = framework.get_status(obj_id)[obj_id]
         if heater_status["temperature"] == target:
             break
-        if (start < target and \
-            not framework.assertGT(heater_status["temperature"], temp)) or \
-            (start > target and \
-             not framework.assertLT(heater_status["temperature"], temp)):
-            return False
+        if start < target:
+            testutils.assertGT(heater_status["temperature"], temp)
+        elif start > target:
+            testutils.assertLT(heater_status["temperature"], temp)
         temp = heater_status["temperature"]
     # command_is_complete() does not remove the completion from the stack
     result = framework.wait_for_completion(cmd_id)
     return not bool(result)
 
+@testutils.object_test("heater_test", "heater")
 def run_heater_test(framework, heater, obj_id):
     heater_status = framework.get_status(obj_id)[obj_id]
     initial_temp = heater_status["temperature"]
@@ -47,50 +46,32 @@ def run_heater_test(framework, heater, obj_id):
     target_temp = initial_temp + 30
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={target_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, initial_temp, target_temp):
-        return framework.failed()
+        return testutils.TestStatus.FAIL
     heater_status = framework.get_status(obj_id)[obj_id]
     temp = heater_status["temperature"]
-    if not framework.assertEQ(temp, target_temp):
-        return framework.failed()
+    testutils.assertEQ(temp, target_temp)
     target_temp = temp + 10
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={target_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, temp, target_temp):
-        return framework.failed()
+        return testutils.TestStatus.FAIL
     heater_status = framework.get_status(obj_id)[obj_id]
     temp = heater_status["temperature"]
-    if not framework.assertEQ(temp, target_temp):
-        return framework.failed()
+    testutils.assertEQ(temp, target_temp)
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={max_temp + 5}")
     result = framework.wait_for_completion(cmd_id)
-    if not framework.assertNE(result, 0):
-        return framework.failed()
+    testutils.assertNE(result, 0)
     heater_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(heater_status["temperature"], temp):
-        return framework.failed()
+    testutils.assertEQ(heater_status["temperature"], temp)
     target_temp = temp - 15
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={target_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, temp, target_temp):
-        return framework.failed()
+        return testutils.TestStatus.FAIL
     heater_status = framework.get_status(obj_id)[obj_id]
     temp = heater_status["temperature"]
-    if not framework.assertEQ(temp, target_temp):
-        return framework.failed()
+    testutils.assertEQ(temp, target_temp)
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={initial_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, temp, initial_temp):
-        return framework.failed()
+        return testutils.TestStatus.FAIL
     heater_status = framework.get_status(obj_id)[obj_id]
-    if not framework.assertEQ(heater_status["temperature"], initial_temp):
-        return framework.failed()
-    return framework.passed()
-
-def run_test(framework):
-    if framework.frontend != "direct":
-        framework.begin("heater_direct")
-        return framework.waive()
-    klasses = framework.get_object_klasses()
-    klasses = {n:v for v, n in klasses.items()}
-    heater_klass = klasses["heater"]
-    heaters = framework.get_objects(heater_klass)
-    for heater in heaters:
-        framework.begin(f"heater_direct for {heater['name']}")
-        run_heater_test(framework, heater["name"], heater["id"])
+    testutils.assertEQ(heater_status["temperature"], initial_temp)
+    return testutils.TestStatus.PASS

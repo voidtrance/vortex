@@ -13,10 +13,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import testutils
+import logging
 from vortex.emulator.kinematics import AxisType
 from math import ceil
-
-dependencies = ["stepper_direct"]
 
 def kinematics_cartesian(distance, motors, axis_type):
     return distance * motors[list(motors)[0]]["spm"]
@@ -46,17 +46,16 @@ def compare_position(framework, actual, desired, spm):
     # It is possible that the axis cannot achieve the exact
     # desired position if the difference between the desired
     # and actual positions is less than one motor step.
-    if not framework.assertLT((desired - actual) * spm,  1.0):
-        return False
+    testutils.assertLT((desired - actual) * spm,  1.0)
     return True
 
-def test_axis(framework, axis, obj_id, kinematics):
-    framework.begin(f"axis_direct '{axis}")
+@testutils.object_test("axis", "axis", ["stepper"])
+def test_axis(framework, name, obj_id):
+    kinematics = framework.get_kinematics_config().type
     axis_status = framework.get_status(obj_id)[obj_id]
     axis_type = AxisType(axis_status["type"])
     if axis_status["length"] != -1:
-        if not framework.assertEQ(axis_status["homed"], False):
-            return framework.failed()
+        testutils.assertEQ(axis_status["homed"], False)
     axis_motors = [x for x in axis_status["motors"] if x]
     initial_position = axis_status["position"]
     motors = framework.get_objects("stepper")
@@ -81,27 +80,25 @@ def test_axis(framework, axis, obj_id, kinematics):
     else:
         if axis_status["length"] != -1:
             travel_distance = (axis_status["length"] - initial_position) / 2
-    framework.log(2, f"Moving axis {travel_distance}mm...")
+    logging.debug(f"Moving axis {travel_distance}mm...")
     expected_position = initial_position + travel_distance
     status = move_axis(framework, axis_type, travel_distance, kinematics, motors)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     axis_status = framework.get_status(obj_id)[obj_id]
     if not compare_position(framework, axis_status["position"],
                             expected_position,
                             motors[list(motors)[0]]["spm"]):
-        return framework.failed()
+        return testutils.TestStatus.FAILED
     travel_distance = -(axis_status["position"] / 2)
-    framework.log(2, f"Moving axis {travel_distance}mm...")
+    logging.debug(f"Moving axis {travel_distance}mm...")
     expected_position += travel_distance
     status = move_axis(framework, axis_type, travel_distance, kinematics, motors)
-    if not framework.assertEQ(status, 0):
-        return framework.failed()
+    testutils.assertEQ(status, 0)
     axis_status = framework.get_status(obj_id)[obj_id]
     if not compare_position(framework, axis_status["position"],
                             expected_position,
                             motors[list(motors)[0]]["spm"]):
-        return framework.failed()
+        return testutils.TestStatus.FAILED
     # Infinite axes are auto-homed.
     if axis_status["length"] != -1:
         endstops = framework.get_objects("endstop")
@@ -112,29 +109,18 @@ def test_axis(framework, axis, obj_id, kinematics):
             if endstop_axis_type == axis_type:
                 axis_endstop = endstop
                 break
-        if not framework.assertNE(axis_endstop, None):
-            return framework.failed()
+        testutils.assertNE(axis_endstop, None)
         if endstop_status["type"] == "min":
             travel_distance = -axis_status["position"]
             home_position = 0
         else:
             travel_distance = axis_status["length"] - axis_status["position"]
             home_position = axis_status["length"]
-        framework.log(2, "Homing axis...")
+        logging.debug("Homing axis...")
         status = move_axis(framework, axis_type, travel_distance, kinematics, motors)
-        if not framework.assertEQ(status, 0):
-            return framework.failed()
+        testutils.assertEQ(status, 0)
         axis_status = framework.get_status(obj_id)[obj_id]
         if not compare_position(framework, axis_status["position"],
                                 home_position, motors[list(motors)[0]]["spm"]):
-            return framework.failed()
-    return framework.passed()
-
-def run_test(framework):
-    if framework.frontend != "direct":
-        framework.begin("axis_direct")
-        return framework.waive()
-    axes = framework.get_objects("axis")
-    kinematics = framework.get_machine_config().kinematics
-    for axis in axes:
-        test_axis(framework, axis["name"], axis["id"], kinematics)
+            return testutils.TestStatus.FAILED
+    return testutils.TestStatus.PASS
