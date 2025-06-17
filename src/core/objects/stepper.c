@@ -308,6 +308,7 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
     if (stepper->steps < stepper->move_steps) {
         double current_speed;
         double steps;
+        int64_t prev_step_count = (int64_t)stepper->steps;
 
         if (stepper->accel.rate && stepper->steps < stepper->accel.distance) {
             if (!stepper->accel.start)
@@ -330,10 +331,10 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
             steps = stepper->move_steps - stepper->steps;
 
         stepper->steps += steps;
-        stepper->current_step += (stepper->steps * (-1 + (stepper->dir * 2))) -
-                                 stepper->current_step;
+        stepper->current_step += ((int64_t)(stepper->steps - prev_step_count) *
+                                  (int)(-1 + (stepper->dir * 2)));
 
-        log_debug(stepper, "Current steps: %lu, inc: %.15f, remaining: %.15f",
+        log_debug(stepper, "Current steps: %ld, inc: %.15f, remaining: %.15f",
                   stepper->current_step, steps,
                   stepper->move_steps - stepper->steps);
     } else if (stepper->current_cmd->object_cmd_id == STEPPER_COMMAND_MOVE) {
