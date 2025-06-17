@@ -275,7 +275,7 @@ def generate_probe_config(section : str, kconfig : Type[configparser.ConfigParse
                 if axis_type != "e":
                     toolhead_axis.append(axis_type)
         econfig.set(s, "attachment", ",".join(toolhead_axis))
-        econfig.set(s, "axis", "x,y,z")
+        econfig.set(s, "axes", "x,y,z")
     s = f"probe probe{name.upper()}"
     econfig.add_section(s)
     econfig.set(s, "toolhead", "toolheadA")
