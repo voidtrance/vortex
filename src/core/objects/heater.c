@@ -28,6 +28,9 @@
 #include <atomics.h>
 #include <debug.h>
 #include <errno.h>
+#include <math.h>
+
+#define PRECISION 3
 
 typedef struct {
     float kp; // Proportional gain
@@ -301,7 +304,10 @@ static void heater_update(core_object_t *object, uint64_t ticks,
 
     if (heater->command.command_id &&
         heater->command.object_cmd_id == HEATER_COMMAND_SET_TEMP) {
-        if (heater->temp_data.current != heater->temp_data.target)
+        float factor = pow(10, PRECISION);
+        float temp = roundf(heater->temp_data.current * factor) / factor;
+
+        if (temp != heater->temp_data.target)
             return;
 
         CORE_CMD_COMPLETE(heater, heater->command.command_id, 0, NULL);
