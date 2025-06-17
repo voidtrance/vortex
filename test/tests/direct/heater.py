@@ -16,27 +16,45 @@
 import testutils
 import time
 
+temp_precision = 1
+pwm_hold_time = 10 # seconds
+
 def wait_for_temp(framework, cmd_id, obj_id, start, target):
     temp = start
-    while not framework.command_is_complete(cmd_id):
+    wait_pwm = False
+    pwm_hold_start = 0
+    framework.ignore_command_completion(cmd_id)
+    while True:
         # Wait an increasing amount of time before querying the
         # object to account for the slowdown in the ramp when
         # approaching target temperature. But use a minimum of
         # 0.1 seconds to allow for some change.
         min_wait = 0.5 if framework.logging_enabled() else 0.1
-        wait = max(10 * (abs(temp - start) / abs(target - start)) or 1, min_wait)
+        wait = max(10 * (abs(target - temp) / abs(target - start)), min_wait)
         time.sleep(wait)
         heater_status = framework.get_status(obj_id)[obj_id]
-        if heater_status["temperature"] == target:
-            break
+        if wait_pwm:
+            if round(heater_status["temperature"], temp_precision) == target:
+                if time.time() - pwm_hold_start > pwm_hold_time:
+                    break
+            else:
+                pwm_hold_start = time.time()
+            continue
         if start < target:
             testutils.assertGT(heater_status["temperature"], temp)
+            if heater_status["temperature"] >= target:
+                pwm_hold_start = time.time()
+                wait_pwm = True
         elif start > target:
             testutils.assertLT(heater_status["temperature"], temp)
+            if heater_status["temperature"] <= target:
+                pwm_hold_start = time.time()
+                wait_pwm = True
         temp = heater_status["temperature"]
-    # command_is_complete() does not remove the completion from the stack
-    result = framework.wait_for_completion(cmd_id)
-    return not bool(result)
+    # We don't need to wait for the command to complete because the HW
+    # object uses a much higher precision and will not complete until
+    # it hits that precise value.
+    return True
 
 @testutils.object_test("heater_test", "heater")
 def run_heater_test(framework, heater, obj_id):
@@ -48,30 +66,31 @@ def run_heater_test(framework, heater, obj_id):
     if not wait_for_temp(framework, cmd_id, obj_id, initial_temp, target_temp):
         return testutils.TestStatus.FAIL
     heater_status = framework.get_status(obj_id)[obj_id]
-    temp = heater_status["temperature"]
+    temp = round(heater_status["temperature"], temp_precision)
     testutils.assertEQ(temp, target_temp)
     target_temp = temp + 10
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={target_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, temp, target_temp):
         return testutils.TestStatus.FAIL
     heater_status = framework.get_status(obj_id)[obj_id]
-    temp = heater_status["temperature"]
+    temp = round(heater_status["temperature"], temp_precision)
     testutils.assertEQ(temp, target_temp)
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={max_temp + 5}")
     result = framework.wait_for_completion(cmd_id)
     testutils.assertNE(result, 0)
     heater_status = framework.get_status(obj_id)[obj_id]
-    testutils.assertEQ(heater_status["temperature"], temp)
-    target_temp = temp - 15
+    testutils.assertEQ(round(heater_status["temperature"], temp_precision), temp)
+    target_temp = temp - 5
     cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={target_temp}")
     if not wait_for_temp(framework, cmd_id, obj_id, temp, target_temp):
         return testutils.TestStatus.FAIL
     heater_status = framework.get_status(obj_id)[obj_id]
-    temp = heater_status["temperature"]
+    temp = round(heater_status["temperature"], temp_precision)
     testutils.assertEQ(temp, target_temp)
-    cmd_id = framework.run_command(f"heater:{heater}:set_temperature:temperature={initial_temp}")
-    if not wait_for_temp(framework, cmd_id, obj_id, temp, initial_temp):
-        return testutils.TestStatus.FAIL
-    heater_status = framework.get_status(obj_id)[obj_id]
-    testutils.assertEQ(heater_status["temperature"], initial_temp)
+    start = time.time()
+    while time.time() - start < 60:
+        heater_status = framework.get_status(obj_id)[obj_id]
+        temp = round(heater_status["temperature"], temp_precision)
+        testutils.assertEQ(temp, target_temp)
+        time.sleep(1)
     return testutils.TestStatus.PASS

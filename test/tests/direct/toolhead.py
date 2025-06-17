@@ -15,39 +15,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import testutils
 from vortex.emulator.kinematics import AxisType
-from math import ceil
 from argparse import Namespace
-
-def kinematics_cartesian(distance, motors, axis_type):
-    return distance * motors[0].spm
-
-def kinematics_corexy(distance, motors, axis_type):
-    if axis_type == AxisType.Y:
-        return -distance * motors[1].spm
-    else:
-        return distance * motors[0].spm
-
-def move_axis(framework, toolhead, axis_type, distance):
-    kinematics_func = eval(f"kinematics_{toolhead.kinematics}")
-    motor_steps = abs(kinematics_func(distance, toolhead.axes[axis_type].motors, axis_type))
-    motor_steps = ceil(motor_steps)
-    move_cmds = []
-    status = 0
-    direction = 1 if distance > 0 else 2
-    if toolhead.kinematics == "cartesian":
-        for motor in toolhead.axes[axis_type].motors:
-            cmd_id  = framework.run_command(f"stepper:{motor.name}:move:steps={motor_steps},direction={direction}")
-            move_cmds.append(cmd_id)
-    for cmd_id in move_cmds:
-        status |= framework.wait_for_completion(cmd_id)
-    return status
-
-def compare_position(framework, actual, desired, spm):
-    # It is possible that the axis cannot achieve the exact
-    # desired position if the difference between the desired
-    # and actual positions is less than one motor step.
-    testutils.assertLT((desired - actual) * spm,  1.0)
-    return True
+from .axis import move_axis
 
 def create_toolhead(framework, name):
     toolhead = Namespace()
@@ -60,7 +29,7 @@ def create_toolhead(framework, name):
     testutils.assertNE(toolhead_obj, None)
     toolhead.id = toolhead_obj["id"]
     toolhead.name = toolhead_obj["name"]
-    toolhead.kinematics = framework.get_kinematics_config().type
+    toolhead.kinematics = framework.get_kinematics_config()
     toolhead.klass = framework.get_object_klass("toolhead")
     toolhead.config = framework.get_config_section(toolhead.klass, toolhead.name)
     toolhead.axes = {AxisType[x.upper()]: Namespace() for x in toolhead.config.axes}
@@ -70,18 +39,19 @@ def create_toolhead(framework, name):
         if axis_status["type"] in toolhead.axes:
             toolhead.axes[axis_status["type"]].obj = a["id"]
             toolhead.axes[axis_status["type"]].name = a["name"]
-            toolhead.axes[axis_status["type"]].length = axis_status["length"]
-            toolhead.axes[axis_status["type"]].motors = []
+            toolhead.axes[axis_status["type"]].length = axis_status["max"] - axis_status["min"]
+            toolhead.axes[axis_status["type"]].motors = dict()
             motors = framework.get_objects("stepper")
             for m in motors:
                 if m["name"] not in axis_status["motors"]:
                     continue
-                motor = Namespace()
-                motor.id = m["id"]
-                motor.name = m["name"]
-                motor_status = framework.get_status(motor.id)[motor.id]
-                motor.spm = motor_status["steps_per_mm"]
-                toolhead.axes[axis_status["type"]].motors.append(motor)
+                name = m["name"]
+                motor = dict()
+                motor["id"] = m["id"]
+                motor_status = framework.get_status(motor["id"])[motor["id"]]
+                motor["spm"] = motor_status["steps_per_mm"]
+                motor["steps"] = motor_status["steps"]
+                toolhead.axes[axis_status["type"]].motors[name] = motor
     for axis in toolhead.axes:
         testutils.assertNE(axis, None)
     return toolhead
@@ -92,13 +62,13 @@ def test_toolhead(framework, name, toolhead_id):
     if toolhead == testutils.TestStatus.FAIL:
         return toolhead
     for axis in toolhead.axes:
-        for motor in toolhead.axes[axis].motors:
-            motor_status = framework.get_status(motor.id)[motor.id]
+        for name, motor in toolhead.axes[axis].motors.items():
+            motor_status = framework.get_status(motor["id"])[motor["id"]]
             if not motor_status["enabled"]:
-                cmd_id = framework.run_command(f"stepper:{motor.name}:enable:enable=1")
+                cmd_id = framework.run_command(f"stepper:{name}:enable:enable=1")
                 framework.wait_for_completion(cmd_id)
             # Increase motor speed to speed up the test
-            cmd_id = framework.run_command(f"stepper:{motor.name}:set_speed:steps_per_second={50 * motor.spm}")
+            cmd_id = framework.run_command(f"stepper:{name}:set_speed:steps_per_second={50 * motor['spm']}")
             framework.wait_for_completion(cmd_id)
     toolhead_status = framework.get_status(toolhead.id)[toolhead.id]
     for axis in toolhead.axes:
@@ -106,7 +76,8 @@ def test_toolhead(framework, name, toolhead_id):
         if toolhead_status["position"][int(axis)] + \
             travel_distance > toolhead.axes[axis].length:
             travel_distance *= -1
-        status = move_axis(framework, toolhead, axis, travel_distance)
+        status = move_axis(framework, axis, travel_distance, toolhead.kinematics,
+                           toolhead.axes[axis].motors)
         testutils.assertEQ(status, 0)
         axis_position = framework.get_status(toolhead.id)[toolhead.id]
         testutils.assertEQ(axis_position["position"][int(axis)],

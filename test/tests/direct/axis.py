@@ -16,7 +16,7 @@
 import testutils
 import logging
 from vortex.emulator.kinematics import AxisType
-from math import ceil
+from math import ceil, pow
 
 def kinematics_cartesian(distance, motors, axis_type):
     return distance * motors[list(motors)[0]]["spm"]
@@ -28,16 +28,16 @@ def kinematics_corexy(distance, motors, axis_type):
         return distance * motors[list(motors)[0]]["spm"]
 
 def move_axis(framework, axis_type, distance, kinematics, motors):
-    kinematics_func = eval(f"kinematics_{kinematics}")
+    kin_type = kinematics.type
+    kinematics_func = eval(f"kinematics_{kin_type}")
     motor_steps = abs(kinematics_func(distance, motors, axis_type))
     motor_steps = ceil(motor_steps)
     move_cmds = []
     status = 0
-    direction = 1 if distance > 0 else 2
-    if kinematics == "cartesian":
-        for motor in motors:
-            cmd_id  = framework.run_command(f"stepper:{motor}:move:steps={motor_steps},direction={direction}")
-            move_cmds.append(cmd_id)
+    direction = 1 if distance > 0 else 0
+    for motor in motors:
+        cmd_id  = framework.run_command(f"stepper:{motor}:move:steps={motor_steps},direction={direction}")
+        move_cmds.append(cmd_id)
     for cmd_id in move_cmds:
         status |= framework.wait_for_completion(cmd_id)
     return status
@@ -46,18 +46,21 @@ def compare_position(framework, actual, desired, spm):
     # It is possible that the axis cannot achieve the exact
     # desired position if the difference between the desired
     # and actual positions is less than one motor step.
-    testutils.assertLT((desired - actual) * spm,  1.0)
+    step_diff = int(abs(desired - actual) * spm * pow(10, 8)) / pow(10, 8)
+    testutils.assertLT(step_diff,  1.0)
     return True
 
 @testutils.object_test("axis", "axis", ["stepper"])
 def test_axis(framework, name, obj_id):
-    kinematics = framework.get_kinematics_config().type
+    kinematics = framework.get_kinematics_config()
+    if kinematics.type == "delta":
+        return testutils.TestStatus.WAIVE("Delta kinematics not supported in this test")
     axis_status = framework.get_status(obj_id)[obj_id]
     axis_type = AxisType(axis_status["type"])
-    if axis_status["length"] != -1:
+    axis_length = axis_status["max"] - axis_status["min"]
+    if axis_length != -1:
         testutils.assertEQ(axis_status["homed"], False)
     axis_motors = [x for x in axis_status["motors"] if x]
-    initial_position = axis_status["position"]
     motors = framework.get_objects("stepper")
     motors = {x["name"]: x["id"] for x in motors}
     motors = {n: {"id": i} for n, i in motors.items() if n in axis_motors}
@@ -73,13 +76,14 @@ def test_axis(framework, name, obj_id):
         framework.wait_for_completion(cmd_id)
     # Axes positions are randomized so we have to figure out
     # how to travel
+    initial_position = axis_status["position"]
     travel_distance = 50
-    if axis_status["length"] - initial_position <= travel_distance and \
+    if axis_length - initial_position <= travel_distance and \
         initial_position > travel_distance:
         travel_distance *= -1
     else:
-        if axis_status["length"] != -1:
-            travel_distance = (axis_status["length"] - initial_position) / 2
+        if axis_length != -1:
+            travel_distance = (axis_length - initial_position) / 2
     logging.debug(f"Moving axis {travel_distance}mm...")
     expected_position = initial_position + travel_distance
     status = move_axis(framework, axis_type, travel_distance, kinematics, motors)
@@ -100,7 +104,7 @@ def test_axis(framework, name, obj_id):
                             motors[list(motors)[0]]["spm"]):
         return testutils.TestStatus.FAILED
     # Infinite axes are auto-homed.
-    if axis_status["length"] != -1:
+    if axis_length != -1:
         endstops = framework.get_objects("endstop")
         axis_endstop = None
         for endstop in endstops:
@@ -114,8 +118,8 @@ def test_axis(framework, name, obj_id):
             travel_distance = -axis_status["position"]
             home_position = 0
         else:
-            travel_distance = axis_status["length"] - axis_status["position"]
-            home_position = axis_status["length"]
+            travel_distance = axis_length - axis_status["position"]
+            home_position = axis_length
         logging.debug("Homing axis...")
         status = move_axis(framework, axis_type, travel_distance, kinematics, motors)
         testutils.assertEQ(status, 0)
