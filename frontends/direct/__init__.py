@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from vortex.frontends import BaseFrontend
-from vortex.controllers import ObjectTypes
+from vortex.core import ObjectTypes
 from vortex.frontends.proto import CommandStatus, Completion
 
 class DirectFrontend(BaseFrontend):
@@ -44,7 +44,7 @@ class DirectFrontend(BaseFrontend):
                 self.log.error(f"Unable to parse command: {e}")
             return
 
-        klass = ObjectTypes[klass]
+        klass = ObjectTypes[klass.upper()]
         cmd_id = self.queue_command(klass, object, cmd, opts)
         if cmd_id is False:
             self.log.error("Failed to queue command")

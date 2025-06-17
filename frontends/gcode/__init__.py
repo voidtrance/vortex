@@ -18,7 +18,7 @@ import vortex.frontends.gcode.gcmd as gcmd
 import vortex.lib.constants as constants
 import vortex.lib.ext_enum as enum
 from vortex.frontends import BaseFrontend
-from vortex.controllers import ObjectTypes, ObjectEvents
+from vortex.core import ObjectTypes, ObjectEvents
 from vortex.emulator.kinematics import AxisType
 from vortex.frontends.proto import CommandStatus, Completion
 
