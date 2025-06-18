@@ -25,6 +25,7 @@ class RequestType(enum.IntEnum):
     OBJECT_EVENTS = enum.auto()
     EMULATION_PAUSE = enum.auto()
     EMULATION_RESUME = enum.auto()
+    EMULATION_RESET = enum.auto()
     EMULATION_PID = enum.auto()
     EXECUTE_COMMAND = enum.auto()
     COMMAND_STATUS = enum.auto()

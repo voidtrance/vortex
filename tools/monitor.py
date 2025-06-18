@@ -23,7 +23,7 @@ from vortex.core import ObjectTypes
 import vortex.emulator.remote.api as api
 gi.require_version("Gtk", "3.0")
 gi.require_version('GLib', '2.0')
-from gi.repository import Gtk, GLib, GObject, GdkPixbuf
+from gi.repository import Gtk, GLib, GObject, GdkPixbuf, Gdk
 from argparse import Namespace
 
 socket_path = "/tmp/vortex-remote"
@@ -280,8 +280,12 @@ class MainWindow(Gtk.Window):
         resume_button = Gtk.Button(label="Resume")
         resume_button.connect("clicked", self.resume_emulation)
         control_box.pack_start(resume_button, False, True, 3)
-        monitor_box.pack_end(control_box, False, False, 3)
 
+        reset_button = Gtk.Button(label="Reset", name="reset-button")
+        reset_button.connect("clicked", self.reset_emulation)
+        control_box.pack_start(reset_button, False, True, 3)
+
+        monitor_box.pack_end(control_box, False, False, 3)
         main_box.pack_start(monitor_box, True, True, 3)
 
         button_box = Gtk.ButtonBox(orientation=Gtk.Orientation.HORIZONTAL)
@@ -381,6 +385,11 @@ class MainWindow(Gtk.Window):
         self.send_request(request)
         return self.get_response().data
     
+    def reset_emulation(self, button):
+        request = api.Request(api.RequestType.EMULATION_RESET)
+        self.send_request(request)
+        return self.get_response().data
+
     def exec_cmd(self, klass, obj, cmd, opts):
         print(klass, obj, cmd, opts)
         request = api.Request(api.RequestType.EXECUTE_COMMAND)
@@ -483,6 +492,11 @@ class MainWindow(Gtk.Window):
         super().destroy()
 
 def main():
+    css = Gtk.CssProvider.new()
+    css.load_from_data(b"button#reset-button { background-image: none; background-color: red; color: white;}")
+    screen = Gdk.Screen.get_default()
+    styleContext = Gtk.StyleContext()
+    styleContext.add_provider_for_screen(screen, css, Gtk.STYLE_PROVIDER_PRIORITY_USER)
     app = MainWindow()
     Gtk.main()
     return 0
