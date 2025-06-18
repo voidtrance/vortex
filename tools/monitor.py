@@ -28,49 +28,36 @@ from argparse import Namespace
 
 socket_path = "/tmp/vortex-remote"
 
-class KlassObject(Gtk.Box):
+class KlassObject:
     def __init__(self, name):
-        super().__init__(orientation=Gtk.Orientation.HORIZONTAL)
         label = Gtk.Label(label='')
         label.set_markup(f'<b>{name}</b>')
         label.hexpand = True
         label.hexpand_set = True
         label.set_xalign(0.)
-        self.pack_start(label, False, False, 3)
+        self.name = label
         self.properties = {}
     def add_property(self, prop):
         label = Gtk.Label(label=prop)
         label.set_xalign(0.)
-        self.properties[prop] = Gtk.Entry()
-        self.properties[prop].set_property("editable", False)
-        self.properties[prop].set_property("can_focus", False)
-        self.pack_end(self.properties[prop], False, False, 3)
-        self.pack_end(label, False, False, 3)
+        self.properties[prop] = (label, Gtk.Entry())
+        self.properties[prop][1].set_property("editable", False)
+        self.properties[prop][1].set_property("can_focus", False)
     def set_value(self, prop, value):
-        self.properties[prop].set_text(str(value))
-    
+        self.properties[prop][1].set_text(str(value))
+    def __len__(self):
+        return len(self.properties)
+    def __iter__(self):
+        for prop, entry in self.properties.values():
+            yield prop, entry
+
 class DisplayKlassObject(KlassObject):
     def __init__(self, name):
         super().__init__(name)
-        self.top_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.prop_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.image = Gtk.Image()
-        self.image.set_hexpand(True)
-        self.image.set_vexpand(True)
         self.image.set_halign(Gtk.Align.START)
-        self.top_box.pack_start(self.prop_box, True, True, 3)
-        self.top_box.pack_start(self.image, True, True, 3)
-        self.pack_end(self.top_box, True, True, 3)
         self.width = 0
         self.height = 0
-    def add_property(self, prop):
-        label = Gtk.Label(label=prop)
-        label.set_xalign(0.)
-        self.properties[prop] = Gtk.Entry()
-        self.properties[prop].editable = False
-        self.properties[prop].can_focus = False
-        self.prop_box.pack_end(self.properties[prop], False, False, 3)
-        self.prop_box.pack_end(label, False, False, 3)
     def set_size(self, width, height):
         self.width = width
         self.height = height
@@ -87,7 +74,7 @@ class DisplayKlassObject(KlassObject):
         pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(b, GdkPixbuf.Colorspace.RGB, False, 8,
                                                   self.width, self.height,
                                                   self.width * 3)
-        pixbuf = pixbuf.scale_simple(int(self.width * 1.5), int(self.height * 1.5),
+        pixbuf = pixbuf.scale_simple(int(self.width * 1.75), int(self.height * 1.75),
                             GdkPixbuf.InterpType.BILINEAR)
         self.image.set_from_pixbuf(pixbuf)
     def _put_pixel(self, pixels, x, y, r, g, b):
@@ -101,6 +88,10 @@ class KlassCommandOption:
         self.name = name
         self.type = type
         self.widget = None
+    def get_label(self):
+        label = Gtk.Label(label=self.name)
+        label.set_xalign(0.)
+        return label
     def get_widget(self):
         if self.type == bool:
             self.widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -112,14 +103,9 @@ class KlassCommandOption:
             self.widget.pack_start(r2, False, False, 3)
             r3 = Gtk.RadioButton.new_with_label_from_widget(self.r1, "Toggle")
             self.widget.pack_start(r3, False, False, 3)
-            widget = self.widget
         else:
-            widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-            label = Gtk.Label(label=self.name)
             self.widget = Gtk.Entry()
-            widget.pack_start(label, False, False, 3)
-            widget.pack_start(self.widget, True, True, 3)
-        return widget
+        return self.widget
     def get_value(self):
         if self.type == bool:
             for i, r in enumerate(self.r1.get_group()):
@@ -128,35 +114,39 @@ class KlassCommandOption:
             return False
         return self.type(self.widget.get_text())
 
-class KlassCommands(Gtk.Box):
+class KlassCommands(Gtk.Grid):
     def __init__(self, klass, objects, callback):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        super().__init__()
+        self.set_column_homogeneous(False)
+        self.set_column_spacing(10)
+        self.set_row_spacing(3)
         self.klass = klass
         self.callback = callback
         self._object_store = Gtk.ListStore(GObject.TYPE_UINT64, str)
         for o in objects:
             self._object_store.append(o)
         self._object_store.set_sort_column_id(0, Gtk.SortType.ASCENDING)
+        self.n_cmds = 0
     def add_command(self, cmd_id, name, opts):
-        cmd_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        button = Gtk.Button(label="Execute")
+        self.attach(button, 0, self.n_cmds, 1, 1)
         label = Gtk.Label(label=name)
         label.set_xalign(0.)
         label.hexpand = True
         label.hexpand_set = True
-        cmd_box.pack_start(label, False, False, 3)
+        self.attach(label, 1, self.n_cmds, 1, 1)
         obj_box = Gtk.ComboBox.new_with_model_and_entry(self._object_store)
         obj_box.set_entry_text_column(1)
         obj_box.set_id_column(0)
-        cmd_box.pack_start(obj_box, False, False, 3)
-        self.pack_start(cmd_box, False, False, 3)
+        self.attach(obj_box, 2, self.n_cmds, 1, 1)
         cmd_opts = []
-        for opt in opts:
+        for i, opt in enumerate(opts):
             ko = KlassCommandOption(*opt)
-            cmd_box.pack_start(ko.get_widget(), False, False, 3)
+            self.attach(ko.get_label(), 3 + i * 2, self.n_cmds, 1, 1)
+            self.attach(ko.get_widget(), 3 + i * 2 + 1, self.n_cmds, 1, 1)
             cmd_opts.append(ko)
-        button = Gtk.Button(label="Execute")
         button.connect("clicked", self.exec_cmd, cmd_id, obj_box, cmd_opts)
-        cmd_box.pack_end(button, False, False, 3)
+        self.n_cmds += 1
     def exec_cmd(self, button, cmd_id, combo, cmd_opts):
         iter = combo.get_active_iter()
         model = combo.get_model()
@@ -179,60 +169,71 @@ class KlassCommands(Gtk.Box):
         for child in self.get_children():
             self.remove(child)
             child.destroy()
-            del child
 
 class KlassFrame(Gtk.Frame):
     def __init__(self, label):
         super().__init__(label=label)
         self.set_label_align(0.01, 0.6)
-        self.set_margin_top(5)
-        self.set_margin_bottom(5)
-        self.set_margin_start(5)
-        self.set_margin_end(5)
-        self.top_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.add(self.top_box)
         self.events = None
         self.commands = None
         self._objects = {}
+        # Hack around the fact the we don't know what klass this
+        # frame represents.
+        self.is_display = label == "Display"
+        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        scroll = Gtk.ScrolledWindow.new()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        self.box.pack_start(scroll, False, False, 3)
+        self.table = Gtk.Grid.new()
+        self.table.set_column_spacing(3)
+        self.table.set_row_spacing(3)
+        scroll.add(self.table)
+        self.add(self.box)
     def add_object(self, obj_id, name, obj):
-        scroll = Gtk.ScrolledWindow()
-        scroll.add(obj)
-        if isinstance(obj, DisplayKlassObject):
-            scroll.set_min_content_height(150)
-        self.top_box.pack_start(scroll, True, True, 3)
+        top_attach = len(self._objects)
+        obj.name.set_margin_end(10)
+        obj.name.set_hexpand(True)
+        if self.is_display:
+            self.table.attach(obj.name, 0, top_attach, 1, 2)
+        else:
+            self.table.attach(obj.name, 0, top_attach, 1, 1)
+        for j, (prop, entry) in enumerate(obj):
+            prop.set_margin_start(10)
+            prop.set_margin_end(3)
+            self.table.attach(prop, j * 2 + 1, top_attach, 1, 1)
+            entry.set_margin_end(3)
+            self.table.attach(entry, j * 2 + 2, top_attach, 1, 1)
+        if self.is_display:
+            obj.image.set_margin_start(10)
+            self.table.attach(obj.image, 1, top_attach + 1, len(obj) * 2, 1)
         self._objects[obj_id] = obj
     def add_commands(self, cmds):
         if not self.commands:
             self.commands = Gtk.Expander(label="Commands")
-            self.top_box.pack_end(self.commands, True, True, 3)
-        self.commands.add(cmds)
-        self.show_all()
+            scroll = Gtk.ScrolledWindow()
+            scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+            self.commands.add(scroll)
+            self.box.pack_end(self.commands, False, False, 3)
+        self.commands.get_child().add(cmds)
     def add_events(self, events):
         if not self.events:
             self.events = Gtk.Expander(label="Events")
-            self.top_box.pack_end(self.events, True, True, 3)
-        self.events.add(events)
-        self.show_all()
-    def remove(self, obj):
-        self.top_box.remove(obj)
-        for i, o in self._objects.items():
-            if i == obj:
-                del self._objects[i]
-                break
+            scroll = Gtk.ScrolledWindow()
+            scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+            scroll.add(events)
+            self.box.pack_end(self.events, False, False, 3)
+        self.events.get_child().add(events)
     def get_object(self, obj_id):
         return self._objects.get(obj_id, None)
     def clear(self):
-        for child in self.top_box.get_children():
-            if isinstance(child, Gtk.Expander):
-                c = child.get_child()
-                if c:
-                    child.remove(c)
-                    c.clear()
-                    del c
-                continue
-            self.top_box.remove(child)
-            child.destroy()
-            del child
+        for i in range(len(self._objects)):
+            self.table.remove_row(0)
+        # Display objects have an image, so we need to remove it
+        if self.is_display:
+            self.table.remove_row(0)
+        if self.commands:
+            self.commands.destroy()
+            self.commands = None
         self._objects.clear()
     def __iter__(self):
         for obj_id, obj in self._objects.items():
@@ -249,11 +250,20 @@ class MainWindow(Gtk.Window):
         self.klass_frames = {}
         self.run_update = True
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        # The main window box containing the entire UI.
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        main_box.set_spacing(10)
+        self.set_widget_margin(main_box, 5)
+
+        # The monitor box all of the emulation data - the emulator
+        # runtime/ticks frame and a horizontal box for the object
+        # selectors and state scrolled window.
+        monitor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        monitor_box.set_spacing(10)
+
         frame = Gtk.Frame.new("Emulation")
         frame.set_label_align(0.01, 0.6)
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.set_widget_margin(box, 5)
         for l in (("runtime", "Runtime"), ("ticks", "Controller clock")):
             label = Gtk.Label(label=l[1])
             entry = Gtk.Entry()
@@ -263,27 +273,53 @@ class MainWindow(Gtk.Window):
             box.pack_start(entry, False, False, 3)
             setattr(self, f"{l[0]}_entry", entry)
         frame.add(box)
-        self.set_widget_margin(frame, 5, 5, 15, 15)
-        main_box.pack_start(frame, False, True, 3)
+        self.set_widget_margin(box, 3)
+        monitor_box.pack_start(frame, False, False, 0)
 
-        monitor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        # This is the box holding all of the object widgets (klass
+        # selectors and the object state scrolled window).
+        objects_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        objects_box.set_spacing(10)
+        object_frame = Gtk.Frame.new(label="Object Types")
+        object_frame.set_label_align(0.01, 0.6)
+        object_checkbutton_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+
+        object_frame.add(object_checkbutton_box)
+        objects_box.pack_start(object_frame, False, False, 0)
 
         scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         object_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        object_box.set_spacing(5)
         scroll.add(object_box)
-        self.set_widget_margin(object_box, 5)
         for klass in ObjectTypes:
             if klass is ObjectTypes.NONE:
                 continue
             label = str(klass).replace('_', " ")
             self.klass_frames[klass] = KlassFrame(label=label.title())
-            object_box.pack_start(self.klass_frames[klass], True, True, 3)
-        monitor_box.pack_start(scroll, True, True, 3)
+            object_box.pack_start(self.klass_frames[klass], False, False, 0)
+        objects_box.pack_start(scroll, True, True, 0)
+
+        for i, klass in enumerate(ObjectTypes):
+            if klass is ObjectTypes.NONE:
+                continue
+            label = str(klass).replace("_", " ")
+            checkbox = Gtk.CheckButton.new_with_label(label.title())
+            checkbox.set_active(True)
+            checkbox.connect("toggled", self.object_frame_toggle, object_box, i - 1, klass)
+            object_checkbutton_box.pack_start(checkbox, False, False, 3)
+
+        monitor_box.pack_start(objects_box, True, True, 3)
+        main_box.pack_start(monitor_box, True, True, 3)
+
+        # Box that holds the two ButtonBox's. We want a box because there
+        # are two button boxes, one for the control buttons and one
+        # for the exit button, which are packed differently.
+        button_boxes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
         control_box = Gtk.ButtonBox(orientation=Gtk.Orientation.VERTICAL)
         control_box.set_layout(Gtk.ButtonBoxStyle.START)
         control_box.set_spacing(5)
-        self.set_widget_margin(control_box, 15)
 
         self.precision_spin = Gtk.SpinButton.new_with_range(-1, 15, 1)
         self.precision_spin.set_value(8)
@@ -301,19 +337,26 @@ class MainWindow(Gtk.Window):
         reset_button.connect("clicked", self.reset_emulation)
         control_box.pack_start(reset_button, False, True, 3)
 
-        monitor_box.pack_end(control_box, False, False, 3)
-        main_box.pack_start(monitor_box, True, True, 3)
+        button_boxes.pack_start(control_box, True, True, 3)
 
-        button_box = Gtk.ButtonBox(orientation=Gtk.Orientation.HORIZONTAL)
-        button_box.set_layout(Gtk.ButtonBoxStyle.END)
+        button_box = Gtk.ButtonBox(orientation=Gtk.Orientation.VERTICAL)
+        button_box.set_layout(Gtk.ButtonBoxStyle.EXPAND)
         exit_button = Gtk.Button(label="Exit")
         exit_button.connect("clicked", self.destroy)
-        button_box.pack_end(exit_button, True, True, 3)
-        
-        main_box.pack_end(button_box, False, True, 3)
+        button_box.pack_end(exit_button, True, True, 0)
+        button_boxes.pack_end(button_box, False, True, 3)
+
+        main_box.pack_end(button_boxes, False, True, 3)
         self.add(main_box)
         self.show_all()
         self.timer = GLib.timeout_add(100, self.update)
+
+    def object_frame_toggle(self, button, box, index, klass):
+        if button.get_active():
+            box.pack_start(self.klass_frames[klass], False, False, 0)
+            box.reorder_child(self.klass_frames[klass], index)
+        else:
+            box.remove(self.klass_frames[klass])
 
     def connect_to_server(self):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -355,21 +398,14 @@ class MainWindow(Gtk.Window):
     def populate_grids(self, data):
         for klass in self.emulation_data.objects:
             obj_set = []
-            self.set_widget_margin(self.klass_frames[klass].top_box, 5)
+            self.set_widget_margin(self.klass_frames[klass].get_child(), 5)
             for i, obj in enumerate(self.emulation_data.objects[klass]):
-                # We want the widgets in the scrolled window to be
-                # right aligned. So, they have to be added to the end
-                # of the horizontal box. However, to get the right
-                # layout, the property names have to be reversed and
-                # then the entries added before the corresponding
-                # label.
                 obj_set.append((obj["id"], obj["name"]))
                 if klass is ObjectTypes.DISPLAY:
                     kobj = DisplayKlassObject(obj["name"])
                 else:
                     kobj = KlassObject(obj["name"])
                 props = list(data[obj["id"]].keys())
-                props.reverse()
                 for j, prop in enumerate(props):
                     if klass is ObjectTypes.DISPLAY and prop == "data":
                         kobj.set_size(data[obj["id"]]["width"],
@@ -379,10 +415,11 @@ class MainWindow(Gtk.Window):
                         kobj.add_property(prop)
                         kobj.set_value(prop, data[obj["id"]][prop])
                 self.klass_frames[klass].add_object(obj["id"], obj["name"], kobj)
-            kcmds = KlassCommands(klass, obj_set, self.exec_cmd)
-            for i, cmd in enumerate(self.emulation_data.commands[klass]):
-                kcmds.add_command(cmd[0], cmd[1], cmd[2])
-            self.klass_frames[klass].add_commands(kcmds)
+            if self.emulation_data.commands[klass]:
+                kcmds = KlassCommands(klass, obj_set, self.exec_cmd)
+                for i, cmd in enumerate(self.emulation_data.commands[klass]):
+                    kcmds.add_command(cmd[0], cmd[1], cmd[2])
+                self.klass_frames[klass].add_commands(kcmds)
         self.show_all()
 
     def set_widget_margin(self, widget, top, bottom=None, left=None, right=None):
@@ -518,14 +555,21 @@ class MainWindow(Gtk.Window):
         self.run_update = False
         super().destroy()
 
+style = b"""
+button#reset-button { background-image: none; background-color: red; color: white;}
+"""
+
 def main():
     css = Gtk.CssProvider.new()
-    css.load_from_data(b"button#reset-button { background-image: none; background-color: red; color: white;}")
+    css.load_from_data(style)
     screen = Gdk.Screen.get_default()
     styleContext = Gtk.StyleContext()
     styleContext.add_provider_for_screen(screen, css, Gtk.STYLE_PROVIDER_PRIORITY_USER)
     app = MainWindow()
-    Gtk.main()
+    try:
+        Gtk.main()
+    except KeyboardInterrupt:
+        pass
     return 0
 
 sys.exit(main())
