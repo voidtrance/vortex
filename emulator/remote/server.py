@@ -88,6 +88,9 @@ class RemoteThread(threading.Thread):
             self._controller.reset()
         elif request.type == api.RequestType.EMULATION_PID:
             response.data = os.getpid()
+        elif request.type == api.RequestType.EMULATION_GET_TIME:
+            response.status = 0
+            response.data = (self._controller.get_runtime(), self._controller.get_clock_ticks())
         elif request.type == api.RequestType.EXECUTE_COMMAND:
             cmd_id = self._frontend.queue_command(request.klass, request.object,
                                                  request.command, request.opts,
@@ -98,6 +101,8 @@ class RemoteThread(threading.Thread):
                 response.data = cmd_id
         elif request.type == api.RequestType.COMMAND_STATUS:
             status = self._frontend.wait_for_command(request.command)
+            response.status = 0
+            response.data = status
         return response
     def _cmd_complete(self, cmd_id, result):
         return

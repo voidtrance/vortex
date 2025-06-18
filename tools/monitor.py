@@ -42,8 +42,8 @@ class KlassObject(Gtk.Box):
         label = Gtk.Label(label=prop)
         label.set_xalign(0.)
         self.properties[prop] = Gtk.Entry()
-        self.properties[prop].editable = False
-        self.properties[prop].can_focus = False
+        self.properties[prop].set_property("editable", False)
+        self.properties[prop].set_property("can_focus", False)
         self.pack_end(self.properties[prop], False, False, 3)
         self.pack_end(label, False, False, 3)
     def set_value(self, prop, value):
@@ -250,6 +250,22 @@ class MainWindow(Gtk.Window):
         self.run_update = True
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        frame = Gtk.Frame.new("Emulation")
+        frame.set_label_align(0.01, 0.6)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.set_widget_margin(box, 5)
+        for l in (("runtime", "Runtime"), ("ticks", "Controller clock")):
+            label = Gtk.Label(label=l[1])
+            entry = Gtk.Entry()
+            entry.set_property("editable", False)
+            entry.set_property("can_focus", False)
+            box.pack_start(label, False, False, 3)
+            box.pack_start(entry, False, False, 3)
+            setattr(self, f"{l[0]}_entry", entry)
+        frame.add(box)
+        self.set_widget_margin(frame, 5, 5, 15, 15)
+        main_box.pack_start(frame, False, True, 3)
+
         monitor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
 
         scroll = Gtk.ScrolledWindow()
@@ -297,7 +313,7 @@ class MainWindow(Gtk.Window):
         main_box.pack_end(button_box, False, True, 3)
         self.add(main_box)
         self.show_all()
-        self.timer = GLib.timeout_add(500, self.update)
+        self.timer = GLib.timeout_add(100, self.update)
 
     def connect_to_server(self):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -402,6 +418,14 @@ class MainWindow(Gtk.Window):
         print(response)
         return
     
+    def get_time(self):
+        try:
+            request = api.Request(api.RequestType.EMULATION_GET_TIME)
+            self.send_request(request)
+            return self.get_response().data
+        except (BrokenPipeError, EOFError):
+            return 0, 0
+
     def get_status(self, klass=None):
         obj_ids = []
         klass_set = [klass] if klass is not None else [x for x in ObjectTypes]
@@ -468,6 +492,9 @@ class MainWindow(Gtk.Window):
         if not self._have_data:
             self.populate_data()
         try:
+            runtime, ticks = self.get_time()
+            self.runtime_entry.set_text(str(runtime))
+            self.ticks_entry.set_text(str(ticks))
             status = self.get_status()
         except:
             status = None
