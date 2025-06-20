@@ -104,7 +104,7 @@ class RemoteThread(threading.Thread):
             response.status = 0
             response.data = status
         return response
-    def _cmd_complete(self, cmd_id, result):
+    def _cmd_complete(self, cmd_id, result, data=None):
         return
     def run(self):
         self._do_run = True

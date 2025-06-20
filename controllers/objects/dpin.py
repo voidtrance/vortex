@@ -26,7 +26,7 @@ class DigitalPinState(ctypes.Structure):
 
 class DigitalPin(vobj.VirtualObjectBase):
     type = ObjectTypes.DIGITAL_PIN
-    commands = [(0, "set", DigitalPinSetArgs, None)]
+    commands = [(0, "set", DigitalPinSetArgs, None, (0,))]
     state = DigitalPinState
     def __init__(self, *args):
         super().__init__(*args)

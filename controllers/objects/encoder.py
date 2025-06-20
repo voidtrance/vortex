@@ -32,7 +32,7 @@ class EncoderState(ctypes.Structure):
 
 class Encoder(vobj.VirtualObjectBase):
     type = ObjectTypes.ENCODER
-    commands = [(0, "pulses", EncoderPulsesArgs, None)]
+    commands = [(0, "pulses", EncoderPulsesArgs, None, (0,))]
     status = EncoderState
     def __init__(self, config, lookup, query, complete, submit):
         super().__init__(config, lookup, query, complete, submit)
