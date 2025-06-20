@@ -84,7 +84,8 @@ class DisplayKlassObject(KlassObject):
         pixels[offset * 3 + 2] = b
 
 class KlassCommandOption:
-    def __init__(self, name, type):
+    def __init__(self, klass, name, type):
+        self.klass = klass
         self.name = name
         self.type = type
         self.widget = None
@@ -95,22 +96,28 @@ class KlassCommandOption:
     def get_widget(self):
         if self.type == bool:
             self.widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            label = Gtk.Label(label=self.name)
+            self.widget.pack_start(label, False, False, 3)
             self.r1 = Gtk.RadioButton.new()
             l = Gtk.Label(label="On")
             self.r1.add(l)
+            self.r1.value = 1
             self.widget.pack_start(self.r1, False, False, 3)
             r2 = Gtk.RadioButton.new_with_label_from_widget(self.r1, "Off")
+            r2.value = 0
             self.widget.pack_start(r2, False, False, 3)
-            r3 = Gtk.RadioButton.new_with_label_from_widget(self.r1, "Toggle")
-            self.widget.pack_start(r3, False, False, 3)
+            if self.klass == ObjectTypes.DIGITAL_PIN:
+                r3 = Gtk.RadioButton.new_with_label_from_widget(self.r1, "Toggle")
+                r3.value = -1
+                self.widget.pack_start(r3, False, False, 3)
         else:
             self.widget = Gtk.Entry()
         return self.widget
     def get_value(self):
         if self.type == bool:
-            for i, r in enumerate(self.r1.get_group()):
+            for r in self.r1.get_group():
                 if r.get_active():
-                    return 2 - i
+                    return r.value
             return False
         return self.type(self.widget.get_text())
 
@@ -141,7 +148,7 @@ class KlassCommands(Gtk.Grid):
         self.attach(obj_box, 2, self.n_cmds, 1, 1)
         cmd_opts = []
         for i, opt in enumerate(opts):
-            ko = KlassCommandOption(*opt)
+            ko = KlassCommandOption(self.klass, *opt)
             self.attach(ko.get_label(), 3 + i * 2, self.n_cmds, 1, 1)
             self.attach(ko.get_widget(), 3 + i * 2 + 1, self.n_cmds, 1, 1)
             cmd_opts.append(ko)
@@ -153,8 +160,9 @@ class KlassCommands(Gtk.Grid):
         opts = {}
         for opt in cmd_opts:
             opts[opt.name] = opt.get_value()
+        # The toggle option is only available for digital pin objects
         if self.klass is ObjectTypes.DIGITAL_PIN:
-            if opts["state"] == 2:
+            if opts["state"] == -1:
                 opts[opt.name] = True
                 self.callback(self.klass, model[iter][0], cmd_id, opts)
                 time.sleep(0.01)
@@ -162,7 +170,7 @@ class KlassCommands(Gtk.Grid):
                 self.callback(self.klass, model[iter][0], cmd_id, opts)
                 return
             else:
-                opts[opt.name] = not(bool(opts[opt.name]))
+                opts[opt.name] = bool(opts[opt.name])
         self.callback(self.klass, model[iter][0], cmd_id, opts)
     def clear(self):
         self._object_store.clear()
