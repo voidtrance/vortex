@@ -36,7 +36,7 @@ class Encoder(vobj.VirtualObjectBase):
     status = EncoderState
     def __init__(self, config, lookup, query, complete, submit):
         super().__init__(config, lookup, query, complete, submit)
-        self.state = {config.pin_a: False, config.pin_b: False}
+        self.reset()
     def get_status(self):
         d = vars(self.config)
         d['state'] = self.state
@@ -51,3 +51,6 @@ class Encoder(vobj.VirtualObjectBase):
             # Simulate encoder pin phase offset.
             time.sleep(0.01)
         self._cmd_complete(cmd_id, 0)
+    def reset(self):
+        self.state = {self.config.pin_a: False, self.config.pin_b: False}
+        return super().reset()

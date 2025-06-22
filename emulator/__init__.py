@@ -16,6 +16,7 @@
 import inspect
 import importlib
 from os import strerror
+from queue import ShutDown
 import vortex.core.lib.logging as logging
 from vortex.lib.utils import parse_frequency
 from vortex.core import VortexCoreError
@@ -102,7 +103,10 @@ class Emulator:
         self._frontend.set_emulation_frequency(self._timer_frequency)
         self._frontend.run()
         while self._run_emulation:
-            command = self._command_queue.get()
+            try:
+                command = self._command_queue.get()
+            except ShutDown:
+                continue
             ret = self._controller.exec_command(command.id, command.obj_id,
                                                 command.cmd_id, command.opts)
             if ret:

@@ -53,10 +53,10 @@ class Display(vobj.VirtualObjectBase):
         return vars(self.config)
     def exec_command(self, cmd_id, cmd, opts):
         ret = super().exec_command(cmd_id, cmd, opts)
+        # unknown command
         if ret < 0:
             return ret
-        # unknown command        
-        return 1
+        return 0
     
 class UC1701(Display):
     WIDTH = 132
@@ -102,7 +102,7 @@ class UC1701(Display):
     def exec_command(self, cmd_id, cmd, opts):
         logger.debug(f"Display.exec_command({cmd_id}, {cmd}, {opts})")
         ret = super().exec_command(cmd_id, cmd, opts)
-        if ret != 1:
+        if ret:
             return ret
         if cmd == 0:
             self._cmd_complete(cmd_id, 0)
@@ -112,7 +112,9 @@ class UC1701(Display):
             if opts.get("is_data", False):
                 self.process_data(data[:len])
             else:
-                self.process_commands(data[:len])
+                ret = self.process_commands(data[:len])
+                if ret != 0:
+                    return ret
             self._cmd_complete(cmd_id, 0)
         elif cmd == 2:
             self.reset()
@@ -135,7 +137,7 @@ class UC1701(Display):
                 handler = getattr(self, cmd, None)
             if handler is None:
                 logger.error("process_command(0x%02x): Unknown command" % byte)
-                return
+                return -1
             if cmd in ("set_status_indicator_on", "set_boost_ratio", 
                        "set_volume", "set_test_control",
                        "set_adv_program_control_0", "set_adv_program_control_1"):
@@ -145,6 +147,7 @@ class UC1701(Display):
                 handler(byte)
             i += 1
         self.update_state()
+        return 0
     def process_data(self, data):
         pa = self._get_bits("PA", 0, 3)
         ca = self._get_bits("CA")
@@ -223,7 +226,7 @@ class UC1701(Display):
         return
     def reset(self):
         self.display_reset(0xE2)
-        return
+        return super().reset()
     def update_state(self):
         return
 

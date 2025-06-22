@@ -27,6 +27,7 @@ class VirtualObjectBase:
         self.query = obj_query
         self._event_submit = event_submit
         self._cmd_complete = cmd_complete
+        self._cmd_id = 0
         self._id = -1
     def exec_command(self, cmd_id, cmd, opts):
         if not self.commands:
@@ -38,10 +39,16 @@ class VirtualObjectBase:
                 break
         if not command:
             return -errno.EINVAL
+        self._cmd_id = cmd_id
         return 0
     def event_submit(self, event, data):
         self._event_submit(event, self._id, data)
     def complete_command(self, cmd_id, status, data=None):
         self._cmd_complete(cmd_id, status, data)
+        self._cmd_id = 0
     def get_status(self):
         return {}
+    def reset(self):
+        if self._cmd_id:
+            self._cmd_id = 0
+        return 0

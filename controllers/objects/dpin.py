@@ -30,7 +30,7 @@ class DigitalPin(vobj.VirtualObjectBase):
     state = DigitalPinState
     def __init__(self, *args):
         super().__init__(*args)
-        self._state = False
+        self.reset()
     def exec_command(self, cmd_id, cmd, opts):
         ret = super().exec_command(cmd_id, cmd, opts)
         if ret:
@@ -39,3 +39,6 @@ class DigitalPin(vobj.VirtualObjectBase):
         self.complete_command(cmd_id, 0)
     def get_status(self):
         return {"state" : self._state, "pin": self.config.pin}
+    def reset(self):
+        self._state = False
+        return super().reset()

@@ -38,6 +38,7 @@ enum {
     THREAD_CONTROL_STOP = 0,
     THREAD_CONTROL_RUN,
     THREAD_CONTROL_RUNNING,
+    THREAD_CONTROL_PAUSE,
     THREAD_CONTROL_PAUSED,
 };
 
@@ -62,6 +63,7 @@ core_thread_list_t core_threads;
 static pthread_once_t initialized = PTHREAD_ONCE_INIT;
 
 typedef struct {
+    struct timespec start;
     uint64_t controller_ticks;
     uint64_t controller_runtime;
     int32_t trigger;
@@ -79,6 +81,7 @@ static core_time_data_t global_time_data = {
 };
 
 #define DEFAULT_SCHED_POLICY SCHED_FIFO
+#define THREAD_CLOCK CLOCK_MONOTONIC_RAW
 
 #define timespec_delta(s, e)                                                   \
     ((SEC_TO_NSEC((e).tv_sec - (s).tv_sec)) + ((e).tv_nsec - (s).tv_nsec))
@@ -124,7 +127,6 @@ static void *core_time_control_thread(void *arg) {
                               .tv_nsec = (long int)update % SEC_TO_NSEC(1) };
     uint64_t controller_clock_mask = (1UL << args->update.width) - 1;
     struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000 };
-    struct timespec start;
     struct timespec now;
     uint64_t runtime = 0;
     int run_val = THREAD_CONTROL_RUN;
@@ -135,16 +137,21 @@ static void *core_time_control_thread(void *arg) {
                                      __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
         pthread_exit(&data->ret);
 
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    clock_gettime(THREAD_CLOCK, &global_time_data.start);
     while (likely(get_value(data->control)) != THREAD_CONTROL_STOP) {
         if (unlikely(get_value(data->control) == THREAD_CONTROL_PAUSED)) {
             nanosleep(&pause, NULL);
             continue;
         }
 
+        if (unlikely(get_value(data->control) == THREAD_CONTROL_PAUSE)) {
+            set_value(data->control, THREAD_CONTROL_PAUSED);
+            continue;
+        }
+
         nanosleep(&sleep, NULL);
-        clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-        runtime = timespec_delta(start, now);
+        clock_gettime(THREAD_CLOCK, &now);
+        runtime = timespec_delta(global_time_data.start, now);
         set_value(global_time_data.controller_runtime, runtime);
         set_value(global_time_data.controller_ticks,
                   (uint64_t)((float)runtime / tick) & controller_clock_mask);
@@ -396,9 +403,24 @@ uint64_t core_get_runtime(void) {
 
 void core_threads_pause(void) {
     core_thread_data_t *thread;
+    core_thread_data_t *time_thread = NULL;
 
-    STAILQ_FOREACH(thread, &core_threads, entry)
-        set_value(thread->args.control, THREAD_CONTROL_PAUSED);
+    STAILQ_FOREACH(thread, &core_threads, entry) {
+        if (thread->type == CORE_THREAD_TYPE_UPDATE) {
+            set_value(thread->args.control, THREAD_CONTROL_PAUSE);
+            time_thread = thread;
+            break;
+        }
+    }
+
+    if (!time_thread)
+        return;
+
+    /* Wait for pause */
+    while (1) {
+        if (get_value(time_thread->args.control) == THREAD_CONTROL_PAUSED)
+            break;
+    }
 }
 
 void core_threads_resume(void) {
@@ -406,6 +428,18 @@ void core_threads_resume(void) {
 
     STAILQ_FOREACH(thread, &core_threads, entry)
         set_value(thread->args.control, THREAD_CONTROL_RUNNING);
+}
+
+void core_threads_reset(void) {
+    core_thread_data_t *thread;
+
+    STAILQ_FOREACH(thread, &core_threads, entry) {
+        if (thread->type == CORE_THREAD_TYPE_UPDATE &&
+            get_value(thread->args.control) != THREAD_CONTROL_PAUSED)
+            return;
+    }
+
+    clock_gettime(THREAD_CLOCK, &global_time_data.start);
 }
 
 void core_threads_destroy(void) {

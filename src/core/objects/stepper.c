@@ -125,7 +125,11 @@ static void stepper_reset(core_object_t *object) {
     stepper_t *stepper = (stepper_t *)object;
 
     stepper->current_step = 0;
-    stepper->current_cmd = 0;
+    if (stepper->current_cmd) {
+        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, -1, NULL);
+        stepper->current_cmd = NULL;
+    }
+
     stepper->dir = 0;
     stepper->steps = 0;
     stepper->move_steps = 0;

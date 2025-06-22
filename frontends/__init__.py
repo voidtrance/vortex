@@ -53,7 +53,6 @@ class BaseFrontend:
         self._fd = os.fdopen(mfd, 'wb+', buffering=0)
         self._poll = select.poll()
         self._poll.register(self._fd, select.POLLIN|select.POLLHUP)
-        self._command_id_queue = []
         self.log = logging.getLogger("vortex.frontend")
 
     def set_controller(self, controller):
@@ -67,6 +66,9 @@ class BaseFrontend:
     # return the base class method instead of the overriden
     # one.
     def reset(self, *args, **kwargs):
+        with self._command_completion_lock:
+            self._command_results.clear()
+        self._queue.clear()
         return self._controller.reset(*args, **kwargs)
 
     def query(self, *args, **kwargs):
@@ -250,7 +252,7 @@ class BaseFrontend:
             time.sleep(0.01)
             with self._command_completion_lock:
                 completed = set(self._command_results.keys())
-        return [self._command_results[i] for i in cmd_set & completed]
+        return [self._command_results.pop(i) for i in cmd_set & completed]
 
     def respond(self, code, data):
         response = Response(code, data)

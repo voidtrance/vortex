@@ -85,7 +85,7 @@ class RemoteThread(threading.Thread):
         elif request.type == api.RequestType.EMULATION_RESUME:
             self._controller.pause(False)
         elif request.type == api.RequestType.EMULATION_RESET:
-            self._controller.reset()
+            self._frontend.reset()
         elif request.type == api.RequestType.EMULATION_PID:
             response.data = os.getpid()
         elif request.type == api.RequestType.EMULATION_GET_TIME:

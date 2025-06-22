@@ -55,6 +55,7 @@ typedef core_object_t *(*object_create_func_t)(const char *, void *);
 #define MAX_PROCESSING_BATCH 64
 
 typedef struct {
+    pthread_mutex_t comp_lock;
     struct __comp_entry {
         uint64_t id;
         int64_t result;
@@ -299,6 +300,7 @@ static void core_process_completions(void *arg) {
     comps = completions->list;
     bool empty;
 
+    pthread_mutex_lock(&comps->comp_lock);
     while (comps->tail != comps->head) {
         PyGILState_STATE state;
         PyObject *args;
@@ -340,9 +342,9 @@ static void core_process_completions(void *arg) {
         if (handled)
             goto next;
 
-    python:
+python:
         state = PyGILState_Ensure();
-        args = Py_BuildValue("kkk", comps->entries[comps->tail].id,
+        args = Py_BuildValue("klk", comps->entries[comps->tail].id,
                              comps->entries[comps->tail].result,
                              comps->entries[comps->tail].data);
         if (!args) {
@@ -356,10 +358,11 @@ static void core_process_completions(void *arg) {
             PyErr_Print();
         PyGILState_Release(state);
 
-    next:
-            object_cache_free(comps->entries[comps->tail].data);
-            comps->tail = (comps->tail + 1) % comps->size;
+next:
+        object_cache_free(comps->entries[comps->tail].data);
+        comps->tail = (comps->tail + 1) % comps->size;
     }
+    pthread_mutex_unlock(&comps->comp_lock);
 }
 
 static void core_object_command_complete(uint64_t cmd_id, int64_t result,
@@ -367,23 +370,21 @@ static void core_object_command_complete(uint64_t cmd_id, int64_t result,
     core_t *core = (core_t *)data;
     core_object_completion_data_t *comps = core->completions.list;
 
-    if (comps->head != comps->tail - 1 ||
-        (comps->head == comps->size && comps->tail != 0)) {
-        comps->entries[comps->head].id = cmd_id;
-        comps->entries[comps->head].result = result;
-        comps->entries[comps->head].data = completion_data;
-        comps->head = (comps->head + 1) % comps->size;
-    } else {
-        void *ptr = realloc(comps->entries,
-                            (comps->size * 2) * sizeof(*comps->entries));
-        if (ptr) {
-            comps->entries = (struct __comp_entry *)ptr;
-            comps->size *= 2;
-        } else {
-            core_log(LOG_LEVEL_ERROR, "Resizing of completion entries failed! "
-                                      "Completions can be missed");
-        }
+    pthread_mutex_lock(&comps->comp_lock);
+    if ((comps->head + 1) % comps->size == comps->tail) {
+        core_log(LOG_LEVEL_ERROR,
+                 "No completion entry! Command completion dropped.");
+        pthread_mutex_unlock(&comps->comp_lock);
+        return;
     }
+
+    core_log(LOG_LEVEL_DEBUG, "Submitting completion %lu, result %ld", cmd_id,
+             result);
+    comps->entries[comps->head].id = cmd_id;
+    comps->entries[comps->head].result = result;
+    comps->entries[comps->head].data = completion_data;
+    comps->head = (comps->head + 1) % comps->size;
+    pthread_mutex_unlock(&comps->comp_lock);
 }
 
 static core_object_t *core_object_find(const core_object_type_t type,
@@ -485,6 +486,7 @@ static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     pthread_mutex_init(&self->commands.submit_lock, NULL);
     STAILQ_INIT(&self->commands.submitted);
 
+    pthread_mutex_init(&self->completions.list->comp_lock, NULL);
     self->completions.list->head = 0;
     self->completions.list->tail = 0;
 
@@ -1368,6 +1370,41 @@ static PyObject *vortex_core_pause(PyObject *self, PyObject *args) {
     return Py_None;
 }
 
+static void core_reset_object(core_t *core, core_object_t *object) {
+    core_process_completions_args_t *completions = &core->completions;
+
+    /*
+     * Reset the object first. That should let it complete any
+     * outstanding commands.
+     */
+    if (object->reset)
+        object->reset(object);
+
+    core_log(LOG_LEVEL_DEBUG, "completing object commands");
+    pthread_mutex_lock(&core->commands.cmd_lock);
+    if (!STAILQ_EMPTY(&core->commands.cmds)) {
+        core_command_t *cmd, *cmd_next;
+        cmd = STAILQ_FIRST(&core->commands.cmds);
+        while (cmd) {
+            cmd_next = STAILQ_NEXT(cmd, entry);
+            if (cmd->target_id == core_object_to_id(object)) {
+                STAILQ_REMOVE(&core->commands.cmds, cmd, core_command, entry);
+                core_object_command_complete((uint64_t)cmd, -1, NULL, core);
+                object_cache_free(cmd->command.args);
+                free(cmd);
+            }
+
+            cmd = cmd_next;
+        }
+    }
+    pthread_mutex_unlock(&core->commands.cmd_lock);
+
+    core_log(LOG_LEVEL_DEBUG, "removing command completions");
+    core_process_completions(completions);
+
+    return;
+}
+
 static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
     PyObject *object_list = NULL;
@@ -1381,8 +1418,9 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
     }
 
     core_threads_pause();
+
     core_log(LOG_LEVEL_DEBUG, "resetting objects");
-    if (object_list && PyList_Check(object_list)) {
+    if (object_list && PyList_Check(object_list) && PyList_Size(object_list)) {
         Py_ssize_t size = PyList_Size(object_list);
         Py_ssize_t i;
 
@@ -1398,8 +1436,7 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
 
             id = PyLong_AsUnsignedLong(item);
             object = core_id_to_object(id);
-            if (object->reset)
-                object->reset(object);
+            core_reset_object(core, object);
         }
     } else {
         core_object_type_t type;
@@ -1407,13 +1444,12 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
         for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
             core_object_t *object;
 
-            LIST_FOREACH(object, &core->objects[type], entry) {
-                if (object->reset)
-                    object->reset(object);
-            }
+            LIST_FOREACH(object, &core->objects[type], entry)
+                core_reset_object(core, object);
         }
     }
 
+    core_threads_reset();
     core_log(LOG_LEVEL_DEBUG, "reset done");
     core_threads_resume();
 

@@ -331,7 +331,7 @@ class KlipperFrontend(BaseFrontend):
         self.shutdown("Command request")
         return True
 
-    def reset(self, cmd):
+    def reset(self, cmd=None):
         self._reset_objects()
         self.config_crc = 0
         self._shutdown = False

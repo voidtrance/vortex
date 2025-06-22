@@ -40,6 +40,10 @@ class CommandQueue(queue.Queue):
     def queue_command(self, obj_id, cmd_id, opts):
         cmd = Command(obj_id, cmd_id, opts)
         return (self.put(cmd), cmd)
+    def clear(self):
+        self.shutdown(True)
+        self.__cmd_count = 0
+        self.is_shutdown = False
     @property
     def size(self):
         return self.__cmd_count

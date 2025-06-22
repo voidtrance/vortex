@@ -79,8 +79,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
                           uint64_t timestamp);
 static int heater_set_temp(heater_t *heater,
                            struct heater_set_temperature_args *args);
-static int heater_use_pins(heater_t *heater,
-                           struct heater_use_pins_args *args);
+static int heater_use_pins(heater_t *heater, struct heater_use_pins_args *args);
 static int heater_exec_cmd(core_object_t *object, core_object_command_t *cmd);
 static void heater_status(core_object_t *object, void *status);
 static int heater_init(core_object_t *object);
@@ -127,7 +126,6 @@ heater_t *object_create(const char *name, void *config_ptr) {
         return NULL;
     }
 
-
     heater->temp_data.compute = heater_compute_init(config->layers);
     if (!heater->temp_data.compute) {
         core_object_destroy(&heater->object);
@@ -158,13 +156,17 @@ static int heater_init(core_object_t *object) {
 static void heater_reset(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
 
+    if (heater->command.command_id) {
+        CORE_CMD_COMPLETE(heater, heater->command.command_id, -1, NULL);
+        heater->command.command_id = 0;
+    }
+
     heater->temp_data.current = AMBIENT_TEMP;
     heater_compute_clear(heater->temp_data.compute);
 }
 
 static int heater_set_temp(heater_t *heater,
                            struct heater_set_temperature_args *args) {
-
     if (args->temperature < 0 || args->temperature > heater->temp_data.max_temp)
         return -1;
 

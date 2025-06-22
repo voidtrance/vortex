@@ -444,6 +444,14 @@ class Controller(core.VortexCore):
         pointer = ctypes.cast(data, ctypes.POINTER(event_data_def))
         content = vortex.lib.ctypes_helpers.parse_ctypes_struct(pointer.contents)
         handler(klass, event_type, object_name, content)
+    def reset(self, objects=[]):
+        _objects = objects[:]
+        for obj in objects:
+            if obj in self._virtual_objects:
+                self.log.debug(f"Resetting virtual object {obj.id}")
+                self._virtual_objec[obj].reset()
+                _objects.remove(obj)
+        return super().reset(_objects)
     def cleanup(self):
         for obj in self._virtual_objects.values():
             del obj
