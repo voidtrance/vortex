@@ -290,6 +290,7 @@ static void stepper_status(core_object_t *object, void *status) {
     s->accel = stepper->accel.rate;
     s->decel = stepper->accel.rate;
     s->steps_per_mm = stepper->config.steps_per_mm;
+    s->use_pins = stepper->use_pins;
     s->pin_addr = stepper->use_pins ? (unsigned long)&stepper->pin_word : 0;
     memcpy(s->enable_pin, stepper->config.enable_pin,
            sizeof(s->enable_pin) + sizeof(s->dir_pin) + sizeof(s->step_pin));
