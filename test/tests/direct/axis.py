@@ -58,7 +58,7 @@ def test_axis(framework, name, obj_id):
     axis_status = framework.get_status(obj_id)[obj_id]
     axis_type = AxisType(axis_status["type"])
     axis_length = axis_status["max"] - axis_status["min"]
-    if axis_length != -1:
+    if axis_length != 0:
         testutils.assertEQ(axis_status["homed"], False)
     axis_motors = [x for x in axis_status["motors"] if x]
     motors = framework.get_objects("stepper")
@@ -78,12 +78,12 @@ def test_axis(framework, name, obj_id):
     # how to travel
     initial_position = axis_status["position"]
     travel_distance = 50
-    if axis_length - initial_position <= travel_distance and \
-        initial_position > travel_distance:
-        travel_distance *= -1
-    else:
-        if axis_length != -1:
-            travel_distance = (axis_length - initial_position) / 2
+    logging.debug(f"Initial position: {initial_position}mm")
+    if axis_length != 0:
+        if initial_position + travel_distance > axis_status["max"]:
+            travel_distance *= -1
+            if initial_position + travel_distance < axis_status["min"]:
+                travel_distance = (axis_status["max"] - initial_position) / 2
     logging.debug(f"Moving axis {travel_distance}mm...")
     expected_position = initial_position + travel_distance
     status = move_axis(framework, axis_type, travel_distance, kinematics, motors)
@@ -104,7 +104,7 @@ def test_axis(framework, name, obj_id):
                             motors[list(motors)[0]]["spm"]):
         return testutils.TestStatus.FAILED
     # Infinite axes are auto-homed.
-    if axis_length != -1:
+    if axis_length != 0:
         endstops = framework.get_objects("endstop")
         axis_endstop = None
         for endstop in endstops:

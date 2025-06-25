@@ -34,9 +34,12 @@ def parse_pin(pin_name : str):
 def generate_stepper_config(section : str,
                             kconfig : Type[configparser.ConfigParser],
                             econfig : Type[configparser.ConfigParser]) -> bool:
-    klass, _, name = section.partition("_")
-    if not name:
-        name = klass
+    if section == "extruder":
+        name = "e"
+    else:
+        klass, _, name = section.partition("_")
+        if not name:
+            name = klass
     print(f"Generating stepper config for section '{section}'...")
     s = f"stepper stepper{name.upper()}"
     econfig.add_section(s)
@@ -58,6 +61,9 @@ def generate_stepper_config(section : str,
 def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser],
                          econfig : Type[configparser.ConfigParser]) -> bool:
     klass, _, name = section.partition("_")
+    if not name and section.startswith("extruder"):
+        name = "e"
+
     if name[0] == "z":
         axis = AxisType.Z
     else:
@@ -67,33 +73,35 @@ def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser
 
     kin = econfig.get("kinematics", "type")
 
-    if kin == "delta":
-        s = f"endstop endstop{name.upper()}"
-        econfig.add_section(s)
-        econfig.set(s, "type", "max")
-        pin = parse_pin(kconfig.get(section, "endstop_pin"))
-        econfig.set(s, "pin", pin)
-        econfig.set(s, "axis", str(axis).lower())
-    else:
-        if axis != AxisType.Z or name == "z":
+    if axis != AxisType.E:
+        if kin == "delta":
             s = f"endstop endstop{name.upper()}"
             econfig.add_section(s)
-            pe = kconfig.getfloat(section, "position_endstop")
-            minp = kconfig.getfloat(section, "position_min")
-            maxp = kconfig.getfloat(section, "position_max")
-            if abs(minp - pe) < abs(maxp - pe):
-                econfig.set(s, "type", "min")
-            else:
-                econfig.set(s, "type", "max")
-            econfig.set(s, "axis", str(axis).lower())
+            econfig.set(s, "type", "max")
             pin = parse_pin(kconfig.get(section, "endstop_pin"))
             econfig.set(s, "pin", pin)
+            econfig.set(s, "axis", str(axis).lower())
+        else:
+            if axis != AxisType.Z or name == "z":
+                s = f"endstop endstop{name.upper()}"
+                econfig.add_section(s)
+                pe = kconfig.getfloat(section, "position_endstop")
+                minp = kconfig.getfloat(section, "position_min")
+                maxp = kconfig.getfloat(section, "position_max")
+                if abs(minp - pe) < abs(maxp - pe):
+                    econfig.set(s, "type", "min")
+                else:
+                    econfig.set(s, "type", "max")
+                econfig.set(s, "axis", str(axis).lower())
+                pin = parse_pin(kconfig.get(section, "endstop_pin"))
+                econfig.set(s, "pin", pin)
 
     s = f"axis axis{str(axis).upper()}"
     if not econfig.has_section(s):
         econfig.add_section(s)
         econfig.set(s, "type", str(axis).lower())
-        econfig.set(s, "endstop", f"endstop{name.upper()}")
+        if axis != AxisType.E:
+            econfig.set(s, "endstop", f"endstop{name.upper()}")
         econfig.set(s, "stepper", f"stepper{name.upper()}")
 
     # Handle various kinematics types
@@ -443,7 +451,7 @@ for section in klipper_config.sections():
 # already been configured. This is required in order to be
 # able to generate configuration for different kinematics types.
 for section in klipper_config.sections():
-    if section.startswith("stepper"):
+    if section.startswith("stepper") or section.startswith("extruder"):
         ret = generate_axis_config(section, klipper_config, emulator_config)
         if ret is False:
             print(f"ERROR: Failed to generate axis configuration")

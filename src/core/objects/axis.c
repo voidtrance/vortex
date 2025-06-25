@@ -33,7 +33,7 @@
 #include <cache.h>
 #include <random.h>
 
-#define AXIS_NO_LENGTH (-1.0)
+#define AXIS_NO_LENGTH (0.0)
 
 typedef struct {
     const char *name;
