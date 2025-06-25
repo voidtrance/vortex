@@ -13,9 +13,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import fcntl
 import inspect
 import importlib
-from os import strerror
+from os import strerror, getpid, unlink
 from queue import ShutDown
 import vortex.core.lib.logging as logging
 from vortex.lib.utils import parse_frequency
@@ -24,8 +25,7 @@ import vortex.emulator.remote.server as remote_server
 import vortex.emulator.kinematics as kinematics
 import vortex.frontends as frontends
 
-__all__ = ["Emulator"]
-
+__all__ = ["Emulator", "EmulatorError"]
 
 class EmulatorError(Exception): pass
 
@@ -48,7 +48,16 @@ def load_mcu(name, config):
     return controllers[0](config)
 
 class Emulator:
+    PID_LOCK_PATH = "/tmp/vortex.pid.lock"
+
     def __init__(self, config, frontend, sequential=False):
+        self.lock_fd = open(self.PID_LOCK_PATH, 'w')
+        try:
+            fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise EmulatorError(f"Emulator already running, PID lock file exists: {self.PID_LOCK_PATH}")
+        self.lock_fd.write(str(getpid()))
+
         machine = config.get_machine_config()
         kin = config.get_kinematics_config()
         self._kinematics = kinematics.Kinematics(kin)
@@ -118,7 +127,10 @@ class Emulator:
             self._server.stop()
         self._frontend.stop()
         self._controller.stop()
+        fcntl.flock(self.lock_fd, fcntl.LOCK_UN)
+        self.lock_fd.close()
+        unlink(self.PID_LOCK_PATH)
 
     def __del__(self):
-        if self._controller:
+        if hasattr(self, "_controller") and self._controller:
             self._controller.cleanup()
