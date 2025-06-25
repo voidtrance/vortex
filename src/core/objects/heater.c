@@ -65,12 +65,13 @@ typedef struct {
     core_object_t object;
     core_object_command_t command;
     uint64_t timestep;
-    temp_data_t temp_data;
     char pin[PIN_NAME_SIZE];
     bool use_pins;
     uint8_t pin_word;
     pthread_t pin_thread;
+    temp_data_t temp_data;
     heater_pid_control_t pid_control;
+    pthread_mutex_t data_lock;
 } heater_t;
 
 static object_cache_t *heater_event_cache = NULL;
@@ -117,6 +118,7 @@ heater_t *object_create(const char *name, void *config_ptr) {
     heater->object.name = strdup(name);
     heater->temp_data.power = config->power;
     heater->temp_data.max_temp = config->max_temp;
+    pthread_mutex_init(&heater->data_lock, NULL);
     strncpy(heater->pin, config->pin, sizeof(heater->pin));
 
     if (object_cache_create(&heater_event_cache,
@@ -161,8 +163,13 @@ static void heater_reset(core_object_t *object) {
         heater->command.command_id = 0;
     }
 
-    heater->temp_data.current = AMBIENT_TEMP;
+    pthread_mutex_lock(&heater->data_lock);
+    heater->temp_data.target = 0;
+    heater->pid_control.prev_error = 0;
+    heater->pid_control.integral = 0;
+    heater_compute_set_power(heater->temp_data.compute, 0.0);
     heater_compute_clear(heater->temp_data.compute);
+    pthread_mutex_unlock(&heater->data_lock);
 }
 
 static int heater_set_temp(heater_t *heater,
@@ -290,6 +297,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
      * Use interpolation function to approximate temperature
      * ramp.
      */
+    pthread_mutex_lock(&heater->data_lock);
     heater_compute_iterate(heater->temp_data.compute, time_delta, 0);
     heater->temp_data.current =
         heater_compute_get_temperature(heater->temp_data.compute);
@@ -303,6 +311,7 @@ static void heater_update(core_object_t *object, uint64_t ticks,
         heater_compute_set_power(heater->temp_data.compute,
                                  heater->temp_data.power * power);
     }
+    pthread_mutex_unlock(&heater->data_lock);
 
     if (heater->command.command_id &&
         heater->command.object_cmd_id == HEATER_COMMAND_SET_TEMP) {
@@ -327,6 +336,12 @@ static void heater_update(core_object_t *object, uint64_t ticks,
 static void heater_destroy(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
 
+    if (heater->use_pins) {
+        heater->use_pins = false;
+        pthread_join(heater->pin_thread, NULL);
+    }
+
+    pthread_mutex_destroy(&heater->data_lock);
     heater_compute_free(heater->temp_data.compute);
     core_object_destroy(object);
     object_cache_destroy(heater_event_cache);
