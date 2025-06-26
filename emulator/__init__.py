@@ -22,7 +22,7 @@ import vortex.core.lib.logging as logging
 from vortex.lib.utils import parse_frequency
 from vortex.core import VortexCoreError
 import vortex.emulator.remote.server as remote_server
-import vortex.emulator.kinematics as kinematics
+import vortex.core.kinematics as kinematics
 import vortex.frontends as frontends
 
 __all__ = ["Emulator", "EmulatorError"]

@@ -19,8 +19,7 @@ import configparser
 from sys import exit
 from typing import Type
 from time import strftime
-from vortex.core import ObjectTypes
-from vortex.emulator.kinematics import AxisType
+from vortex.core.kinematics import AxisType
 
 def parse_pin(pin_name : str):
     if ":" in pin_name:

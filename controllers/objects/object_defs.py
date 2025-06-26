@@ -18,7 +18,7 @@ from vortex.core import ObjectTypes, ObjectEvents
 from vortex.core import PIN_NAME_SIZE, OBJECT_NAME_SIZE, ENDSTOP_NAME_SIZE, MOTOR_NAME_SIZE, \
                         TOOLHEAD_NAME_SIZE, HEATER_NAME_SIZE, \
                         HEAT_SENSOR_NAME_SIZE
-from vortex.emulator.kinematics import AxisType
+from vortex.core.kinematics import AxisType
 import ctypes
 
 class ObjectDef(Namespace):

@@ -33,3 +33,4 @@ py_kinematics = custom_target('_vortex_kinematics', output: '_vortex_kinematics.
                         build_by_default: true,
                         install: true,
                         install_dir: py.get_install_dir(pure: false) / 'vortex/core/kinematics')
+py.install_sources(['__init__.py'], subdir: 'vortex/core/kinematics')

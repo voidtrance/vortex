@@ -15,5 +15,4 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 python_sources = ['__init__.py', 'config.py']
 py.install_sources(python_sources, subdir: 'vortex/emulator')
-subdir('kinematics')
 subdir('remote')

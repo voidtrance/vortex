@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import testutils
 import logging
-from vortex.emulator.kinematics import AxisType
+from vortex.core.kinematics import AxisType
 from math import ceil, pow
 
 def kinematics_cartesian(distance, motors, axis_type):

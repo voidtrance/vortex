@@ -19,7 +19,7 @@ import vortex.lib.constants as constants
 import vortex.lib.ext_enum as enum
 from vortex.frontends import BaseFrontend
 from vortex.core import ObjectTypes, ObjectEvents
-from vortex.emulator.kinematics import AxisType
+from vortex.core.kinematics import AxisType
 from vortex.frontends.proto import CommandStatus, Completion
 
 @enum.unique

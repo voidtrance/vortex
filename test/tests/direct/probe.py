@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import testutils
-from vortex.emulator.kinematics import AxisType
+from vortex.core.kinematics import AxisType
 from argparse import Namespace
 from .toolhead import create_toolhead
 from .axis import move_axis
