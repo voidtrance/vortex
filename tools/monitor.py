@@ -388,6 +388,15 @@ class MainWindow(Gtk.Window):
                 break
         return pickle.loads(data)
 
+    def send_request_with_response(self, request):
+        try:
+            self.send_request(request)
+            response = self.get_response()
+        except BrokenPipeError:
+            response = api.Response(request.type)
+            response.status = -1
+        return response
+
     def get_data_value(self, value):
         precision = self.precision_spin.get_value_as_int()
         if isinstance(value, float) and precision != -1 and \
@@ -438,18 +447,18 @@ class MainWindow(Gtk.Window):
 
     def pause_emulation(self, button):
         request = api.Request(api.RequestType.EMULATION_PAUSE)
-        self.send_request(request)
-        return self.get_response().data
+        response = self.send_request_with_response(request)
+        return response.data
     
     def resume_emulation(self, button):
         request = api.Request(api.RequestType.EMULATION_RESUME)
-        self.send_request(request)
-        return self.get_response().data
+        response = self.send_request_with_response(request)
+        return response.data
     
     def reset_emulation(self, button):
         request = api.Request(api.RequestType.EMULATION_RESET)
-        self.send_request(request)
-        return self.get_response().data
+        response = self.send_request_with_response(request)
+        return response.data
 
     def exec_cmd(self, klass, obj, cmd, opts):
         print(klass, obj, cmd, opts)
@@ -458,18 +467,16 @@ class MainWindow(Gtk.Window):
         request.object = obj
         request.command = cmd
         request.opts = opts
-        self.send_request(request)
-        response = self.get_response()
+        response = self.send_request_with_response(request)
         print(response)
         return
     
     def get_time(self):
-        try:
-            request = api.Request(api.RequestType.EMULATION_GET_TIME)
-            self.send_request(request)
-            return self.get_response().data
-        except (BrokenPipeError, EOFError):
+        request = api.Request(api.RequestType.EMULATION_GET_TIME)
+        response = self.send_request_with_response(request)
+        if response.status == -1:
             return 0, 0
+        return response.data
 
     def get_status(self, klass=None):
         obj_ids = []
@@ -479,12 +486,10 @@ class MainWindow(Gtk.Window):
                 continue                
             for obj in self.emulation_data.objects[klass]:
                 obj_ids.append(obj["id"])
-        try:
-            request = api.Request(api.RequestType.OBJECT_STATUS)
-            request.objects = obj_ids
-            self.send_request(request)
-            return self.get_response().data
-        except (BrokenPipeError, EOFError):
+        request = api.Request(api.RequestType.OBJECT_STATUS)
+        request.objects = obj_ids
+        response = self.send_request_with_response(request)
+        if response.status == -1:
             self.connection = None
             try:
                 for klass in self.emulation_data.objects:
@@ -495,38 +500,35 @@ class MainWindow(Gtk.Window):
             except Exception as e:
                 print(e)
             self._have_data = False
-            return None
+        return response.data
 
     def populate_data(self):
         request = api.Request(api.RequestType.KLASS_LIST)
-        self.send_request(request)
-        response = self.get_response()
+        response = self.send_request_with_response(request)
         if response.status != 0:
-            return
+            return False
         self.emulation_data.klasses = response.data
         request = api.Request(api.RequestType.OBJECT_LIST)
-        self.send_request(request)
-        response = self.get_response()
+        response = self.send_request_with_response(request)
         if response.status != 0:
-            return
+            return False
         self.emulation_data.objects = response.data
         self.emulation_data.commands = {}
         self.emulation_data.events = {}
         for klass in self.emulation_data.klasses:
             request = api.Request(api.RequestType.OBJECT_COMMANDS)
             request.klass = klass
-            self.send_request(request)
-            response = self.get_response()
+            response = self.send_request_with_response(request)
             if response.status != 0:
-                return
+                return False
             self.emulation_data.commands = response.data
             request.type = api.RequestType.OBJECT_EVENTS
-            self.send_request(request)
-            response = self.get_response()
+            response = self.send_request_with_response(request)
             if response.status != 0:
-                return
+                return False
             self.emulation_data.events = response.data
         self._have_data = True
+        return True
 
     def update(self):
         if self.connection is None:
@@ -535,7 +537,8 @@ class MainWindow(Gtk.Window):
                 return self.run_update
         need_populate = not self._have_data
         if not self._have_data:
-            self.populate_data()
+            if not self.populate_data():
+                return self.run_update
         try:
             runtime, ticks = self.get_time()
             self.runtime_entry.set_text(str(runtime))
