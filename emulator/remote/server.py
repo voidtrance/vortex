@@ -20,9 +20,11 @@ import os
 import errno
 import ctypes
 import vortex.emulator.remote.api as api
+import vortex.core.lib.logging as logging
 from vortex.core import ObjectTypes
-from vortex.lib.ctypes_helpers import is_simple_char_array, is_simple
+from vortex.lib.ctypes_helpers import is_simple_char_array
 
+log = logging.getLogger("vortex.core.server")
 class RemoteThread(threading.Thread):
     def __init__(self, index, connection, emulation):
         self._conn = connection
@@ -122,7 +124,9 @@ class RemoteThread(threading.Thread):
                     request = pickle.loads(data)
                 except EOFError:
                     break
+                log.debug(f"Received request: {request}")
                 response = self._process_request(request)
+                log.debug(f"Sending response: {response}")
                 self._conn.sendall(pickle.dumps(response))
                 l = len(pickle.dumps(request))
                 data = data[l:]
@@ -189,12 +193,14 @@ class RemoteServer(threading.Thread):
         self._emulation = emulator
         self._max_connections = max_conns
         self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        log.debug(f"Binding Vortex server to {self.path}")
         self._socket.bind(self.path)
         self._monitor_run = False
         self._threads = []
         super().__init__(None, None, "vortex-remote-server")
 
     def run(self):
+        log.verbose("Starting Vortex server")
         self._socket.listen(self._max_connections)
         self._monitor_run = True
         child_count = 0
