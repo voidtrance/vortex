@@ -231,7 +231,7 @@ class Controller(core.VortexCore):
                 raise core.VortexCoreError(f"Unknown pin {pin} for object {name}")
             if getattr(self.object_factory[klass], "virtual", False) or \
                 inspect.isfunction(self.object_factory[klass]):
-                self.log.verbose(f"Creating object {klass}:{name}")
+                self.log.verbose(f"Creating object {klass}:{name}", end="->")
                 obj = self.object_factory[klass](options, self.objects,
                                                  self.query_objects,
                                                  self.virtual_command_complete,
@@ -242,6 +242,7 @@ class Controller(core.VortexCore):
                 if object_id == vortex.core.INVALID_OBJECT_ID:
                     self.log.error(f"Failed to register virtual object {klass}:{name}")
                     continue
+                self.log.debug(f"Object {klass}:{name} created: {object_id}")
                 obj._id = object_id
                 self._virtual_objects[object_id] = obj
             else:
@@ -287,6 +288,7 @@ class Controller(core.VortexCore):
     def get_frequency(self):
         return self.FREQUENCY
     def command_complete(self, cmd_id, status, data_addr):
+        self.log.debug(f"controller complete {cmd_id}={status}, data_addr={data_addr}")
         obj_id, obj_cmd = self._exec_cmd_map.pop(cmd_id, (None, None))
         obj = self.objects.object_by_id(obj_id)
         data = None
@@ -300,6 +302,7 @@ class Controller(core.VortexCore):
                 data = vortex.lib.ctypes_helpers.parse_ctypes_struct(data)
         self._completion_callback(cmd_id, status, data)
     def virtual_command_complete(self, cmd_id, status, data=None):
+        self.log.debug(f"controller virtual complete: {cmd_id}={status}, data={data}")
         self._completion_callback(cmd_id, status, data)
     def virtual_object_opts_convert(self, obj_id, obj_cmd_id, opts):
         if obj_id not in self._virtual_objects:
@@ -403,15 +406,32 @@ class Controller(core.VortexCore):
             return vortex.lib.ctypes_helpers.parse_ctypes_struct(opts_struct)
     def exec_command(self, command_id, object_id, subcommand_id, opts=None):
         object = self.objects.object_by_id(object_id)
+        self.log.debug(f"controller executing command {command_id}: {object.id} {object.klass} {object.name}")
         if opts is not None:
             opts = self._convert_opts(object.klass, subcommand_id, opts)
         if not self.object_defs[object.klass].virtual:
             args = 0
             if opts is not None:
                 args = ctypes.addressof(opts)
+            # Store the command into the command map so if the object
+            # completes the command quickly (before it is stored if it were
+            # stored after), the complete callback can successfully find it.
+            #
+            # this thread                      core completion thread
+            # -------------------------------------------------------
+            # self.exec_command()
+            #    object->exec_command()
+            #       CORE_CMD_COMPLETE()
+            #                                  core_process_completions()
+            #                                     complete_cm()
+            #                                        self.command_complete()
+            #       return
+            #    return
+            self._exec_cmd_map[command_id] = (object_id, subcommand_id)
             ret = super().exec_command(command_id, object_id, subcommand_id, args)
-            if not ret:
-                self._exec_cmd_map[command_id] = (object_id, subcommand_id)
+            self.log.debug(f"result: {command_id}={ret}")
+            if ret:
+                self._exec_cmd_map.pop(command_id)
             return ret
         else:
             return self._virtual_objects[object_id].exec_command(command_id,
