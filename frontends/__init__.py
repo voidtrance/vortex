@@ -37,6 +37,7 @@ class BaseFrontend:
         self._command_completion = {}
         self._command_completion_lock = threading.Lock()
         self._command_results = {}
+        self._command_results_lock = threading.Lock()
         self._run = True
         self._run_sequential = False
         self._queue = CommandQueue(queue_size)
@@ -223,22 +224,23 @@ class BaseFrontend:
         obj_id, obj_cmd_id = check
         opts = self._controller.virtual_object_opts_convert(obj_id, obj_cmd_id, opts)
         self.log.debug(f"Submitting virtual object command: {self.get_object_name(klass, obj_id)} {obj_cmd_id} {opts}")
+        cmd = Command(obj_id, obj_cmd_id, opts)
+        cmd.id = cmd_id
         with self._command_completion_lock:
-            cmd = Command(obj_id, obj_cmd_id, opts)
-            cmd.id = cmd_id
-            self._queue.put(cmd)
             self._command_completion[cmd_id] = (cmd, callback)
+        self._queue.put(cmd)
         if self._run_sequential:
             self.wait_for_command(cmd_id)
         return True
 
     def complete_command(self, id, result, data=None):
+        self.log.debug(f"Completing command: {id} {result}")
         with self._command_completion_lock:
-            self.log.debug(f"Completing command: {id} {result}")
-            cmd, callback = self._command_completion.pop(id)
-            if callback is not None:
-                callback(id, result, data)
-            else:
+            _, callback = self._command_completion.pop(id)
+        if callback is not None:
+            callback(id, result, data)
+        else:
+            with self._command_results_lock:
                 self._command_results[id] = (result, data)
 
     def wait_for_command(self, cmd_set):
@@ -249,8 +251,7 @@ class BaseFrontend:
         cmd_set = set(cmd_set)
         completed = set()
         while self._run and not cmd_set & completed:
-            time.sleep(0.01)
-            with self._command_completion_lock:
+            with self._command_results_lock:
                 completed = set(self._command_results.keys())
         return [self._command_results.pop(i) for i in cmd_set & completed]
 
