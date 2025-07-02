@@ -591,9 +591,6 @@ class SPI(HelperBase):
                                               "data": data[s:e]})
             if cmd_id is False:
                 return -1
-            result = self.frontend.wait_for_command(cmd_id)
-            if not result or result[0][0] != 0:
-                return result[0][0]
         if with_response:
             status = self.frontend.query_object([self.id])[self.id]
             return status["response"]
