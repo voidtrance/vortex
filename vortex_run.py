@@ -86,6 +86,7 @@ def create_arg_parser():
     debug.add_argument("-R", "--remote", action="store_true",
                        help="""Start remote API server thread. This thread
                        processes requests from the monitoring application.""")
+    debug.add_argument("--enable-profiling", action="store_true")
 
     parser.add_argument("-C", "--config", required=True,
                         help="""HW object configuration file. This argument
@@ -116,13 +117,16 @@ def main():
         print(err)
         return errno.ENOENT
     
+    if opts.enable_profiling:
+        emulation.enable_profiler()
+
     emulation.set_frequency(opts.frequency, opts.process_frequency)
     emulation.set_thread_priority_change(opts.set_priority)
     if opts.remote:
         emulation.start_remote_server()
 
     try:
-        emulation.run()
+        emulation.start()
     except KeyboardInterrupt:
         pass
     except Exception as e:

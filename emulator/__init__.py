@@ -16,6 +16,8 @@
 import fcntl
 import inspect
 import importlib
+import cProfile
+import pstats
 from os import strerror, getpid, unlink
 from queue import ShutDown
 import vortex.core.lib.logging as logging
@@ -74,6 +76,10 @@ class Emulator:
         self._update_frequency = 0
         self._controller_thread_priority = False
         self._server = None
+        self._profiler = None
+
+    def enable_profiler(self):
+        self._profiler = cProfile.Profile()
 
     def set_frequency(self, timer_frequency=0, update_frequency=0):
         self._timer_frequency = parse_frequency(timer_frequency)
@@ -99,7 +105,9 @@ class Emulator:
     def unregister_event(self, object_type, event_type, object_name):
         return self._controller.event_unregister(object_type, event_type, object_name)
     
-    def run(self):
+    def start(self):
+        if self._profiler:
+            self._profiler.enable()
         try:
            self._controller.start(self._timer_frequency, self._update_frequency,
                                   self._controller_thread_priority,
@@ -130,6 +138,11 @@ class Emulator:
         fcntl.flock(self.lock_fd, fcntl.LOCK_UN)
         self.lock_fd.close()
         unlink(self.PID_LOCK_PATH)
+        if self._profiler:
+            self._profiler.disable()
+            stats = pstats.Stats(self._profiler)
+            stats.sort_stats(pstats.SortKey.TIME)
+            stats.print_stats()
 
     def __del__(self):
         if hasattr(self, "_controller") and self._controller:
