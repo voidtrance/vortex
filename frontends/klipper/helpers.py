@@ -513,7 +513,8 @@ class TRSync(HelperBase):
     def trigger(self, reason):
         self.report_timer.timeout = 0
         self.expire_timer.timeout = 0
-        self.do_trigger(self.frontend.get_controller_clock_ticks(), reason)
+        self.flags = TRSyncFlags.ZERO
+        self.do_trigger(0, reason)
     def report_handler(self, ticks):
         self.report(ticks)
         self._log.debug(f"next report: {ticks + self.report_ticks}")
