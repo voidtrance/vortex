@@ -17,10 +17,10 @@
  */
 #ifndef __CORE_H__
 #define __CORE_H__
+#include <pthread.h>
 #include "logging.h"
 #include "objects/object_defs.h"
 
-void core_log(core_log_level_t level, core_object_type_t type,
-              const char *name, const char *fmt, ...);
-
+void core_log(core_log_level_t level, core_object_type_t type, const char *name,
+              const char *fmt, ...);
 #endif

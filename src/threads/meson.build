@@ -17,7 +17,7 @@ pthreads = dependency('threads')
 
 core_threads_include = include_directories('.')
 math = cc.find_library(('m'))
-core_threads = library('threads', ['threads.c'],
+core_threads = library('threads', ['core_threads.c'],
                      install: true,
                      dependencies: [math, pthreads],
                      include_directories: [core_utils_include, core_include_general],

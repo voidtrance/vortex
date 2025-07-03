@@ -19,6 +19,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <core_threads.h>
 #include "object_defs.h"
 #include <common_defs.h>
 #include "heater_compute.h"
@@ -187,34 +188,35 @@ static int heater_set_temp(heater_t *heater,
     return 0;
 }
 
-static void *pin_monitor_thread(void *args) {
-    heater_t *heater = (heater_t *)args;
-    struct timespec sleep = { .tv_sec = 0, .tv_nsec = 1000 };
+static void heater_pin_control(core_object_t *object, uint64_t tick,
+                               uint64_t runtime) {
+    heater_t *heater = (heater_t *)object;
+    uint64_t time_delta = runtime - heater->timestep;
+    uint8_t val = __atomic_load_n(&heater->pin_word, __ATOMIC_SEQ_CST);
 
-    while (*(volatile bool *)&heater->use_pins) {
-        uint8_t val = __atomic_load_n(&heater->pin_word, __ATOMIC_SEQ_CST);
-        heater_compute_set_power(heater->temp_data.compute,
-                                 val ? heater->temp_data.power : 0);
-        nanosleep(&sleep, NULL);
-    }
+    heater->timestep = runtime;
 
-    return NULL;
+    heater_compute_set_power(heater->temp_data.compute,
+                             val ? heater->temp_data.power : 0);
+    pthread_mutex_lock(&heater->data_lock);
+    heater_compute_iterate(heater->temp_data.compute, time_delta, 0);
+    heater->temp_data.current =
+        heater_compute_get_temperature(heater->temp_data.compute);
+    pthread_mutex_unlock(&heater->data_lock);
 }
 
 static int heater_use_pins(heater_t *heater,
                            struct heater_use_pins_args *args) {
     int ret = 0;
     struct heater_use_pins_data *data = NULL;
+    core_thread_args_t thread_args = { 0 };
 
     if (args->enable && !heater->use_pins) {
-        pthread_attr_t attrs;
-
         heater->use_pins = true;
-        ret = pthread_attr_init(&attrs);
-        if (!ret)
-            ret = pthread_create(&heater->pin_thread, &attrs,
-                                 pin_monitor_thread, heater);
-        pthread_attr_destroy(&attrs);
+        thread_args.object.callback = (object_callback_t)heater_pin_control;
+
+        ret = core_threads_update_object_thread(heater->object.update_thread_id,
+                                                &thread_args);
         if (!ret) {
             data = calloc(1, sizeof(*data));
             if (data)
@@ -224,7 +226,10 @@ static int heater_use_pins(heater_t *heater,
         }
     } else if (!args->enable) {
         heater->use_pins = false;
-        pthread_join(heater->pin_thread, NULL);
+        thread_args.object.frequency = 25; /* 25 Hz */
+        thread_args.object.callback = (object_callback_t)heater_update;
+        ret = core_threads_update_object_thread(heater->object.update_thread_id,
+                                                &thread_args);
     }
 
     CORE_CMD_COMPLETE(heater, heater->command.command_id, ret, data);
@@ -335,11 +340,6 @@ static void heater_update(core_object_t *object, uint64_t ticks,
 
 static void heater_destroy(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
-
-    if (heater->use_pins) {
-        heater->use_pins = false;
-        pthread_join(heater->pin_thread, NULL);
-    }
 
     pthread_mutex_destroy(&heater->data_lock);
     heater_compute_free(heater->temp_data.compute);

@@ -58,6 +58,8 @@ typedef struct {
 } core_thread_args_t;
 
 int core_thread_create(core_thread_type_t type, core_thread_args_t *args);
+pthread_t core_threads_get_thread_id(const char *name);
+int core_threads_update_object_thread(pthread_t id, core_thread_args_t *args);
 int core_threads_start(void);
 void core_threads_stop(void);
 uint64_t core_get_clock_ticks(void);

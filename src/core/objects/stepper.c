@@ -21,6 +21,7 @@
 #include "object_defs.h"
 #include <cache.h>
 #include <math.h>
+#include <core_threads.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -66,6 +67,17 @@ typedef struct {
     uint32_t pin_word;
     pthread_t pin_thread;
 } stepper_t;
+
+enum {
+    ENABLE_PIN = (1U << 31),
+    DIR_PIN = (1U << 30),
+    DEBUG_PIN = (1U << 29),
+    STEPS_SHIFT = (1U << 16),
+};
+
+#define EN_DIR_MASK (ENABLE_PIN | DIR_PIN)
+#define STEPS_MASK (STEPS_SHIFT - 1)
+#define CONTROL_MASK (~STEPS_MASK)
 
 static object_cache_t *stepper_event_cache = NULL;
 
@@ -145,6 +157,7 @@ static int stepper_enable(core_object_t *object, uint64_t id, void *args) {
     stepper->enabled = !!opts->enable;
     log_debug(stepper, "Enabling %s %u", stepper->object.name,
               stepper->enabled);
+    stepper->current_cmd = NULL;
     return 0;
 }
 
@@ -154,6 +167,7 @@ static int stepper_set_speed(core_object_t *object, uint64_t id, void *args) {
 
     log_debug(stepper, "SPS: %f", opts->steps_per_second);
     stepper->spns = opts->steps_per_second / SEC_TO_NSEC(1);
+    stepper->current_cmd = NULL;
     return 0;
 }
 
@@ -175,6 +189,7 @@ static int stepper_set_accel(core_object_t *object, uint64_t id, void *args) {
         0.5 * stepper->accel.rate * pow(stepper->accel.time, 2);
     stepper->decel.time = stepper->spns / stepper->decel.rate;
     stepper->decel.distance = 0.5 * pow(stepper->spns, 2) / stepper->decel.rate;
+    stepper->current_cmd = NULL;
     return 0;
 }
 
@@ -196,54 +211,33 @@ static int stepper_move(core_object_t *object, uint64_t id, void *args) {
     return 0;
 }
 
-enum {
-    ENABLE_PIN = (1U << 31),
-    DIR_PIN = (1U << 30),
-    DEBUG_PIN = (1U << 29),
-    STEPS_SHIFT = (1U << 16),
-};
+static void stepper_pin_control(core_object_t *object, uint64_t ticks,
+                                uint64_t timestamp) {
+    stepper_t *stepper = (stepper_t *)object;
+    uint32_t val = atomic32_load_and(&stepper->pin_word, EN_DIR_MASK);
+    uint8_t dir = !!(val & DIR_PIN);
+    uint8_t enabled = !!(val & ENABLE_PIN);
 
-#define EN_DIR_MASK (ENABLE_PIN | DIR_PIN)
-#define STEPS_MASK (STEPS_SHIFT - 1)
-#define CONTROL_MASK (~STEPS_MASK)
-
-static void *pin_monitor_thread(void *args) {
-    stepper_t *stepper = (stepper_t *)args;
-    struct timespec sleep = { .tv_sec = 0, .tv_nsec = 1000 }; // sleep for 1us.
-
-    while (*(volatile bool *)&stepper->use_pins) {
-        uint32_t val = atomic32_load_and(&stepper->pin_word, EN_DIR_MASK);
-        uint8_t dir = !!(val & DIR_PIN);
-        uint8_t enabled = !!(val & ENABLE_PIN);
-
-        stepper->enabled = enabled;
-        stepper->dir = (stepper_move_dir_t)dir;
-        stepper->current_step +=
-            (int64_t)(val & STEPS_MASK) * enabled * (-1 + (dir << 1));
-
-        nanosleep(&sleep, NULL);
-    }
-
-    return NULL;
+    stepper->enabled = enabled;
+    stepper->dir = (stepper_move_dir_t)dir;
+    stepper->current_step +=
+        (int64_t)(val & STEPS_MASK) * enabled * (-1 + (dir << 1));
 }
 
 static int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_use_pins_args *opts = (struct stepper_use_pins_args *)args;
     struct stepper_use_pins_data *data = NULL;
+    core_thread_args_t thread_args = { 0 };
     int ret = 0;
 
     if (opts->enable && !stepper->use_pins) {
-        pthread_attr_t attrs;
-
+        thread_args.object.frequency = 1000000; /* 1us */
+        thread_args.object.callback = (object_callback_t)stepper_pin_control;
         stepper->use_pins = true;
-        ret = pthread_attr_init(&attrs);
-        if (!ret)
-            ret = pthread_create(&stepper->pin_thread, &attrs,
-                                 pin_monitor_thread, stepper);
 
-        pthread_attr_destroy(&attrs);
-
+        ret = core_threads_update_object_thread(object->update_thread_id,
+                                                &thread_args);
         if (!ret) {
             data = calloc(1, sizeof(*data));
             if (data)
@@ -254,10 +248,14 @@ static int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
     } else if (!opts->enable) {
         // This will also stop the thread.
         stepper->use_pins = false;
-        pthread_join(stepper->pin_thread, NULL);
+        thread_args.object.frequency = 1000; /* 1kHz */
+        thread_args.object.callback = (object_callback_t)stepper_update;
+        ret = core_threads_update_object_thread(object->update_thread_id,
+                                                &thread_args);
     }
 
     CORE_CMD_COMPLETE(stepper, id, ret, data);
+    stepper->current_cmd = NULL;
     return ret;
 }
 
@@ -301,7 +299,7 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
     stepper_t *stepper = (stepper_t *)object;
     uint64_t delta = timestep - stepper->last_timestep;
 
-    if (stepper->use_pins || !stepper->current_cmd)
+    if (!stepper->current_cmd)
         goto done;
 
     if (stepper->current_cmd->object_cmd_id != STEPPER_COMMAND_MOVE) {
@@ -364,11 +362,6 @@ done:
 
 static void stepper_destroy(core_object_t *object) {
     stepper_t *stepper = (stepper_t *)object;
-
-    if (stepper->use_pins) {
-        stepper->use_pins = false;
-        pthread_join(stepper->pin_thread, NULL);
-    }
 
     core_object_destroy(object);
     object_cache_destroy(stepper_event_cache);

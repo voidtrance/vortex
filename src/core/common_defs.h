@@ -17,6 +17,7 @@
  */
 #ifndef __OBJECTS_COMMON_DEFS_H__
 #define __OBJECTS_COMMON_DEFS_H__
+#include <pthread.h>
 #include <logging.h>
 #include "objects/object_defs.h"
 #include "events.h"
@@ -133,6 +134,11 @@ struct core_object {
      * This function should free all object resources.
      */
     void (*destroy)(core_object_t *object);
+
+    /*
+     * The object's update thread ID.
+     */
+    pthread_t update_thread_id;
 
     /*
      * This is structure is for internal use only.

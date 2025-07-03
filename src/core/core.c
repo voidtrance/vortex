@@ -29,7 +29,7 @@
 #include <structmember.h>
 #include <sys/queue.h>
 #include <utils.h>
-#include <threads.h>
+#include <core_threads.h>
 #include <logging.h>
 
 #include "events.h"
@@ -650,6 +650,26 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
         PyErr_Format(VortexCoreError, "Failed to start core threads: %s",
                      strerror(-ret));
         return NULL;
+    }
+
+    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+        core_object_t *object;
+
+        if (LIST_EMPTY(&core->objects[type]))
+            continue;
+
+        LIST_FOREACH(object, &core->objects[type], entry) {
+            char name[256];
+
+            if (!object->update)
+                continue;
+
+            snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
+                     object->name);
+            object->update_thread_id = core_threads_get_thread_id(name);
+            core_log(LOG_LEVEL_DEBUG, "Object %s update thread id: %lu", name,
+                     (unsigned long)object->update_thread_id);
+        }
     }
 
     Py_XINCREF(Py_None);

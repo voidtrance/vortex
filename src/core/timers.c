@@ -24,7 +24,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <sys/queue.h>
-#include <threads.h>
+#include <core_threads.h>
 #include <debug.h>
 #include <utils.h>
 #include <atomics.h>
