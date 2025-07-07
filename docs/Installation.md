@@ -85,3 +85,48 @@ shells.
 ```
 source VIRTDIR/bin/activate
 ```
+
+## Building And Installing The Kernel Module
+The kernel module is distributed as source code in the `src/kmod` directory of the
+package. To build the module, go to that directory and run the following command:
+
+```
+make -C /lib/modules/$(uname -r)/build M=${PWD}
+```
+
+This will produce a file called `vortex.ko`.
+
+If secure boot is enabled on your system, the module will need to be signed first
+before it is installed and loadable. On Fedora systems, the easiest way to do this
+is by using `akmod`. Here is the procedure (taken from https://blog.monosoul.dev/2022/05/17/automatically-sign-nvidia-kernel-module-in-fedora-36/).
+
+1. Install the required packages:
+```
+sudo dnf install kmodtool akmods mokutil openssl
+```
+2. Generate a signing key (this may not be required):
+```
+sudo kmodgenca -a
+```
+3. Initiate the key enrollment. This will require you to enter a password. The
+password will be needed later.
+```
+sudo mokutil --import /etc/pki/akmods/certs/public_key.der
+```
+4. Reboot the system.
+5. On boot-up, the MOK manager will start and ask you to enroll the key that
+was added in step 3. Select "Enroll MOD", then "Continue", then "Yes" and enter the
+password from step 3, and finally, "OK" to reboot the system again.
+6. After the system has booted up, go to the directory where the `vortex.ko`
+kernel module is located and run the following command to sign the module. This
+command needs to be run as `root`:
+```
+/lib/modules/$(uname -r)/build/scripts/sign-file sha256 \
+	/etc/pki/akmods/private/private_key.priv \
+	/etc/pki/akmods/certs/public_key.der \
+	vortex.ko
+```
+7. Next, you can install the module. Again, this needs to be run as `root`.
+```
+make -C /lib/modules/$(uname -r)/build M=${PWD} module_install
+```

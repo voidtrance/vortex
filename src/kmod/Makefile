@@ -13,8 +13,19 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-subdir('include')
-subdir('lib')
-subdir('kmod')
-subdir('threads')
-subdir('core')
+#
+# This project uses Meson and meson-python as the build system.
+# However, to simplify development, this Makefile is here for
+# convinience and to record the require build commands.
+BINARY     := vortex
+KERNEL      := /lib/modules/$(shell uname -r)/build
+ARCH        := x86
+C_FLAGS     := -Wall
+KMOD_DIR    := $(shell pwd)
+TARGET_PATH := /lib/modules/$(shell uname -r)/kernel/drivers/char
+
+OBJECTS := vortex.o
+
+ccflags-y += $(C_FLAGS)
+
+obj-m += $(BINARY).o

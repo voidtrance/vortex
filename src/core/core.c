@@ -1377,17 +1377,19 @@ static PyObject *vortex_core_python_event_submit(PyObject *self,
 
 static PyObject *vortex_core_pause(PyObject *self, PyObject *args) {
     bool pause;
+    int ret;
+    PyObject *ret_object;
 
     if (!PyArg_ParseTuple(args, "p", &pause))
         return NULL;
 
     if (pause)
-        core_threads_pause();
+        ret = core_threads_pause();
     else
-        core_threads_resume();
+        ret = core_threads_resume();
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    ret_object = Py_BuildValue("i", ret);
+    return ret_object;
 }
 
 static void core_reset_object(core_t *core, core_object_t *object) {
@@ -1427,7 +1429,9 @@ static void core_reset_object(core_t *core, core_object_t *object) {
 
 static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
+    int ret;
     PyObject *object_list = NULL;
+    PyObject *ret_object;
 
     if (!PyArg_ParseTuple(args, "|O", &object_list))
         return NULL;
@@ -1437,7 +1441,9 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    core_threads_pause();
+    ret = core_threads_pause();
+    if (ret)
+        goto done;
 
     core_log(LOG_LEVEL_DEBUG, "resetting objects");
     if (object_list && PyList_Check(object_list) && PyList_Size(object_list)) {
@@ -1469,11 +1475,16 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
         }
     }
 
-    core_threads_reset();
-    core_log(LOG_LEVEL_DEBUG, "reset done");
-    core_threads_resume();
+    ret = core_threads_reset();
+    if (ret)
+        goto done;
 
-    Py_RETURN_TRUE;
+    core_log(LOG_LEVEL_DEBUG, "reset done");
+    ret = core_threads_resume();
+
+done:
+    ret_object = Py_BuildValue("i", ret);
+    return ret_object;
 }
 
 static uint64_t core_timer_handler(uint64_t ticks, void *data) {

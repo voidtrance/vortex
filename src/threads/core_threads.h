@@ -64,9 +64,9 @@ int core_threads_start(void);
 void core_threads_stop(void);
 uint64_t core_get_clock_ticks(void);
 uint64_t core_get_runtime(void);
-void core_threads_pause(void);
-void core_threads_resume(void);
-void core_threads_reset(void);
+int core_threads_pause(void);
+int core_threads_resume(void);
+int core_threads_reset(void);
 void core_threads_destroy(void);
 
 #endif

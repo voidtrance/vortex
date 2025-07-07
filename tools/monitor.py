@@ -18,6 +18,7 @@ import sys
 import socket
 import pickle
 import time
+import os
 import gi
 from vortex.core import ObjectTypes
 import vortex.emulator.remote.api as api
@@ -269,6 +270,11 @@ class MainWindow(Gtk.Window):
         monitor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         monitor_box.set_spacing(10)
 
+        self.statusbar = Gtk.Statusbar.new()
+        monitor_box.pack_end(self.statusbar, False, False, 0)
+        self.emulation_ctxt = self.statusbar.get_context_id("Emulation Status")
+        self.cmd_ctxt = self.statusbar.get_context_id("Command Status")
+
         frame = Gtk.Frame.new("Emulation")
         frame.set_label_align(0.01, 0.6)
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -359,6 +365,10 @@ class MainWindow(Gtk.Window):
         self.show_all()
         self.timer = GLib.timeout_add(100, self.update)
 
+    def status_bar_clear(self, ctxt):
+        self.statusbar.remove_all(ctxt)
+        return False
+
     def object_frame_toggle(self, button, box, index, klass):
         if button.get_active():
             box.pack_start(self.klass_frames[klass], False, False, 0)
@@ -448,16 +458,36 @@ class MainWindow(Gtk.Window):
     def pause_emulation(self, button):
         request = api.Request(api.RequestType.EMULATION_PAUSE)
         response = self.send_request_with_response(request)
+        if response.status == 0:
+            self.statusbar.push(self.emulation_ctxt, "Emulation paused")
+        else:
+            self.statusbar.push(self.emulation_ctxt,
+                                f"Emulation failed to pause: {os.strerror(response.data)}")
+        GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
         return response.data
     
     def resume_emulation(self, button):
         request = api.Request(api.RequestType.EMULATION_RESUME)
         response = self.send_request_with_response(request)
+        if response.status == 0:
+            self.statusbar.push(self.emulation_ctxt, "Emulation resumed")
+        else:
+            self.statusbar.push(self.emulation_ctxt,
+                                f"Emulation failed to resume: {os.strerror(response.data)}")
+        GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
         return response.data
     
     def reset_emulation(self, button):
         request = api.Request(api.RequestType.EMULATION_RESET)
         response = self.send_request_with_response(request)
+        print(response)
+        if response.status == 0:
+            self.statusbar.push(self.emulation_ctxt, "Emulation reset")
+        else:
+            self.statusbar.push(self.emulation_ctxt,
+                                f"Emulation failed to reset: {os.strerror(response.data)}")
+        GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
+
         return response.data
 
     def exec_cmd(self, klass, obj, cmd, opts):
@@ -468,8 +498,9 @@ class MainWindow(Gtk.Window):
         request.command = cmd
         request.opts = opts
         response = self.send_request_with_response(request)
-        print(response)
-        return
+        self.statusbar.push(self.cmd_ctxt, f"Command result: status={response.status}, {response.data}")
+        GLib.timeout_add(5000, self.status_bar_clear, self.cmd_ctxt)
+        return response.data
     
     def get_time(self):
         request = api.Request(api.RequestType.EMULATION_GET_TIME)

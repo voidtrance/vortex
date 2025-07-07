@@ -335,8 +335,7 @@ class KlipperFrontend(BaseFrontend):
         self._reset_objects()
         self.config_crc = 0
         self._shutdown = False
-        super().reset()
-        return True
+        return super().reset()
 
     def get_uptime(self, cmd):
         runtime = self.get_controller_clock_ticks()
@@ -607,7 +606,8 @@ class KlipperFrontend(BaseFrontend):
                         self.shutdown("Unsupported command")
                         break
                     handler = getattr(self, mid.name)
-                    if not handler(cmd=cmd, **msg_params):
+                    ret = handler(cmd=cmd, **msg_params)
+                    if (type(ret) == int and ret != 0) or ret is False:
                         self.shutdown("Command failure")
                         break
                     if pos >= len(block) - msgproto.MESSAGE_TRAILER_SIZE:

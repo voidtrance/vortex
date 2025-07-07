@@ -19,8 +19,9 @@ core_threads_include = include_directories('.')
 math = cc.find_library(('m'))
 core_threads = library('threads', ['core_threads.c'],
                      install: true,
-                     dependencies: [math, pthreads],
-                     include_directories: [core_utils_include, core_include_general],
+                     dependencies: [math, pthreads, core_logging_dep, kmod_dep],
+                     include_directories: [core_utils_include, core_include_general,
+                                            core_logging_include],
                      install_dir: py.get_install_dir(pure: false) / 'vortex/core/threads')
 core_threads_dep = declare_dependency(link_with: core_threads,
                                     include_directories: core_threads_include)

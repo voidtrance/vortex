@@ -14,6 +14,9 @@ controller used by the emulation.
 > responses. Some responses contain the current MCU time when the response gets
 > generate. Also, some responses have to come back within a certain time window.
 >
+> For better timeing performance, see the [Core Timing](/docs/UserGuide.md#core-timing)
+> section of the User Guide.
+>
 > The timer mechanism built into Vortex relies on the update thread to update the
 > timer state and call timer callback. If the update frequency is too low, the
 > timer thread updates the timers' state at too low of a frequency. This results

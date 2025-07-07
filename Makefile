@@ -26,6 +26,7 @@ DEBUG_OPTS :=
 MESON_DEBUG_OPTS :=
 GCC_BUILD_OPTS :=
 VERSION=$(shell git describe --tags --abbrev=0)
+KVER := $(shell uname -r)
 
 PYTHON_VERSION=$(shell $(PYTHON) -c "import platform; print(platform.python_version())")
 PYTHON_VERSION_NUMS = $(subst ., ,$(PYTHON_VERSION))
@@ -42,6 +43,19 @@ all: version
 		ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
 			compile_commands.json; \
 	fi
+
+kmod:
+	mkdir -p build/kmod
+	$(MAKE) -C /lib/modules/$(KVER)/build M=$${PWD}/src/kmod
+
+kmod_sign: kmod
+	/lib/modules/$(KVER)/build/scripts/sign-file sha256 \
+		/etc/pki/akmods/private/private_key.priv \
+		/etc/pki/akmods/certs/public_key.der \
+		$${PWD}/src/kmod/vortex.ko
+
+kmod_install: kmod_sign
+	$(MAKE) -C /lib/modules/$(KVER)/build M=$${PWD}/src/kmod modules_install
 
 version:
 	@echo $(VERSION) > version.txt
@@ -68,5 +82,6 @@ gdb:
 	$(GDB) $(PYTHON_DEBUG) -ex 'r ./vortex_run.py $(GDB_OPTS)'
 
 clean:
+	$(MAKE) -C /lib/modules/$(KVER)/build M=$${PWD}/src/kmod clean
 	rm -rf build dist builddir
 	rm -f compile_commands.json version.txt

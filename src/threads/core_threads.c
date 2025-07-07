@@ -24,14 +24,18 @@
 #include <math.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <linux/futex.h>
 #include <sys/syscall.h>
 #include <sys/sysinfo.h>
+#include <sys/ioctl.h>
 #include <limits.h>
 #include <sys/resource.h>
 #include <sys/queue.h>
 #include <sys/timerfd.h>
 #include <utils.h>
+#include <logging.h>
+#include <vortex.h>
 #include "core_threads.h"
 
 enum {
@@ -47,7 +51,9 @@ struct core_thread_args {
     pthread_mutex_t lock;
     core_thread_args_t args;
     struct timespec sleep;
+    uint64_t pause_offset;
     int control;
+    int kmod_fd;
     int ret;
 };
 
@@ -59,10 +65,6 @@ typedef struct core_thread_data {
     struct core_thread_args args;
     void *(*thread_func)(void *);
 } core_thread_data_t;
-
-typedef STAILQ_HEAD(core_threads_list, core_thread_data) core_thread_list_t;
-core_thread_list_t core_threads;
-static pthread_once_t initialized = PTHREAD_ONCE_INIT;
 
 typedef struct {
     struct timespec start;
@@ -87,6 +89,15 @@ static core_time_data_t global_time_data = {
 
 #define timespec_delta(s, e) \
     ((SEC_TO_NSEC((e).tv_sec - (s).tv_sec)) + ((e).tv_nsec - (s).tv_nsec))
+
+typedef STAILQ_HEAD(core_threads_list, core_thread_data) core_thread_list_t;
+core_thread_list_t core_threads;
+static pthread_once_t initialized = PTHREAD_ONCE_INIT;
+static vortex_logger_t *thread_logger = NULL;
+
+#define VORTEX_LOG(level, fmt, ...)                                  \
+    vortex_logger_log(thread_logger, level, __FILE__, __LINE__, fmt, \
+                      ##__VA_ARGS__)
 
 static long timer_update_wait(int32_t *flag) {
     int32_t wake_value = TIMER_TRIGGER_WAKE;
@@ -120,14 +131,32 @@ static long timer_update_wake(int32_t *flag) {
 #define get_value(x) (x)
 #define set_value(x, y) (*(volatile typeof((x)) *)&(x) = (y))
 
+static struct timespec pause_duration = { .tv_sec = 0, .tv_nsec = 50000 };
+
+static inline int do_pause(struct core_thread_args *data) {
+    int pause_val = THREAD_CONTROL_PAUSE;
+    int run_val = THREAD_CONTROL_RUN;
+
+    if (unlikely(__atomic_compare_exchange_n(
+            &data->control, &pause_val, THREAD_CONTROL_PAUSED, false,
+            __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)))
+        return THREAD_CONTROL_PAUSE;
+    else if (unlikely(__atomic_compare_exchange_n(
+                 &data->control, &run_val, THREAD_CONTROL_RUNNING, false,
+                 __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)))
+        return THREAD_CONTROL_RUN;
+    return get_value(data->control);
+}
+
 static void *core_time_control_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
     float tick = (1000.0 / ((float)args->update.tick_frequency / 1000000));
     uint64_t controller_clock_mask = (1UL << args->update.width) - 1;
-    struct timespec pause = { .tv_sec = 0, .tv_nsec = 50000 };
     struct timespec now;
+    struct timespec pause_start;
     uint64_t runtime = 0;
+    uint64_t loop_count = 0;
     int run_val = THREAD_CONTROL_RUN;
 
     data->ret = 0;
@@ -138,25 +167,82 @@ static void *core_time_control_thread(void *arg) {
 
     clock_gettime(THREAD_CLOCK, &global_time_data.start);
     while (likely(get_value(data->control)) != THREAD_CONTROL_STOP) {
-        if (unlikely(get_value(data->control) == THREAD_CONTROL_PAUSED)) {
-            nanosleep(&pause, NULL);
-            continue;
-        }
+        int state = do_pause(data);
 
-        if (unlikely(get_value(data->control) == THREAD_CONTROL_PAUSE)) {
-            set_value(data->control, THREAD_CONTROL_PAUSED);
+        switch (state) {
+        case THREAD_CONTROL_PAUSE:
+            clock_gettime(THREAD_CLOCK, &pause_start);
+        case THREAD_CONTROL_PAUSED:
+            nanosleep(&pause_duration, NULL);
             continue;
+        case THREAD_CONTROL_RUN:
+            clock_gettime(THREAD_CLOCK, &now);
+            data->pause_offset += timespec_delta(pause_start, now);
+            break;
         }
 
         nanosleep(&data->sleep, NULL);
         clock_gettime(THREAD_CLOCK, &now);
-        runtime = timespec_delta(global_time_data.start, now);
+        runtime =
+            timespec_delta(global_time_data.start, now) - data->pause_offset;
         set_value(global_time_data.controller_runtime, runtime);
         set_value(global_time_data.controller_ticks,
                   (uint64_t)((float)runtime / tick) & controller_clock_mask);
+        loop_count++;
         timer_update_wake(&global_time_data.trigger);
     }
 
+    VORTEX_LOG(LOG_LEVEL_DEBUG,
+               "Timing Stats: Avg runtime per step: %f, Avg ticks per step: %f",
+               (float)global_time_data.controller_runtime / loop_count,
+               (float)global_time_data.controller_ticks / loop_count);
+    pthread_exit(&data->ret);
+}
+
+static void *core_time_control_thread_kmod(void *arg) {
+    struct core_thread_args *data = (struct core_thread_args *)arg;
+    core_thread_args_t *args = &data->args;
+    struct vortex_cmd_init ctrl;
+    struct vortex_time_data time_data;
+    int run_val = THREAD_CONTROL_RUN;
+    uint64_t loop_count = 0;
+    int ret;
+
+    ctrl.sleep_ns = data->sleep.tv_sec * 1000000000 + data->sleep.tv_nsec;
+    ctrl.tick_time = (1000.0 / ((float)args->update.tick_frequency / 1000000));
+    ctrl.width = args->update.width;
+
+    ret = ioctl(data->kmod_fd, VORTEX_CMD_INIT, &ctrl);
+    if (ret) {
+        VORTEX_LOG(LOG_LEVEL_ERROR, "kmod setup: %s", strerror(errno));
+        data->ret = ret;
+        pthread_exit(&data->ret);
+    }
+
+    if (!__atomic_compare_exchange_n(&data->control, &run_val,
+                                     THREAD_CONTROL_RUNNING, false,
+                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+        pthread_exit(&data->ret);
+
+    while (likely(get_value(data->control) != THREAD_CONTROL_STOP)) {
+        if (do_pause(data) == THREAD_CONTROL_PAUSED) {
+            nanosleep(&pause_duration, NULL);
+            continue;
+        }
+
+        if (unlikely(read(data->kmod_fd, &time_data, sizeof(time_data))) == -1)
+            continue;
+
+        set_value(global_time_data.controller_runtime, time_data.runtime);
+        set_value(global_time_data.controller_ticks, time_data.ticks);
+        loop_count++;
+        timer_update_wake(&global_time_data.trigger);
+    }
+
+    VORTEX_LOG(LOG_LEVEL_DEBUG,
+               "Timing Stats: Avg runtime per step: %f, Avg ticks per step: %f",
+               (float)global_time_data.controller_runtime / loop_count,
+               (float)global_time_data.controller_ticks / loop_count);
     pthread_exit(&data->ret);
 }
 
@@ -286,11 +372,13 @@ static int start_thread(struct core_thread_data *thread) {
 
 static void core_thread_list_init(void) {
     STAILQ_INIT(&core_threads);
+    vortex_logger_create("vortex.core.threads", &thread_logger);
 }
 
 int core_thread_create(core_thread_type_t type, core_thread_args_t *args) {
     core_thread_data_t *thread;
     float update;
+    int fd;
 
     pthread_once(&initialized, core_thread_list_init);
 
@@ -304,11 +392,19 @@ int core_thread_create(core_thread_type_t type, core_thread_args_t *args) {
 
     switch (type) {
     case CORE_THREAD_TYPE_UPDATE:
-        thread->thread_func = core_time_control_thread;
-        thread->args.name = strdup("time_control");
         update = (1000.0 / ((float)args->update.update_frequency / 1000000));
         thread->args.sleep.tv_sec = (time_t)update / SEC_TO_NSEC(1);
         thread->args.sleep.tv_nsec = (long int)update % SEC_TO_NSEC(1);
+        thread->args.name = strdup("time_control");
+        fd = open("/dev/vortex", O_RDWR);
+        if (fd == -1) {
+            VORTEX_LOG(LOG_LEVEL_VERBOSE, "Using user timing method");
+            thread->thread_func = core_time_control_thread;
+        } else {
+            VORTEX_LOG(LOG_LEVEL_VERBOSE, "Using kernel timing method");
+            thread->args.kmod_fd = fd;
+            thread->thread_func = core_time_control_thread_kmod;
+        }
         break;
     case CORE_THREAD_TYPE_TIMER:
         thread->thread_func = core_timer_thread;
@@ -392,6 +488,8 @@ void core_threads_stop(void) {
         if (thread->type == CORE_THREAD_TYPE_UPDATE && thread->thread_id) {
             set_value(thread->args.control, THREAD_CONTROL_STOP);
             pthread_join(thread->thread_id, NULL);
+            close(thread->args.kmod_fd);
+            break;
         }
     }
 }
@@ -449,45 +547,87 @@ uint64_t core_get_runtime(void) {
     return get_value(global_time_data.controller_runtime);
 }
 
-void core_threads_pause(void) {
+int core_threads_pause(void) {
     core_thread_data_t *thread;
     core_thread_data_t *time_thread = NULL;
 
     STAILQ_FOREACH(thread, &core_threads, entry) {
         if (thread->type == CORE_THREAD_TYPE_UPDATE) {
-            set_value(thread->args.control, THREAD_CONTROL_PAUSE);
             time_thread = thread;
             break;
         }
     }
 
     if (!time_thread)
-        return;
+        return ENOENT;
+
+    if (thread->args.kmod_fd) {
+        if (ioctl(thread->args.kmod_fd, VORTEX_CMD_PAUSE, 0) == -1)
+            return errno;
+    }
+
+    set_value(thread->args.control, THREAD_CONTROL_PAUSE);
 
     /* Wait for pause */
     while (1) {
         if (get_value(time_thread->args.control) == THREAD_CONTROL_PAUSED)
             break;
     }
+
+    return 0;
 }
 
-void core_threads_resume(void) {
+int core_threads_resume(void) {
     core_thread_data_t *thread;
-
-    STAILQ_FOREACH(thread, &core_threads, entry)
-        set_value(thread->args.control, THREAD_CONTROL_RUNNING);
-}
-
-void core_threads_reset(void) {
-    core_thread_data_t *thread;
+    core_thread_data_t *time_thread = NULL;
 
     STAILQ_FOREACH(thread, &core_threads, entry) {
-        if (thread->type == CORE_THREAD_TYPE_UPDATE &&
-            get_value(thread->args.control) != THREAD_CONTROL_PAUSED)
-            return;
+        if (thread->type == CORE_THREAD_TYPE_UPDATE) {
+            time_thread = thread;
+            break;
+        }
     }
 
-    clock_gettime(THREAD_CLOCK, &global_time_data.start);
+    if (!time_thread)
+        return ENOENT;
+
+    if (get_value(thread->args.control) != THREAD_CONTROL_PAUSED)
+        return EINVAL;
+
+    set_value(thread->args.control, THREAD_CONTROL_RUN);
+    if (thread->args.kmod_fd) {
+        if (ioctl(thread->args.kmod_fd, VORTEX_CMD_RESUME, 0) == -1)
+            return errno;
+    }
+
+    return 0;
+}
+
+int core_threads_reset(void) {
+    core_thread_data_t *thread;
+    core_thread_data_t *time_thread = NULL;
+
+    STAILQ_FOREACH(thread, &core_threads, entry) {
+        if (thread->type == CORE_THREAD_TYPE_UPDATE) {
+            time_thread = thread;
+            break;
+        }
+    }
+
+    if (!time_thread)
+        return ENOENT;
+    if (get_value(thread->args.control) != THREAD_CONTROL_PAUSED)
+        return EINVAL;
+
+    if (thread->args.kmod_fd) {
+        if (ioctl(thread->args.kmod_fd, VORTEX_CMD_RESET, 0) == -1)
+            return errno;
+    } else {
+        clock_gettime(THREAD_CLOCK, &global_time_data.start);
+        thread->args.pause_offset = 0;
+    }
+
+    return 0;
 }
 
 void core_threads_destroy(void) {

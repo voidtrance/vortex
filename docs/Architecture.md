@@ -169,6 +169,54 @@ Core HW objects can implement one or both of the following control types:
  reads the value and acts accordingly (see the
  [stepper object](/src/core/objects/stepper.c) as an example).
 
+## System Load
+
+The emulator makes heavy use of threads to run various parts of the emulation.
+Threads are used for the base core time control, timer processing, command
+loops, and HW object updates. All of these threads put a load on the system
+where the emulator is running. This load can be categories thusly:
+
+  * The load put on the system by the base emulator. This is CPU cycle demand
+    put on by the threads provided/used by the base emulator. This includes the
+    following threads:
+     - contoller timekeeping thread,
+     - timers thread,
+     - frontend command processing thread,
+     - core command submission thread,
+     - core command completion thread,
+     - core event processing thread,
+     - remove server thread(s) (if the remote server is used).
+  * HW object update threads. There is one such thread per object. Separate
+    threads per objects were chosen instead of a thread per object klass/type
+    in order to avoid interference between threads.
+
+The system load is also affected by the emulation's control loop frequency and
+HW object update frequencies.
+
+The emulator's control loop frequency determines how often the core updates the
+controller clock. The controller clock is counted in real time. This means that
+the controller tick counter is updated as if it were running at is real frequency.
+Thus, depending on how frequently the contol loop wakes up determines the
+controller tick counter granularity. Running the emulator control loop at higher
+frequency means a more precise controller clock emulation at the cost of system
+resources (CPU time). Of course, this also depends on the capabilities of the
+base system.
+
+The emulator provides two ways for controlling timing:
+
+1. Built-in timing logic, which uses system calls to get the current system time
+and compute controller clock ticks. Sleep intervals of the time control thread are
+also implmeneted using system calls. This method is much easier to use since it is
+already built into the emulator. However, it is less precise due to higher latency
+of system calls. It also uses more CPU resources.
+2. In-kernel timig logic. This is implemented using a Linux kernel module. While
+this method is an order of magnitude more precise and uses less CPU resources, it
+requires more work to setup and use. (See [Building And Installing The Kernel Module](/docs/Installationmd#building-and-installing-the-kernel-module).)
+
+
+In addition to the emulator control loop, each HW object defines it's own update
+frequency. Higher update frequencies mean higher CPU usage.
+
 ## Frontend Architecture
 The frontends' purpose is to read command data from the Vortex serial pipe
 and convert them to object commands. Each frontend accepts a different

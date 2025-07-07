@@ -14,7 +14,7 @@ order to provide a path that the emulator client can interface with.
 
 This serial interface can be used to send command data to the frontend. Depending
 of the frontend used, the command data can be simple GCode commands, direct HW
-onject commands, or any data that the instantiated frontend can process.
+object commands, or any data that the instantiated frontend can process.
 
 For detailed information on the emulator's operation, see the 
 [architecture description](/docs/Architecture.md) document.
@@ -59,6 +59,24 @@ messages:
    with the name `x` regardless of their type. Note that using the filter
    `vortex.core.*` (the wildcard at the end of the filter) is the same as using the
    filter `vortex.core`.
+
+### Core Timing
+Time control of the emulator supports two different methods - built-in time control
+and time control through a Linux kernel module.
+
+Using the kernel module provides better controller clock granularity and marginally
+reduces the CPU utilization. If it is possible to install third-party kernel modules
+on the system that is being used to run the emulation, it is recommeded to use this
+method.
+
+The built-in time control does not require any external helpers/modules/programs.
+However, it has higher latency due to the number of system calls that are required.
+This results in a higher controller clock granularity.
+
+The emulator will auto-detect which method should be used.
+
+For installation steps of the kernel module, see 
+[Building And Installing The Kernel Module](/docs/Installationmd#building-and-installing-the-kernel-module)
 
 ## Available Tools
 Vortex includes a couple of useful tools when using or, even, developing the

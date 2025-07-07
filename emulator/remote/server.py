@@ -83,11 +83,17 @@ class RemoteThread(threading.Thread):
         elif request.type == api.RequestType.OBJECT_EVENTS:
             response.data = self.get_object_events(request.klass)
         elif request.type == api.RequestType.EMULATION_PAUSE:
-            self._controller.pause(True)
+            ret = self._controller.pause(True)
+            response.status = int(ret)
+            response.data = ret
         elif request.type == api.RequestType.EMULATION_RESUME:
-            self._controller.pause(False)
+            ret = self._controller.pause(False)
+            response.status = int(ret)
+            response.data = ret
         elif request.type == api.RequestType.EMULATION_RESET:
-            self._frontend.reset()
+            ret = self._frontend.reset()
+            response.status = int(ret)
+            response.data = ret
         elif request.type == api.RequestType.EMULATION_PID:
             response.data = os.getpid()
         elif request.type == api.RequestType.EMULATION_GET_TIME:
