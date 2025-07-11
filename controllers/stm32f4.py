@@ -29,12 +29,15 @@ class STM32F446(Controller):
            ["PC11", "PC12", "PC10"],
            ["PE13", "PE14", "PE12"]]
     FREQUENCY = 12000000
-    MOTOR_COUNT = 8
-    PWM_COUNT = 8
-    HEATER_COUNT = 2
+    STEPPER_COUNT = 8
+    PWM_COUNT = 6
+    HEATER_COUNT = 4
     PROBE_COUNT = 1
     ENDSTOP_COUNT = 5
     THERMISTOR_COUNT = 5
+    DISPLAY_COUNT = 1
+    ENCODER_COUNT = 1
+    DIGITAL_PIN_COUNT = 22
     ADC_MAX = 4095
     PWM_MAX = 255
     def __init__(self, config):

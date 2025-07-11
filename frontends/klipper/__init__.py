@@ -174,7 +174,7 @@ class KlipperFrontend(BaseFrontend):
         self._add_commands(proto.KLIPPER_PROTOCOL.sched)
 
         # Setup stepper commands
-        if self.query_hw("MOTOR_COUNT"):
+        if self.query_hw("STEPPER_COUNT"):
             self._add_commands(proto.KLIPPER_PROTOCOL.stepper)
             self._add_commands(proto.KLIPPER_PROTOCOL.trsync)
 

@@ -104,8 +104,8 @@ def main():
     config = vortex.emulator.config.Configuration()
     try:
         config.read(opts.config)
-    except Exception as e:
-        logging.error(e)
+    except Exception as err:
+        logging.critical(str(err))
         return errno.EINVAL
 
     if opts.controller:
@@ -114,7 +114,7 @@ def main():
     try:
         emulation = vortex.emulator.Emulator(config, opts.frontend, opts.sequential)
     except vortex.emulator.EmulatorError as err:
-        print(err)
+        logging.critical(str(err))
         return errno.ENOENT
     
     if opts.enable_profiling:
@@ -132,7 +132,7 @@ def main():
     except Exception as e:
         if opts.debug.lower() == "debug":
             traceback.print_exc(e)
-        print(f"Emulator exception: {e}")
+        logging.critical(f"Emulator exception: {e}")
     finally:
         emulation.stop()
 

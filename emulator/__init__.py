@@ -63,7 +63,10 @@ class Emulator:
         machine = config.get_machine_config()
         kin = config.get_kinematics_config()
         self._kinematics = kinematics.Kinematics(kin)
-        self._controller = load_mcu(machine.controller, config)
+        try:
+            self._controller = load_mcu(machine.controller, config)
+        except VortexCoreError as e:
+            raise EmulatorError(e)
         self._frontend = frontends.create_frontend(frontend)
         if self._frontend is None:
             raise EmulatorError(f"Failed to create frontend '{frontend}'")

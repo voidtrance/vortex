@@ -41,6 +41,7 @@ class Pins:
             self._start = start
             self._end = end
         self.__c = Counter(self._start)
+        self.__used = []
     @property
     def name(self):
         return self._name
@@ -52,9 +53,19 @@ class Pins:
         return self._end
     def next(self):
         value = self.__c.next()
+        while value in self.__used:
+            value = self.__c.next()
         if value > self._end:
             raise PinError("Value exceeds pin range")
         return f"{self.name}{value}"
+    def use(self, pin):
+        if not pin.startswith(self._name):
+            raise PinError("Pin does not belong to set")
+        if pin not in self:
+            raise PinError("Pin not in set")
+        if pin in self.__used:
+            raise PinError(f"Pin {pin} already used")
+        self.__used.append(pin)
     def __len__(self):
         return self._end - self._start + 1
     def __iter__(self):
@@ -153,7 +164,7 @@ def get_host_cpu_frequency(type="cur"):
 class Controller(core.VortexCore):
     PINS = []
     SPI = []
-    MOTOR_COUNT = 0
+    STEPPER_COUNT = 0
     THERMISTOR_COUNT = 0
     PWM_PIN_COUNT = 0
     DIGITAL_PIN_COUNT = 0
@@ -161,10 +172,14 @@ class Controller(core.VortexCore):
     PROBE_COUNT = 0
     HEATER_COUNT = 0
     FAN_COUNT = 0
+    DISPLAY_COUNT = 0
+    ENCODER_COUNT = 0
+    DIGITAL_PIN_COUNT = 0
     FREQUENCY = 0
     ARCH = 0
     _libc = ctypes.CDLL("libc.so.6")
     _Command = namedtuple("Command", ['id', 'name', 'opts', 'data', 'defaults'])
+
     def __init__(self, config):
         self.log = logging.getLogger("vortex.core")
         debug_level = logging.get_level()
@@ -182,12 +197,20 @@ class Controller(core.VortexCore):
         self._event_handlers = {}
         self._timer_factory = timers.Factory(self)
         self._exec_cmd_map = {}
+        self._free_object_counts = dict.fromkeys(core.ObjectTypes, 0)
+        for klass in (core.ObjectTypes.AXIS, core.ObjectTypes.TOOLHEAD):
+            self._free_object_counts.pop(klass)
+        for klass in core.ObjectTypes:
+            if hasattr(self, f"{klass}_COUNT"):
+                self._free_object_counts[klass] = getattr(self, f"{klass}_COUNT")
         self._load_objects(config)
         if not self.init_objects():
             raise core.VortexCoreError("Failed to initialize objects.")
+
     @property
     def timers(self):
         return self._timer_factory
+
     def _load_virtual_objects(self):
         vobjs = {}
         mod_base = "vortex.controllers.objects"
@@ -209,6 +232,7 @@ class Controller(core.VortexCore):
                     else:
                         vobjs[member.type] = member
         return vobjs
+
     def _load_objects(self, config):
         module = importlib.import_module("vortex.controllers.objects.object_defs")
         base = getattr(module, "ObjectDef")
@@ -226,12 +250,17 @@ class Controller(core.VortexCore):
                 self.object_factory[klass] is None:
                 self.log.error(f"No definitions for klass '{klass}'")
                 continue
+            self.log.verbose(f"Creating object {klass}:{name}")
             res, pin = self._verify_pins(options)
             if res != True:
                 raise core.VortexCoreError(f"Unknown pin {pin} for object {name}")
+            if klass in self._free_object_counts:
+                if not self._free_object_counts[klass]:
+                    raise core.VortexCoreError(f"Cannot create object {name} of type {klass}."
+                                                " Object count exceeded.")
+                self._free_object_counts[klass] -= 1
             if getattr(self.object_factory[klass], "virtual", False) or \
                 inspect.isfunction(self.object_factory[klass]):
-                self.log.verbose(f"Creating object {klass}:{name}", end="->")
                 obj = self.object_factory[klass](options, self.objects,
                                                  self.query_objects,
                                                  self.virtual_command_complete,
@@ -242,7 +271,6 @@ class Controller(core.VortexCore):
                 if object_id == vortex.core.INVALID_OBJECT_ID:
                     self.log.error(f"Failed to register virtual object {klass}:{name}")
                     continue
-                self.log.debug(f"Object {klass}:{name} created: {object_id}")
                 obj._id = object_id
                 self._virtual_objects[object_id] = obj
             else:
@@ -262,17 +290,22 @@ class Controller(core.VortexCore):
                     continue
                 if logging.get_level() == logging.DEBUG:
                     vortex.lib.ctypes_helpers.show_struct(obj_conf, self.log.debug)
-                self.log.verbose(f"Creating object {klass}:{name}")
                 object_id = self.create_object(klass, name, ctypes.addressof(obj_conf))
-                self.log.debug(f"Object {klass}:{name} created: {object_id}")
+            self.log.debug(f"Object {klass}:{name} created: {object_id}")
             self._objects.add_object(klass, name, object_id)
+
     def _verify_pins(self, config):
         for name, value in vars(config).items():
             if "pin" in name:
                 pin_set = [p for p in self.PINS if value in p]
-                if not pin_set:
+                if not pin_set or len(pin_set) > 1:
                     return False, value
+                try:
+                    pin_set[0].use(value)
+                except PinError as e:
+                    raise core.VortexCoreError(e)
         return True, None
+
     def start(self, timer_frequency, update_frequency, set_priority, vobj_exec_cb, completion_cb):
         self._virtual_object_exec_command = vobj_exec_cb
         self._completion_callback = completion_cb
@@ -285,8 +318,10 @@ class Controller(core.VortexCore):
         self.log.info(f"Emulation running at {timer_frequency} Hz ({hz_to_nsec(timer_frequency)} ns / tick)")
         super().start(self.ARCH, self.FREQUENCY, timer_frequency, update_frequency,
                       self.command_complete, set_priority)
+
     def get_frequency(self):
         return self.FREQUENCY
+
     def command_complete(self, cmd_id, status, data_addr):
         self.log.debug(f"controller complete {cmd_id}={status}, data_addr={data_addr}")
         obj_id, obj_cmd = self._exec_cmd_map.pop(cmd_id, (None, None))
@@ -301,9 +336,11 @@ class Controller(core.VortexCore):
                 data = ctypes.cast(data_addr, ctypes.POINTER(cmd_data)).contents
                 data = vortex.lib.ctypes_helpers.parse_ctypes_struct(data)
         self._completion_callback(cmd_id, status, data)
+
     def virtual_command_complete(self, cmd_id, status, data=None):
         self.log.debug(f"controller virtual complete: {cmd_id}={status}, data={data}")
         self._completion_callback(cmd_id, status, data)
+
     def virtual_object_opts_convert(self, obj_id, obj_cmd_id, opts):
         if obj_id not in self._virtual_objects:
             return -1
@@ -314,8 +351,10 @@ class Controller(core.VortexCore):
         args_ptr = ctypes.cast(opts, ctypes.POINTER(args_struct[0])).contents
         args = vortex.lib.ctypes_helpers.parse_ctypes_struct(args_ptr)
         return args
+
     def vobj_cmd_exec(self, klass, obj_id, cmd_id, cmd, opts):
         return self._virtual_object_exec_command(klass, obj_id, cmd_id, cmd, opts)
+
     def vobj_get_state(self, klass, obj_id):
         if obj_id not in self._virtual_objects:
             return 0
@@ -323,6 +362,7 @@ class Controller(core.VortexCore):
         struct = self._virtual_objects[obj_id].state()
         vortex.lib.ctypes_helpers.fill_ctypes_struct(struct, state)
         return struct
+
     def get_param(self, param):
         if param == "commands":
             cmds = {x: [] for x in core.ObjectTypes}
@@ -353,14 +393,18 @@ class Controller(core.VortexCore):
             return events
         else:
             raise core.VortexCoreError(f"Unknown parameter '{param}'")
+
     def get_hw_param(self, param):
         if hasattr(self, param):
             return getattr(self, param)
         raise core.VortexCoreError(f"Unknown HW parameter '{param}'")
+
     def lookup_object(self, klass, name):
         return self.objects.object_by_name(name, klass)
+
     def lookup_objects(self, klass):
         return self.objects.object_by_klass(klass)
+
     def query_objects(self, objects):
         virtual_objects = []
         for id in objects:
@@ -385,6 +429,7 @@ class Controller(core.VortexCore):
         for id in virtual_objects:
             object_status[id] = self._virtual_objects[id].get_status()
         return object_status
+
     def _convert_opts(self, klass, cmd_id, opts):
         klass_def = self.object_defs[klass]
         commands = klass_def.commands
@@ -404,6 +449,7 @@ class Controller(core.VortexCore):
             return opts_struct
         else:
             return vortex.lib.ctypes_helpers.parse_ctypes_struct(opts_struct)
+
     def exec_command(self, command_id, object_id, subcommand_id, opts=None):
         object = self.objects.object_by_id(object_id)
         self.log.debug(f"controller executing command {command_id}: {object.id} {object.klass} {object.name}")
@@ -436,20 +482,24 @@ class Controller(core.VortexCore):
         else:
             return self._virtual_objects[object_id].exec_command(command_id,
                                                                  subcommand_id, opts)
+
     def event_register(self, object_type, event_type, object_name, handler):
         if not super().event_register(object_type, event_type, object_name,
                                       self._event_handler):
             return False
         self._event_handlers[(object_type, event_type, object_name)] = handler
         return True
+
     def event_unregister(self, object_type, event_type, object_name):
         self._event_handlers.pop((object_type, event_type, object_name))
         return super().event_unregister(object_type, event_type, object_name)
+
     def _find_event_data(self, klass, event):
         for e, s in self.object_defs[klass].events.items():
             if e == event:
                 return s
         return None
+
     def _event_handler(self, klass, object_name, event_type, data):
         handler = self._event_handlers.get((klass, event_type, object_name),
                                             None)
@@ -464,6 +514,7 @@ class Controller(core.VortexCore):
         pointer = ctypes.cast(data, ctypes.POINTER(event_data_def))
         content = vortex.lib.ctypes_helpers.parse_ctypes_struct(pointer.contents)
         handler(klass, event_type, object_name, content)
+
     def reset(self, objects=[]):
         _objects = objects[:]
         for obj in objects:
@@ -472,6 +523,7 @@ class Controller(core.VortexCore):
                 self._virtual_objec[obj].reset()
                 _objects.remove(obj)
         return super().reset(_objects)
+
     def cleanup(self):
         for obj in self._virtual_objects.values():
             del obj
