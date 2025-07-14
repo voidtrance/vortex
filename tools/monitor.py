@@ -14,75 +14,84 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import sys
-import socket
-import pickle
-import time
 import os
 import gi
-from vortex.core import ObjectTypes
+import sys
+import time
+import socket
+import pickle
 import vortex.emulator.remote.api as api
-gi.require_version("Gtk", "3.0")
-gi.require_version('GLib', '2.0')
-from gi.repository import Gtk, GLib, GObject, GdkPixbuf, Gdk
 from argparse import Namespace
+from vortex.core import ObjectTypes
+from vortex.core.kinematics import AxisType
+gi.require_version("Adw", "1")
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gtk, GLib, GObject, GdkPixbuf, Gdk, Gio, Adw
 
-socket_path = "/tmp/vortex-remote"
+style = b"""
+button#reset-button { background-image: none; background-color: red; color: white;}
+frame > label { font-size: 14pt;}
+"""
 
-class KlassObject:
-    def __init__(self, name):
-        label = Gtk.Label(label='')
-        label.set_markup(f'<b>{name}</b>')
-        label.hexpand = True
-        label.hexpand_set = True
-        label.set_xalign(0.)
-        self.name = label
-        self.properties = {}
-    def add_property(self, prop):
-        label = Gtk.Label(label=prop)
-        label.set_xalign(0.)
-        self.properties[prop] = (label, Gtk.Entry())
-        self.properties[prop][1].set_property("editable", False)
-        self.properties[prop][1].set_property("can_focus", False)
-    def set_value(self, prop, value):
-        self.properties[prop][1].set_text(str(value))
-    def __len__(self):
-        return len(self.properties)
-    def __iter__(self):
-        for prop, entry in self.properties.values():
-            yield prop, entry
+class ConnectionTermiated(Exception):
+    pass
 
-class DisplayKlassObject(KlassObject):
-    def __init__(self, name):
-        super().__init__(name)
-        self.image = Gtk.Image()
-        self.image.set_halign(Gtk.Align.START)
-        self.width = 0
-        self.height = 0
-    def set_size(self, width, height):
-        self.width = width
-        self.height = height
-    def update(self, data):
-        pixels = [0] * self.width * self.height * 3
-        for byte in range(8):
-            for bit in range(8):
-                for column in range(self.width):
-                    if data[column][byte] & (1 << bit):
-                        self._put_pixel(pixels, column, byte * 8 + bit, 255, 255, 255)
-                    else:
-                        self._put_pixel(pixels, column, byte * 8 + bit, 0, 0, 0)
-        b = GLib.Bytes.new(pixels)
-        pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(b, GdkPixbuf.Colorspace.RGB, False, 8,
-                                                  self.width, self.height,
-                                                  self.width * 3)
-        pixbuf = pixbuf.scale_simple(int(self.width * 1.75), int(self.height * 1.75),
-                            GdkPixbuf.InterpType.BILINEAR)
-        self.image.set_from_pixbuf(pixbuf)
-    def _put_pixel(self, pixels, x, y, r, g, b):
-        offset = y * self.width + x
-        pixels[offset * 3 + 0] = r
-        pixels[offset * 3 + 1] = g
-        pixels[offset * 3 + 2] = b
+class Communicator:
+    SOCKET = "/tmp/vortex-remote"
+    def __init__(self):
+        self.connected = False
+
+    def connect(self):
+        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            self.socket.connect(self.SOCKET)
+            self.connected = True
+        except (FileNotFoundError, ConnectionRefusedError):
+            return False
+        return True
+
+    def disconnect(self):
+        self.socket.close()
+        self.socket = None
+        self.connected = False
+
+    def send(self, request):
+        self.socket.sendall(pickle.dumps(request))
+
+    def receive(self):
+        data = b""
+        incoming = self.socket.recv(1024)
+        while incoming:
+            data += incoming
+            try:
+                incoming = self.socket.recv(1024, socket.MSG_DONTWAIT)
+            except BlockingIOError:
+                break
+        return pickle.loads(data)
+
+    def send_with_response(self, request):
+        try:
+            self.send(request)
+            response = self.receive()
+        except (BrokenPipeError, ConnectionResetError, pickle.UnpicklingError):
+            self.disconnect()
+            raise ConnectionTermiated()
+        return response
+
+    def get_time(self):
+        request = api.Request(api.RequestType.EMULATION_GET_TIME)
+        response = self.send_with_response(request)
+        if response.status == -1:
+            return 0, 0
+        return response.data
+
+    def get_status(self, data):
+        request = api.Request(api.RequestType.OBJECT_STATUS)
+        request.objects = data
+        response = self.send_with_response(request)
+        if response.status == -1:
+            return None
+        return response.data
 
 class KlassCommandOption:
     def __init__(self, klass, name, type):
@@ -96,31 +105,52 @@ class KlassCommandOption:
         return label
     def get_widget(self):
         if self.type == bool:
-            self.widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            self.widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3)
             label = Gtk.Label(label=self.name)
-            self.widget.pack_start(label, False, False, 3)
-            self.r1 = Gtk.RadioButton.new()
-            l = Gtk.Label(label="On")
-            self.r1.add(l)
-            self.r1.value = 1
-            self.widget.pack_start(self.r1, False, False, 3)
-            r2 = Gtk.RadioButton.new_with_label_from_widget(self.r1, "Off")
+            self.widget.append(label)
+            self.radio_buttons = []
+            r1 = Gtk.CheckButton(label="On")
+            r1.value = 1
+            self.widget.append(r1)
+            self.radio_buttons.append(r1)
+            r2 = Gtk.CheckButton(label="Off", group=r1)
             r2.value = 0
-            self.widget.pack_start(r2, False, False, 3)
+            self.widget.append(r2)
+            self.radio_buttons.append(r2)
             if self.klass == ObjectTypes.DIGITAL_PIN:
-                r3 = Gtk.RadioButton.new_with_label_from_widget(self.r1, "Toggle")
+                r3 = Gtk.CheckButton(label="Toggle", group=r1)
                 r3.value = -1
-                self.widget.pack_start(r3, False, False, 3)
+                self.widget.append(r3)
+                self.radio_buttons.append(r2)
         else:
             self.widget = Gtk.Entry()
         return self.widget
     def get_value(self):
         if self.type == bool:
-            for r in self.r1.get_group():
+            for r in self.radio_buttons:
                 if r.get_active():
                     return r.value
             return False
         return self.type(self.widget.get_text())
+
+def set_widget_margin(widget, top, bottom=None, left=None, right=None):
+    widget.set_margin_top(top)
+    widget.set_margin_bottom(bottom if bottom is not None else top)
+    widget.set_margin_start(left if left is not None else top)
+    widget.set_margin_end(right if right is not None else top)
+
+class ListObject(GObject.Object):
+    __gtype_name__ = "list_object"
+    def __init__(self, id, name):
+        super().__init__()
+        self._id = id
+        self._name = name
+    @GObject.Property(type=int)
+    def object_id(self):
+        return self._id
+    @GObject.Property(type=str)
+    def name(self):
+        return self._name
 
 class KlassCommands(Gtk.Grid):
     def __init__(self, klass, objects, callback):
@@ -128,13 +158,23 @@ class KlassCommands(Gtk.Grid):
         self.set_column_homogeneous(False)
         self.set_column_spacing(10)
         self.set_row_spacing(3)
+        self.set_hexpand(True)
         self.klass = klass
         self.callback = callback
-        self._object_store = Gtk.ListStore(GObject.TYPE_UINT64, str)
+        self._object_store = Gio.ListStore.new(item_type=ListObject)
         for o in objects:
-            self._object_store.append(o)
-        self._object_store.set_sort_column_id(0, Gtk.SortType.ASCENDING)
+            self._object_store.append(ListObject(*o))
+        self.item_factory = Gtk.SignalListItemFactory()
+        self.item_factory.connect("setup", self._object_item_setup)
+        self.item_factory.connect("bind", self._object_item_bind)
         self.n_cmds = 0
+    def _object_item_setup(self, factory, list_item):
+        label = Gtk.Label()
+        list_item.set_child(label)
+    def _object_item_bind(self, factory, list_item):
+        label = list_item.get_child()
+        object = list_item.get_item()
+        object.bind_property("name", label, "label", GObject.BindingFlags.SYNC_CREATE)
     def add_command(self, cmd_id, name, opts):
         button = Gtk.Button(label="Execute")
         self.attach(button, 0, self.n_cmds, 1, 1)
@@ -143,9 +183,9 @@ class KlassCommands(Gtk.Grid):
         label.hexpand = True
         label.hexpand_set = True
         self.attach(label, 1, self.n_cmds, 1, 1)
-        obj_box = Gtk.ComboBox.new_with_model_and_entry(self._object_store)
-        obj_box.set_entry_text_column(1)
-        obj_box.set_id_column(0)
+        obj_box = Gtk.DropDown(model=self._object_store, factory=self.item_factory)
+        obj_box.set_expression(Gtk.ClosureExpression.new(str, lambda x: x.get_property("name"), None))
+        obj_box.set_enable_search(True)
         self.attach(obj_box, 2, self.n_cmds, 1, 1)
         cmd_opts = []
         for i, opt in enumerate(opts):
@@ -156,8 +196,10 @@ class KlassCommands(Gtk.Grid):
         button.connect("clicked", self.exec_cmd, cmd_id, obj_box, cmd_opts)
         self.n_cmds += 1
     def exec_cmd(self, button, cmd_id, combo, cmd_opts):
-        iter = combo.get_active_iter()
+        position = combo.get_selected()
         model = combo.get_model()
+        item = model.get_item(position)
+        object_id = item.get_property("object_id")
         opts = {}
         for opt in cmd_opts:
             opts[opt.name] = opt.get_value()
@@ -165,44 +207,177 @@ class KlassCommands(Gtk.Grid):
         if self.klass is ObjectTypes.DIGITAL_PIN:
             if opts["state"] == -1:
                 opts[opt.name] = True
-                self.callback(self.klass, model[iter][0], cmd_id, opts)
+                self.callback(self.klass, object_id, cmd_id, opts)
                 time.sleep(0.01)
                 opts[opt.name] = False
-                self.callback(self.klass, model[iter][0], cmd_id, opts)
+                self.callback(self.klass, object_id, cmd_id, opts)
                 return
             else:
                 opts[opt.name] = bool(opts[opt.name])
-        self.callback(self.klass, model[iter][0], cmd_id, opts)
+        self.callback(self.klass, object_id, cmd_id, opts)
     def clear(self):
         self._object_store.clear()
         for child in self.get_children():
             self.remove(child)
             child.destroy()
 
+class KlassObject:
+    def __init__(self, name):
+        label = Gtk.Label(label='')
+        label.set_markup(f'<b>{name}</b>')
+        label.hexpand = True
+        label.hexpand_set = True
+        label.set_xalign(0.)
+        self.name = label
+        self.properties = {}
+        self.precision = -1
+    def _get_value(self, value):
+        if isinstance(value, float) and self.precision != -1 and \
+            value and round(value, self.precision):
+            value = round(value, self.precision)
+        elif isinstance(value, list):
+            rounded = []
+            for v in value:
+                # isinstance() is not sufficient because a lot of
+                # non-[integer|float|string] value masquarade is
+                # those types. type() is much more reliable.
+                if type(v) in (int, float, str) and not v:
+                    continue
+                if isinstance(v, float) and self.precision != -1:
+                    rounded.append(round(v, self.precision))
+                else:
+                    rounded.append(v)
+            return rounded
+        elif isinstance(value, dict):
+            return ", ".join([f"{key}={value}" for key, value in value.items()])
+        return value
+    def add_property(self, prop):
+        label = Gtk.Label(label=prop)
+        label.set_xalign(0.)
+        self.properties[prop] = (label, Gtk.Entry())
+        self.properties[prop][1].set_width_chars(8)
+        self.properties[prop][1].set_property("editable", False)
+        self.properties[prop][1].set_property("can_focus", False)
+    def set_value(self, prop, value):
+        value = self._get_value(value)
+        if isinstance(value, list):
+            value = ", ".join([str(x) for x in value])
+        self.properties[prop][1].set_text(str(value))
+    def update(self, data):
+        for property, value in data.items():
+            self.set_value(property, value)
+    def __len__(self):
+        return len(self.properties)
+    def __iter__(self):
+        for prop, entry in self.properties.values():
+            yield prop, entry
+
+class DisplayObject(KlassObject):
+    type = ObjectTypes.DISPLAY
+    SCALE_FACTOR = 2
+    def __init__(self, name):
+        super().__init__(name)
+        self.image = Gtk.Picture()
+        self.image.set_halign(Gtk.Align.START)
+        self.width = 0
+        self.height = 0
+    def set_size(self, width, height):
+        self.width = width
+        self.height = height
+        self.image.set_size_request(self.width * self.SCALE_FACTOR,
+                                    self.height * self.SCALE_FACTOR)
+    def update(self, data):
+        super().update(data)
+        if not self.width and not self.height:
+            self.set_size(data["width"], data["height"])
+        image_data = data["data"]
+        pixels = [0] * self.width * self.height * 3
+        for byte in range(8):
+            for bit in range(8):
+                for column in range(self.width):
+                    pixel_color = 255 * bool((image_data[column][byte] & (1 << bit)))
+                    self._put_pixel(pixels, column, byte * 8 + bit,
+                                    pixel_color)
+        b = GLib.Bytes.new(pixels)
+        pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(b, GdkPixbuf.Colorspace.RGB, False, 8,
+                                                  self.width, self.height,
+                                                  self.width * 3)
+        pixbuf = pixbuf.scale_simple(self.width * self.SCALE_FACTOR,
+                                     self.height * self.SCALE_FACTOR,
+                                     GdkPixbuf.InterpType.BILINEAR)
+        texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+        self.image.set_paintable(texture)
+    def _put_pixel(self, pixels, x, y, r, g=None, b=None):
+        if g is None:
+            g = r
+        if b is None:
+            b = r
+        offset = y * self.width + x
+        pixels[offset * 3 + 0] = r
+        pixels[offset * 3 + 1] = g
+        pixels[offset * 3 + 2] = b
+
+class TooheadObject(KlassObject):
+    type = ObjectTypes.TOOLHEAD
+    def __init__(self, name):
+        super().__init__(name)
+    def add_property(self, prop):
+        if prop != "position":
+            super().add_property(prop)
+    def update(self, data):
+        valid_axes = []
+        for property, value in data.items():
+            if property == "position":
+                continue
+            if property == "axes":
+                axes = []
+                for axis in value:
+                    if axis in AxisType:
+                        axes.append(AxisType[axis])
+                        valid_axes.append(AxisType[axis])
+                self.set_value(property, axes)
+        position = data["position"]
+        for axis in valid_axes:
+            if axis not in self.properties:
+                label = Gtk.Label(label=str(axis))
+                label.set_xalign(0.)
+                self.properties[axis] = (label, Gtk.Entry())
+                self.properties[axis][1].set_width_chars(8)
+                self.properties[axis][1].set_property("editable", False)
+                self.properties[axis][1].set_property("can_focus", False)
+            self.set_value(axis, position[axis])
+
+KLASS_CLASS_MAP = {
+    ObjectTypes.DISPLAY: DisplayObject,
+    ObjectTypes.TOOLHEAD: TooheadObject
+}
+
 class KlassFrame(Gtk.Frame):
-    def __init__(self, label):
+    def __init__(self, klass, label):
         super().__init__(label=label)
-        self.set_label_align(0.01, 0.6)
+        self.set_label_align(0.)
         self.events = None
         self.commands = None
         self._objects = {}
         # Hack around the fact the we don't know what klass this
         # frame represents.
-        self.is_display = label == "Display"
-        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.klass = klass
+        self.box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         scroll = Gtk.ScrolledWindow.new()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-        self.box.pack_start(scroll, False, False, 3)
+        self.box.append(scroll)
         self.table = Gtk.Grid.new()
         self.table.set_column_spacing(3)
         self.table.set_row_spacing(3)
-        scroll.add(self.table)
-        self.add(self.box)
+        set_widget_margin(self.table, 0, 0, 20)
+        scroll.set_child(self.table)
+        self.set_child(self.box)
+
     def add_object(self, obj_id, name, obj):
         top_attach = len(self._objects)
         obj.name.set_margin_end(10)
         obj.name.set_hexpand(True)
-        if self.is_display:
+        if self.klass == ObjectTypes.DISPLAY:
             self.table.attach(obj.name, 0, top_attach, 1, 2)
         else:
             self.table.attach(obj.name, 0, top_attach, 1, 1)
@@ -212,283 +387,380 @@ class KlassFrame(Gtk.Frame):
             self.table.attach(prop, j * 2 + 1, top_attach, 1, 1)
             entry.set_margin_end(3)
             self.table.attach(entry, j * 2 + 2, top_attach, 1, 1)
-        if self.is_display:
+        if self.klass == ObjectTypes.DISPLAY:
             obj.image.set_margin_start(10)
             self.table.attach(obj.image, 1, top_attach + 1, len(obj) * 2, 1)
         self._objects[obj_id] = obj
+
     def add_commands(self, cmds):
         if not self.commands:
             self.commands = Gtk.Expander(label="Commands")
             scroll = Gtk.ScrolledWindow()
             scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-            self.commands.add(scroll)
-            self.box.pack_end(self.commands, False, False, 3)
-        self.commands.get_child().add(cmds)
+            self.commands.set_child(scroll)
+            self.box.append(self.commands)
+        self.commands.get_child().set_child(cmds)
+
     def add_events(self, events):
         if not self.events:
             self.events = Gtk.Expander(label="Events")
             scroll = Gtk.ScrolledWindow()
             scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-            scroll.add(events)
-            self.box.pack_end(self.events, False, False, 3)
-        self.events.get_child().add(events)
+            scroll.set_child(events)
+            self.box.append(self.events)
+        self.events.get_child().set_child(events)
+
     def get_object(self, obj_id):
         return self._objects.get(obj_id, None)
+
     def clear(self):
         for i in range(len(self._objects)):
             self.table.remove_row(0)
         # Display objects have an image, so we need to remove it
-        if self.is_display:
+        if self.klass == ObjectTypes.DISPLAY:
             self.table.remove_row(0)
         if self.commands:
-            self.commands.destroy()
+            self.box.remove(self.commands)
             self.commands = None
         self._objects.clear()
+
     def __iter__(self):
         for obj_id, obj in self._objects.items():
             yield obj
 
-class MainWindow(Gtk.Window):
-    def __init__(self):
-        super().__init__(title="Vortex Monitor")
+class MonitorWindow(Gtk.ApplicationWindow):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.set_default_size(1024, 800)
-        self.connect("destroy", Gtk.main_quit)
-        self.connection = None
-        self.emulation_data = Namespace()
-        self._have_data = False
         self.klass_frames = {}
-        self.run_update = True
 
-        # The main window box containing the entire UI.
-        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        main_box.set_spacing(10)
-        self.set_widget_margin(main_box, 5)
+        # Create the main horizontal box. This will contain
+        # the emulation data box and the button box
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        set_widget_margin(main_box, 5)
 
-        # The monitor box all of the emulation data - the emulator
-        # runtime/ticks frame and a horizontal box for the object
-        # selectors and state scrolled window.
-        monitor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        monitor_box.set_spacing(10)
+        # Create the box for all of the high level emulation
+        # data.
+        monitor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        main_box.append(monitor_box)
 
-        self.statusbar = Gtk.Statusbar.new()
-        monitor_box.pack_end(self.statusbar, False, False, 0)
-        self.emulation_ctxt = self.statusbar.get_context_id("Emulation Status")
-        self.cmd_ctxt = self.statusbar.get_context_id("Command Status")
-
-        frame = Gtk.Frame.new("Emulation")
-        frame.set_label_align(0.01, 0.6)
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        # Runtime/tick frame
+        frame = Gtk.Frame.new()
+        frame.set_label_align(0.01)
+        monitor_box.append(frame)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3)
+        set_widget_margin(box, 5)
+        frame.set_child(box)
         for l in (("runtime", "Runtime"), ("ticks", "Controller clock")):
             label = Gtk.Label(label=l[1])
             entry = Gtk.Entry()
             entry.set_property("editable", False)
             entry.set_property("can_focus", False)
-            box.pack_start(label, False, False, 3)
-            box.pack_start(entry, False, False, 3)
+            box.append(label)
+            box.append(entry)
             setattr(self, f"{l[0]}_entry", entry)
-        frame.add(box)
-        self.set_widget_margin(box, 3)
-        monitor_box.pack_start(frame, False, False, 0)
 
-        # This is the box holding all of the object widgets (klass
-        # selectors and the object state scrolled window).
-        objects_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        objects_box.set_spacing(10)
-        object_frame = Gtk.Frame.new(label="Object Types")
-        object_frame.set_label_align(0.01, 0.6)
-        object_checkbutton_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        # Now, the main object box - selectors and klass frames
+        object_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        monitor_box.append(object_box)
 
-        object_frame.add(object_checkbutton_box)
-        objects_box.pack_start(object_frame, False, False, 0)
+        selector_frame = Gtk.Frame()
+        object_box.append(selector_frame)
+        selector_frame.set_label_align(0.01)
+
+        selector_button_grid = Gtk.Grid()
+        selector_button_grid.set_column_spacing(10)
+        set_widget_margin(selector_button_grid, 5)
+        selector_frame.set_child(selector_button_grid)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        object_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        object_box.set_spacing(5)
-        scroll.add(object_box)
-        for klass in ObjectTypes:
-            if klass is ObjectTypes.NONE:
-                continue
-            label = str(klass).replace('_', " ")
-            self.klass_frames[klass] = KlassFrame(label=label.title())
-            object_box.pack_start(self.klass_frames[klass], False, False, 0)
-        objects_box.pack_start(scroll, True, True, 0)
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        object_frame_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        scroll.set_child(object_frame_box)
 
         for i, klass in enumerate(ObjectTypes):
             if klass is ObjectTypes.NONE:
                 continue
-            label = str(klass).replace("_", " ")
-            checkbox = Gtk.CheckButton.new_with_label(label.title())
-            checkbox.set_active(True)
-            checkbox.connect("toggled", self.object_frame_toggle, object_box, i - 1, klass)
-            object_checkbutton_box.pack_start(checkbox, False, False, 3)
+            label = str(klass).replace('_', " ") + " Objects"
+            self.klass_frames[klass] = KlassFrame(klass, label=label.title())
+            self.klass_frames[klass].set_visible(False)
+            object_frame_box.append(self.klass_frames[klass])
+            
+            name = str(klass).replace("_", " ").capitalize()
+            label = Gtk.Label(label=name)
+            label.set_xalign(0.0)
+            selector_button_grid.attach(label, 0, i, 1, 1)
+            switch = Gtk.Switch()
+            switch.set_active(False)
+            switch.connect("notify::active", self.object_frame_toggle, klass)
+            selector_button_grid.attach(switch, 1, i, 1, 1)
+            setattr(self, f"{klass}_selector_switch", switch)
+        object_box.append(scroll)
 
-        monitor_box.pack_start(objects_box, True, True, 3)
-        main_box.pack_start(monitor_box, True, True, 3)
+        # Create application status bar.
+        #self.statusbar = Gtk.Statusbar.new()
 
-        # Box that holds the two ButtonBox's. We want a box because there
-        # are two button boxes, one for the control buttons and one
-        # for the exit button, which are packed differently.
         button_boxes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main_box.append(button_boxes)
 
-        control_box = Gtk.ButtonBox(orientation=Gtk.Orientation.VERTICAL)
-        control_box.set_layout(Gtk.ButtonBoxStyle.START)
-        control_box.set_spacing(5)
+        control_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        control_box.set_vexpand(True)
+        button_boxes.append(control_box)
 
-        self.precision_spin = Gtk.SpinButton.new_with_range(-1, 15, 1)
-        self.precision_spin.set_value(8)
-        control_box.pack_start(self.precision_spin, False, True, 3)
+        #control_box.set_layout(Gtk.ButtonBoxStyle.START)
+        self.precision_spin = Gtk.SpinButton.new_with_range(0, 15, 1)
+        self.precision_spin.set_value(4)
+        self.precision_spin.set_tooltip_text("Set the precision of displayed data")
+        self.precision_spin.connect("value-changed", self.set_object_value_precision)
+        control_box.append(self.precision_spin)
 
         pause_button = Gtk.Button(label="Pause")
-        pause_button.connect("clicked", self.pause_emulation)
-        control_box.pack_start(pause_button, False, True, 3)
+        pause_button.set_action_name("app.emulation-pause")
+        pause_button.set_tooltip_text("Pause the emulation.")
+        control_box.append(pause_button)
 
         resume_button = Gtk.Button(label="Resume")
-        resume_button.connect("clicked", self.resume_emulation)
-        control_box.pack_start(resume_button, False, True, 3)
+        resume_button.set_action_name("app.emulation-resume")
+        resume_button.set_tooltip_text("Resume the emulation.")
+        control_box.append(resume_button)
+
+        capture_button = Gtk.Button(label="Capture State")
+        capture_button.set_action_name("app.emulation-capture")
+        capture_button.set_tooltip_text("Capture emulation state. "
+                                        "The emulation will be paused during capture.")
+        control_box.append(capture_button)
 
         reset_button = Gtk.Button(label="Reset", name="reset-button")
-        reset_button.connect("clicked", self.reset_emulation)
-        control_box.pack_start(reset_button, False, True, 3)
+        reset_button.set_action_name("app.emulation-reset")
+        reset_button.set_tooltip_text("Reset the emulation.")
+        control_box.append(reset_button)
 
-        button_boxes.pack_start(control_box, True, True, 3)
+        quit_button_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        button_boxes.append(quit_button_box)
+        quit_button = Gtk.Button.new_with_label("Quit")
+        quit_button.set_action_name("app.quit")
+        quit_button_box.append(quit_button)
 
-        button_box = Gtk.ButtonBox(orientation=Gtk.Orientation.VERTICAL)
-        button_box.set_layout(Gtk.ButtonBoxStyle.EXPAND)
-        exit_button = Gtk.Button(label="Exit")
-        exit_button.connect("clicked", self.destroy)
-        button_box.pack_end(exit_button, True, True, 0)
-        button_boxes.pack_end(button_box, False, True, 3)
-
-        main_box.pack_end(button_boxes, False, True, 3)
-        self.add(main_box)
-        self.show_all()
-        self.timer = GLib.timeout_add(100, self.update)
-
-    def status_bar_clear(self, ctxt):
-        self.statusbar.remove_all(ctxt)
-        return False
-
-    def object_frame_toggle(self, button, box, index, klass):
-        if button.get_active():
-            box.pack_start(self.klass_frames[klass], False, False, 0)
-            box.reorder_child(self.klass_frames[klass], index)
+        self.set_child(main_box)
+        
+    def object_frame_toggle(self, switch, gparam, klass):
+        if switch.get_active():
+            self.klass_frames[klass].set_visible(True)
         else:
-            box.remove(self.klass_frames[klass])
+            self.klass_frames[klass].set_visible(False)
 
-    def connect_to_server(self):
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        try:
-            sock.connect(socket_path)
-        except (FileNotFoundError, ConnectionRefusedError):
-            return
-        self.connection = sock
+    def set_emulation_time(self, runtime, ticks):
+        self.runtime_entry.set_text(str(runtime))
+        self.ticks_entry.set_text(str(ticks))
 
-    def send_request(self, request):
-        self.connection.sendall(pickle.dumps(request))
 
-    def get_response(self):
-        data = b""
-        incoming = self.connection.recv(1024)
-        while incoming:
-            data += incoming
-            try:
-                incoming = self.connection.recv(1024, socket.MSG_DONTWAIT)
-            except BlockingIOError:
-                break
-        return pickle.loads(data)
-
-    def send_request_with_response(self, request):
-        try:
-            self.send_request(request)
-            response = self.get_response()
-        except BrokenPipeError:
-            response = api.Response(request.type)
-            response.status = -1
-        return response
-
-    def get_data_value(self, value):
-        precision = self.precision_spin.get_value_as_int()
-        if isinstance(value, float) and precision != -1 and \
-            value and round(value, precision):
-            value = round(value, precision)
-        elif isinstance(value, list):
-            rounded = []
-            for v in value:
-                if isinstance(v, float) and precision != -1:
-                    rounded.append(round(v, precision))
-                else:
-                    rounded.append(v)
-            value = ", ".join([str(x) for x in rounded if not isinstance(x,str) or x])
-        return str(value)
-    
-    def populate_grids(self, data):
-        for klass in self.emulation_data.objects:
+    def populate_objects(self, objects, data):
+        for klass in objects.objects:
             obj_set = []
-            self.set_widget_margin(self.klass_frames[klass].get_child(), 5)
-            for i, obj in enumerate(self.emulation_data.objects[klass]):
+            set_widget_margin(self.klass_frames[klass].get_child(), 5)
+            if objects.objects[klass]:
+                switch = getattr(self, f"{klass}_selector_switch")
+                switch.set_active(True)
+            for i, obj in enumerate(objects.objects[klass]):
                 obj_set.append((obj["id"], obj["name"]))
-                if klass is ObjectTypes.DISPLAY:
-                    kobj = DisplayKlassObject(obj["name"])
-                else:
-                    kobj = KlassObject(obj["name"])
+                kclass = KLASS_CLASS_MAP.get(klass, KlassObject)
+                kobj = kclass(obj["name"])
+                kobj.precision = self.precision_spin.get_value_as_int()
                 props = list(data[obj["id"]].keys())
-                for j, prop in enumerate(props):
-                    if klass is ObjectTypes.DISPLAY and prop == "data":
-                        kobj.set_size(data[obj["id"]]["width"],
-                                      data[obj["id"]]["height"])
-                        kobj.update(data[obj["id"]][prop])
-                    else:
-                        kobj.add_property(prop)
-                        kobj.set_value(prop, data[obj["id"]][prop])
+                for prop in props:
+                    kobj.add_property(prop)
+                kobj.update(data[obj["id"]])
                 self.klass_frames[klass].add_object(obj["id"], obj["name"], kobj)
-            if self.emulation_data.commands[klass]:
-                kcmds = KlassCommands(klass, obj_set, self.exec_cmd)
-                for i, cmd in enumerate(self.emulation_data.commands[klass]):
+            app = self.get_application()
+            if objects.commands[klass]:
+                kcmds = KlassCommands(klass, obj_set, app.exec_cmd)
+                for i, cmd in enumerate(objects.commands[klass]):
                     kcmds.add_command(cmd[0], cmd[1], cmd[2])
                 self.klass_frames[klass].add_commands(kcmds)
-        self.show_all()
 
-    def set_widget_margin(self, widget, top, bottom=None, left=None, right=None):
-        widget.set_margin_top(top)
-        widget.set_margin_bottom(bottom if bottom is not None else top)
-        widget.set_margin_start(left if left is not None else top)
-        widget.set_margin_end(right if right is not None else top)
+    def update_objects(self, objects, status):
+        for klass, objts in objects.objects.items():
+            for obj in objts:
+                obj_id = obj["id"]
+                kobj = self.klass_frames[klass].get_object(obj_id)
+                kobj.update(status[obj_id])
 
-    def pause_emulation(self, button):
+    def set_object_value_precision(self, spinbutton):
+        precision = spinbutton.get_value_as_int()
+        for frame in self.klass_frames.values():
+            for obj in frame:
+                obj.precision = precision
+
+    def clear(self):
+        for klass, frame in self.klass_frames.items():
+            frame.clear()
+            switch = getattr(self, f"{klass}_selector_switch")
+            switch.set_active(False)
+
+        
+
+class MonitorApplication(Adw.Application):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, application_id="com.github.voidtrance.VortexMonitor",
+                         **kwargs)
+        self.main_window = None
+        self.have_data = False
+        self.object_data = None
+        self.connection = Communicator()
+        self.css = Gtk.CssProvider.new()
+        self.css.load_from_data(style)
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), self.css,
+                                                   Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    def do_startup(self, *args):
+        Gtk.Application.do_startup(self)
+
+        pause_action = Gio.SimpleAction.new("emulation-pause", None)
+        pause_action.connect("activate", self.pause_emulation)
+        self.add_action(pause_action)
+
+        resume_action = Gio.SimpleAction.new("emulation-resume", None)
+        resume_action.connect("activate", self.resume_emulation)
+        self.add_action(resume_action)
+
+        reset_action = Gio.SimpleAction.new("emulation-reset", None)
+        reset_action.connect("activate", self.reset_emulation)
+        self.add_action(reset_action)
+
+        capture_action = Gio.SimpleAction.new("emulation-capture", None)
+        capture_action.connect("activate", self.show_capture_status_dalog)
+        self.add_action(capture_action)
+
+        quit_action = Gio.SimpleAction.new("quit", None)
+        quit_action.connect("activate", self.on_quit)
+        self.add_action(quit_action)
+
+    def do_activate(self):
+        if not self.main_window:
+            self.main_window = MonitorWindow(application=self, title="Vortex Monitor")
+
+        self.main_window.present()
+        self.connection.connect()
+        self.timeout = GLib.timeout_add(100, self.update)
+
+    def get_object_data(self):
+        self.object_data = Namespace()
+        request = api.Request(api.RequestType.KLASS_LIST)
+        response = self.connection.send_with_response(request)
+        if response.status != 0:
+            return False
+        self.object_data.klasses = response.data
+        request = api.Request(api.RequestType.OBJECT_LIST)
+        response = self.connection.send_with_response(request)
+        if response.status != 0:
+            return False
+        self.object_data.objects = response.data
+        self.object_data.commands = {}
+        self.object_data.events = {}
+        for klass in self.object_data.klasses:
+            request = api.Request(api.RequestType.OBJECT_COMMANDS)
+            request.klass = klass
+            response = self.connection.send_with_response(request)
+            if response.status != 0:
+                return False
+            self.object_data.commands = response.data
+            request.type = api.RequestType.OBJECT_EVENTS
+            response = self.connection.send_with_response(request)
+            if response.status != 0:
+                return False
+            self.object_data.events = response.data
+        self.query_ids = [o["id"] for k in self.object_data.klasses \
+                     for o in self.object_data.objects.get(k, [])]
+        return True
+
+    def update(self):
+        if not self.connection.connected:
+            if not self.connection.connect():
+                return True
+
+        need_populate = not self.object_data
+        if not self.object_data:
+            if not self.get_object_data():
+                return True
+
+        try:
+            runtime, ticks = self.connection.get_time()
+            self.main_window.set_emulation_time(runtime, ticks)
+            status = self.connection.get_status(self.query_ids)
+        except ConnectionTermiated:
+            self.main_window.clear()
+            self.query_ids = None
+            self.object_data = None
+            return True
+        except Exception as e:
+            print(f"STATUS UPDATE ERROR: {e}, {type(e)}")
+            status = None
+
+        if status is None:
+            return True
+
+        if need_populate:
+            self.main_window.populate_objects(self.object_data, status)
+
+        self.main_window.update_objects(self.object_data, status)
+        return True
+
+    def pause_emulation(self, action, param):
         request = api.Request(api.RequestType.EMULATION_PAUSE)
-        response = self.send_request_with_response(request)
-        if response.status == 0:
-            self.statusbar.push(self.emulation_ctxt, "Emulation paused")
-        else:
-            self.statusbar.push(self.emulation_ctxt,
-                                f"Emulation failed to pause: {os.strerror(response.data)}")
-        GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
+        response = self.connection.send_with_response(request)
+        #if response.status == 0:
+        #    self.statusbar.push(self.emulation_ctxt, "Emulation paused")
+        #else:
+        #    self.statusbar.push(self.emulation_ctxt,
+        #                        f"Emulation failed to pause: {os.strerror(response.data)}")
+        #GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
         return response.data
-    
-    def resume_emulation(self, button):
+
+    def resume_emulation(self, action, param):
         request = api.Request(api.RequestType.EMULATION_RESUME)
-        response = self.send_request_with_response(request)
-        if response.status == 0:
-            self.statusbar.push(self.emulation_ctxt, "Emulation resumed")
-        else:
-            self.statusbar.push(self.emulation_ctxt,
-                                f"Emulation failed to resume: {os.strerror(response.data)}")
-        GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
+        response = self.connection.send_with_response(request)
+        #if response.status == 0:
+        #    self.statusbar.push(self.emulation_ctxt, "Emulation resumed")
+        #else:
+        #    self.statusbar.push(self.emulation_ctxt,
+        #                        f"Emulation failed to resume: {os.strerror(response.data)}")
+        #GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
         return response.data
-    
-    def reset_emulation(self, button):
+
+    def reset_emulation(self, action, param):
         request = api.Request(api.RequestType.EMULATION_RESET)
-        response = self.send_request_with_response(request)
+        response = self.connection.send_with_response(request)
         print(response)
-        if response.status == 0:
-            self.statusbar.push(self.emulation_ctxt, "Emulation reset")
-        else:
-            self.statusbar.push(self.emulation_ctxt,
-                                f"Emulation failed to reset: {os.strerror(response.data)}")
-        GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
+        #if response.status == 0:
+        #    self.statusbar.push(self.emulation_ctxt, "Emulation reset")
+        #else:
+        #    self.statusbar.push(self.emulation_ctxt,
+        #                        f"Emulation failed to reset: {os.strerror(response.data)}")
+        #GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
 
         return response.data
+
+    def save_state(self, dialog, task, user_data):
+        import json
+        file = dialog.save_finish(task)
+        stream = file.replace(None, False, Gio.FileCreateFlags.REPLACE_DESTINATION, None)
+        try:
+            self.pause_emulation(None, None)
+            status = self.connection.get_status(self.query_ids)
+            self.resume_emulation(None, None)
+        except Exception as e:
+            print(e)
+            return
+        stream.write_bytes(GObject.Bytes(bytes(json.dumps(status), "ascii")))
+
+    def show_capture_status_dalog(self, action, param):
+        dialog = Gtk.FileDialog()
+        dialog.set_modal(True)
+        dialog.set_initial_name("vortext_state.json")
+        dialog.save(parent=self.main_window, cancellable=None, callback=self.save_state,
+                     user_data=self)
 
     def exec_cmd(self, klass, obj, cmd, opts):
         print(klass, obj, cmd, opts)
@@ -497,121 +769,22 @@ class MainWindow(Gtk.Window):
         request.object = obj
         request.command = cmd
         request.opts = opts
-        response = self.send_request_with_response(request)
+        response = self.connection.send_with_response(request)
         self.statusbar.push(self.cmd_ctxt, f"Command result: status={response.status}, {response.data}")
         GLib.timeout_add(5000, self.status_bar_clear, self.cmd_ctxt)
         return response.data
-    
-    def get_time(self):
-        request = api.Request(api.RequestType.EMULATION_GET_TIME)
-        response = self.send_request_with_response(request)
-        if response.status == -1:
-            return 0, 0
-        return response.data
 
-    def get_status(self, klass=None):
-        obj_ids = []
-        klass_set = [klass] if klass is not None else [x for x in ObjectTypes]
-        for klass in klass_set:
-            if klass not in self.emulation_data.objects:
-                continue                
-            for obj in self.emulation_data.objects[klass]:
-                obj_ids.append(obj["id"])
-        request = api.Request(api.RequestType.OBJECT_STATUS)
-        request.objects = obj_ids
-        response = self.send_request_with_response(request)
-        if response.status == -1:
-            self.connection = None
-            try:
-                for klass in self.emulation_data.objects:
-                    if klass in self.klass_frames:
-                        self.klass_frames[klass].clear()
-                delattr(self, "emulation_data")
-                self.emulation_data = Namespace()
-            except Exception as e:
-                print(e)
-            self._have_data = False
-        return response.data
+    def on_quit(self, action, param):
+        GLib.source_remove(self.timeout)
+        self.quit()
 
-    def populate_data(self):
-        request = api.Request(api.RequestType.KLASS_LIST)
-        response = self.send_request_with_response(request)
-        if response.status != 0:
-            return False
-        self.emulation_data.klasses = response.data
-        request = api.Request(api.RequestType.OBJECT_LIST)
-        response = self.send_request_with_response(request)
-        if response.status != 0:
-            return False
-        self.emulation_data.objects = response.data
-        self.emulation_data.commands = {}
-        self.emulation_data.events = {}
-        for klass in self.emulation_data.klasses:
-            request = api.Request(api.RequestType.OBJECT_COMMANDS)
-            request.klass = klass
-            response = self.send_request_with_response(request)
-            if response.status != 0:
-                return False
-            self.emulation_data.commands = response.data
-            request.type = api.RequestType.OBJECT_EVENTS
-            response = self.send_request_with_response(request)
-            if response.status != 0:
-                return False
-            self.emulation_data.events = response.data
-        self._have_data = True
-        return True
-
-    def update(self):
-        if self.connection is None:
-            self.connect_to_server()
-            if self.connection is None:
-                return self.run_update
-        need_populate = not self._have_data
-        if not self._have_data:
-            if not self.populate_data():
-                return self.run_update
-        try:
-            runtime, ticks = self.get_time()
-            self.runtime_entry.set_text(str(runtime))
-            self.ticks_entry.set_text(str(ticks))
-            status = self.get_status()
-        except:
-            status = None
-        if status is None:
-            return self.run_update
-        if need_populate:
-            self.populate_grids(status)
-        for klass, objects in self.emulation_data.objects.items():
-            for obj in objects:
-                obj_id = obj["id"]
-                kobj = self.klass_frames[klass].get_object(obj_id)
-                for prop in status[obj_id]:
-                    if klass is ObjectTypes.DISPLAY and prop == "data":
-                        kobj.update(status[obj_id][prop])
-                    else:
-                        value = self.get_data_value(status[obj_id][prop])
-                        kobj.set_value(prop, value)
-        return self.run_update
-    
-    def destroy(self, button):
-        self.run_update = False
-        super().destroy()
-
-style = b"""
-button#reset-button { background-image: none; background-color: red; color: white;}
-"""
 
 def main():
-    css = Gtk.CssProvider.new()
-    css.load_from_data(style)
-    screen = Gdk.Screen.get_default()
-    styleContext = Gtk.StyleContext()
-    styleContext.add_provider_for_screen(screen, css, Gtk.STYLE_PROVIDER_PRIORITY_USER)
-    app = MainWindow()
+    app = MonitorApplication()
     try:
-        Gtk.main()
+        ret = app.run()
     except KeyboardInterrupt:
-        pass
-    return 0
+        ret = app.quit()
+    return ret
 
 sys.exit(main())
