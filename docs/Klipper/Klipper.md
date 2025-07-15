@@ -5,6 +5,9 @@ the Klipper host using the [Klipper MCU protocol](/docs/Klipper/KlipperProtocol.
 It accepts and responds to commands according to the configuration of the
 controller used by the emulation.
 
+The frontend is design to work exclusive with the Klipper host firmware. See
+http://klipper3d.org for more information.
+
 > **WARNING**
 >
 > Please note that using the Klipper frontend with an emulator update frequency of

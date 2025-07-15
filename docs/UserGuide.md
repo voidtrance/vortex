@@ -1,5 +1,5 @@
 # Vortex Emulator User Guide
-## How To Use The Emulator
+## Getting Started
 The first thing that is required in order to use the emulator is a configuration
 file listing all of the objects that the emulator is to create. For further
 information about creating configuration files and object configuration, see the
@@ -18,6 +18,30 @@ object commands, or any data that the instantiated frontend can process.
 
 For detailed information on the emulator's operation, see the 
 [architecture description](/docs/Architecture.md) document.
+
+### Using the `direct` frontend
+The `direct` frontend accepts and executes object commands. Object commands use
+the follwoing format:
+
+```
+<object type>:<object name>:<object command>[:<parameter>=<value>[,<parameter>=<value>]]
+```
+
+The commands are parsed by the frontend, encoded and submitted to the emulator core.
+
+As the name suggests, this is the most direct/lowlevel frontend. The list of available
+object commands is listed in the [Direct Frontend Guide](/docs/frontends/Direct.md#list-of-available-object-commands).
+
+### Using the `gcode` frontend
+As the name implies, the `gcode` frontend accepts GCode commands, converts them to
+the necessary object commands to executed the submitted GCode command, and executes
+them.
+
+The list of supported GCode commands is available at
+[GCode list of supported commands](/docs/frontends/Gcode.md#supported-gcode-commands).
+
+### Using `klipper` frontend
+The Klipper frontend is describe on the [Klipper](/docs/Klipper/Klipper.md) page.
 
 ## Emulator Logging
 The emulator includes a logging facility, which can be used to display log messages
