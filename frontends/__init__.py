@@ -38,7 +38,7 @@ class BaseFrontend:
         self._command_completion_lock = threading.Lock()
         self._command_results = {}
         self._command_results_lock = threading.Lock()
-        self._run = True
+        self._stop = threading.Event()
         self._run_sequential = False
         self._queue = CommandQueue(queue_size)
         self._thread = None
@@ -146,12 +146,11 @@ class BaseFrontend:
     def run(self):
         self._thread = threading.Thread(None, self._run_command_loop,
                                          "frontend")
-        self._run = True
         self._thread.start()
     
     def stop(self):
         if self._thread:
-            self._run = False
+            self._stop.set()
             self._thread.join()
         cmds = list(self._command_completion.keys())
         for cmd in cmds:
@@ -164,7 +163,7 @@ class BaseFrontend:
         return
 
     def _run_command_loop(self):
-        while self._run:
+        while not self._stop.is_set():
             events = self._poll.poll(0.1)
             if not events or self._fd.fileno() not in [e[0] for e in events]:
                 continue
@@ -250,7 +249,7 @@ class BaseFrontend:
             cmd_set = list(cmd_set)
         cmd_set = set(cmd_set)
         completed = set()
-        while self._run and not cmd_set & completed:
+        while not self._stop.is_set() and not cmd_set & completed:
             with self._command_results_lock:
                 completed = set(self._command_results.keys())
         return [self._command_results.pop(i) for i in cmd_set & completed]

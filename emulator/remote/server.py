@@ -31,7 +31,7 @@ class RemoteThread(threading.Thread):
         self._emulation = emulation
         self._controller = emulation.get_controller()
         self._frontend = emulation.get_frontend()
-        self._do_run = False
+        self._stop = threading.Event()
         self._objects = {}
         self._klasses = {x: str(x) for x in ObjectTypes}
         for klass, name, id in self._controller.objects:
@@ -115,9 +115,8 @@ class RemoteThread(threading.Thread):
     def _cmd_complete(self, cmd_id, result, data=None):
         return
     def run(self):
-        self._do_run = True
         data = b""
-        while self._do_run:
+        while not self._stop.is_set():
             try:
                 data += self._conn.recv(1024)
             except ConnectionResetError:
@@ -185,6 +184,7 @@ class RemoteThread(threading.Thread):
                                       "args": [] if args is None else args})
         return events
     def stop(self):
+        self._stop.set()
         try:
             self._conn.shutdown(socket.SHUT_RDWR)
             self._conn.close()
@@ -201,16 +201,15 @@ class RemoteServer(threading.Thread):
         self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         log.debug(f"Binding Vortex server to {self.path}")
         self._socket.bind(self.path)
-        self._monitor_run = False
+        self._stop = threading.Event()
         self._threads = []
         super().__init__(None, None, "vortex-remote-server")
 
     def run(self):
         log.verbose("Starting Vortex server")
         self._socket.listen(self._max_connections)
-        self._monitor_run = True
         child_count = 0
-        while self._monitor_run:
+        while not self._stop.is_set():
             try:
                 _conn, address = self._socket.accept()
                 thread = RemoteThread(child_count, _conn, self._emulation)
@@ -221,7 +220,7 @@ class RemoteServer(threading.Thread):
                 continue
 
     def stop(self):
-        self._monitor_run = False
+        self._stop.set()
         for thread in self._threads:
             thread.stop()
             thread.join()
