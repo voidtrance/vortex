@@ -15,16 +15,22 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#define _GNU_SOURCE
+#include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <stdio.h>
 #include <stdarg.h>
 #include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <utils.h>
+#include <sys/queue.h>
 #include <pthread.h>
+#include <debug.h>
 #include "logging.h"
 
 typedef struct log_token {
@@ -45,10 +51,15 @@ typedef struct {
     bool final;
 } filter_t;
 
+typedef struct log_stream {
+    STAILQ_ENTRY(log_stream) entry;
+    FILE *stream;
+    log_level_t level;
+} log_stream_t;
+
 typedef struct log_setup {
     log_level_t level;
-    char *logfile;
-    FILE *stream;
+    STAILQ_HEAD(log_stream_list, log_stream) log_streams;
     filter_t *filters;
     size_t n_filters;
     bool extended;
@@ -207,7 +218,7 @@ static uint64_t get_elapsed_time_ns(log_setup_t *info) {
     return get_current_time_ns() - info->inital_logtime;
 }
 
-int vortex_logging_init(const char *logfile) {
+int vortex_logging_init(void) {
     if (log_setup)
         return EEXIST;
 
@@ -216,28 +227,13 @@ int vortex_logging_init(const char *logfile) {
         return ENOMEM;
 
     memset(log_setup, 0, sizeof(log_setup_t));
-    log_setup->level = LOG_LEVEL_NOTSET;
-    log_setup->logfile = logfile ? strdup(logfile) : NULL;
+    log_setup->level = LOG_LEVEL_MAX;
     log_setup->filters = NULL;
     log_setup->n_filters = 0;
     log_setup->inital_logtime = get_current_time_ns();
     log_setup->extended = false;
-    log_setup->stream = NULL;
+    STAILQ_INIT(&log_setup->log_streams);
     pthread_mutex_init(&log_setup->lock, NULL);
-
-    if (logfile) {
-        log_setup->stream = fopen(logfile, "a");
-        if (!log_setup->stream) {
-            free(log_setup->logfile);
-            free(log_setup);
-            log_setup = NULL;
-            return errno;
-        }
-    } else {
-        // Default to stdout if no logfile is provided
-        log_setup->stream = stderr;
-    }
-
     return 0;
 }
 
@@ -246,17 +242,6 @@ int vortex_logging_set_extended(bool extended) {
         return EFAULT;
 
     log_setup->extended = extended;
-    return 0;
-}
-
-int vortex_logging_set_level(log_level_t level) {
-    if (!log_setup)
-        return EFAULT;
-
-    if (level < LOG_LEVEL_NOTSET || level >= LOG_LEVEL_MAX)
-        return EINVAL;
-
-    log_setup->level = level;
     return 0;
 }
 
@@ -277,6 +262,91 @@ int vortex_logging_add_filter(const char *filter) {
     status = parse_filter(log_setup, filter);
     pthread_mutex_unlock(&log_setup->lock);
     return status;
+}
+
+int vortex_logging_add_stream(int stream, log_level_t level) {
+    FILE *fstream;
+    log_stream_t *log_stream;
+    char mode[3] = { 0 };
+    int flags;
+
+    if (level <= LOG_LEVEL_NOTSET || level >= LOG_LEVEL_MAX)
+        return EINVAL;
+
+    if (!log_setup)
+        return EFAULT;
+
+    log_stream = malloc(sizeof(*log_stream));
+    if (!log_stream)
+        return ENOMEM;
+
+    flags = fcntl(stream, F_GETFL);
+    if (flags & O_RDONLY)
+        return EACCES;
+
+    if (flags & O_APPEND)
+        mode[0] = 'a';
+    else
+        mode[0] = 'w';
+
+    if (flags & O_RDWR)
+        mode[1] = '+';
+
+    stream = dup(stream);
+    fstream = fdopen(stream, mode);
+    if (!fstream) {
+        free(log_stream);
+        return errno;
+    }
+
+    setvbuf(fstream, NULL, _IONBF, 0);
+    log_stream->stream = fstream;
+    log_stream->level = level;
+
+    pthread_mutex_lock(&log_setup->lock);
+    STAILQ_INSERT_TAIL(&log_setup->log_streams, log_stream, entry);
+    log_setup->level = min(log_setup->level, level);
+    pthread_mutex_unlock(&log_setup->lock);
+    return 0;
+}
+
+static int remove_stream_locked(int stream) {
+    log_stream_t *log_stream_entry;
+    log_stream_t *next;
+
+    if (STAILQ_EMPTY(&log_setup->log_streams))
+        return ENOENT;
+
+    log_stream_entry = STAILQ_FIRST(&log_setup->log_streams);
+    while (log_stream_entry) {
+        next = STAILQ_NEXT(log_stream_entry, entry);
+        if (fileno(log_stream_entry->stream) == stream) {
+            STAILQ_REMOVE(&log_setup->log_streams, log_stream_entry, log_stream,
+                          entry);
+            break;
+        }
+
+        log_stream_entry = next;
+    }
+
+    if (!log_stream_entry)
+        return ENOENT;
+
+    fclose(log_stream_entry->stream);
+    free(log_stream_entry);
+    return 0;
+}
+
+int vortex_logging_remove_stream(int stream) {
+    int ret;
+
+    if (!log_setup)
+        return EFAULT;
+
+    pthread_mutex_lock(&log_setup->lock);
+    ret = remove_stream_locked(stream);
+    pthread_mutex_unlock(&log_setup->lock);
+    return ret;
 }
 
 int vortex_logger_create(const char *name, vortex_logger_t **logger) {
@@ -321,6 +391,11 @@ int vortex_logger_log(vortex_logger_t *logger, log_level_t level,
                       ...) {
     va_list args;
     uint64_t elapsed_time;
+    log_stream_t *log_stream;
+    log_stream_t *next;
+    char string[2048];
+    size_t s = 0;
+    bool do_log;
 
     if (!log_setup || !logger)
         return EFAULT;
@@ -331,34 +406,54 @@ int vortex_logger_log(vortex_logger_t *logger, log_level_t level,
     if (level < log_setup->level)
         return 0;
 
-    pthread_mutex_lock(&log_setup->lock);
-
     /*
      * Filtering is done with the lock held to protect against
      * a filter being added while logging is in progress.
      */
-    if (!filter_record(logger)) {
-        pthread_mutex_unlock(&log_setup->lock);
+    pthread_mutex_lock(&log_setup->lock);
+    do_log = filter_record(logger);
+    pthread_mutex_unlock(&log_setup->lock);
+
+    if (!do_log)
         return 0;
-    }
 
+    /*
+     * The lock is relase so we dont block other threads while the
+     * message is formated. If a filter that would filter out this
+     * message is added while the lock is dropped, it OK.
+     */
     elapsed_time = get_elapsed_time_ns(log_setup);
-    fprintf(log_setup->stream, "%.4f ", elapsed_time / 1000.0);
-
+    s = snprintf(string, sizeof(string), "%.4f ", elapsed_time / 1000.0);
     if (log_setup->extended) {
-        fprintf(log_setup->stream, "[%s] %s:%zu: ", log_level_names[level],
-                filename, line);
+        s += snprintf(string + s, sizeof(string) - s,
+                      "[%s] %s:%zu: ", log_level_names[level], filename, line);
     } else {
-        fprintf(log_setup->stream, "[%s] ", log_level_names[level]);
+        s += snprintf(string + s, sizeof(string) - s, "[%s] ",
+                      log_level_names[level]);
     }
 
     if (logger->prefix)
-        fprintf(log_setup->stream, "%s: ", logger->prefix);
+        s += snprintf(string + s, sizeof(string) - s, "%s: ", logger->prefix);
 
     va_start(args, format);
-    vfprintf(log_setup->stream, format, args);
+    s += vsnprintf(string + s, sizeof(string) - s, format, args);
     va_end(args);
-    fprintf(log_setup->stream, "\n");
+    s += snprintf(string + s, sizeof(string) - s, "\n");
+
+    pthread_mutex_lock(&log_setup->lock);
+    log_stream = STAILQ_FIRST(&log_setup->log_streams);
+    while (log_stream) {
+        next = STAILQ_NEXT(log_stream, entry);
+        if (level < log_stream->level)
+            goto next_stream;
+
+        if (fputs(string, log_stream->stream) < 0)
+            remove_stream_locked(fileno(log_stream->stream));
+
+next_stream:
+        log_stream = next;
+    }
+
     pthread_mutex_unlock(&log_setup->lock);
     return 0;
 }
@@ -372,14 +467,23 @@ void vortex_logger_destroy(vortex_logger_t *logger) {
 }
 
 void vortex_logging_deinit(void) {
+    log_stream_t *log_stream;
+    log_stream_t *next;
+
     if (!log_setup)
         return;
 
-    if (log_setup->stream && log_setup->stream != stderr) {
-        fclose(log_setup->stream);
+    pthread_mutex_lock(&log_setup->lock);
+    for (log_stream = STAILQ_FIRST(&log_setup->log_streams),
+        next = STAILQ_NEXT(log_stream, entry);
+         log_stream; log_stream = next, next = STAILQ_NEXT(next, entry)) {
+        remove_stream_locked(fileno(log_stream->stream));
+        if (!next)
+            break;
     }
 
-    free(log_setup->logfile);
+    pthread_mutex_unlock(&log_setup->lock);
+
     for (size_t i = 0; i < log_setup->n_filters; i++) {
         free_tokens(log_setup->filters[i].tokens,
                     log_setup->filters[i].n_tokens);

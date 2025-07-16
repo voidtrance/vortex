@@ -97,8 +97,7 @@ def main():
     parser = create_arg_parser()
     opts = parser.parse_args()
 
-    logging.init(opts.logfile, opts.extended_logging)
-    logging.set_level(opts.debug)
+    logging.init(opts.debug, opts.logfile, opts.extended_logging)
     logging.add_filter(opts.filter)
 
     config = vortex.emulator.config.Configuration()

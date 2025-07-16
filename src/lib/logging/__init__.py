@@ -16,6 +16,7 @@
 import os
 import atexit
 import errno
+from sys import stderr
 from inspect import currentframe
 import vortex.core.lib.logging._vortex_logging as core_logging
 
@@ -115,46 +116,35 @@ def _init_base_logger():
     if _baseLogger is None:
         _baseLogger = VortexLogger("vortex")
 
-def init(log_file=None, extended_logging=False):
+def init(level, log_file=None, extended_logging=False):
     """
     Initialize the Vortex logging system.
 
+    :param level: The logging level to set. Must be an integer.
     :param log_file: Optional log file path. If None, logging will not be written to a file.
     :param extended_logging: If True, enables extended logging which includes source file and line number.
     :return: 0 on success, or an error code on failure.
     """
-    if log_file:
-        log_file = log_file.encode("ascii")
-    else:
-        log_file = core_logging.ffi.NULL
-    status = core_logging.lib.vortex_logging_init(log_file)
+    level = get_level_value(level)
+
+    status = core_logging.lib.vortex_logging_init()
+    if status != 0:
+        return status
+
+    status = core_logging.lib.vortex_logging_add_stream(stderr.fileno(), level)
     if status != 0:
         return status
     
+    if log_file:
+        log_fd = open(log_file, "a")
+        status = core_logging.lib.vortex_logging_add_stream(log_fd.fileno(), level)
+        if status != 0:
+            return status;
+
     core_logging.lib.vortex_logging_set_extended(extended_logging)
     _init_base_logger()
     atexit.register(core_logging.lib.vortex_logging_deinit)
     return 0
-
-def set_level(level):
-    """
-    Set the logging level for the Vortex logging system.
-
-    :param level: The logging level to set. Must be an integer.
-    :return: 0 on success, or an error code on failure.
-    """
-    if isinstance(level, str):
-        for key, value in LOG_LEVELS.items():
-            if value.lower() == level.lower():
-                level = key
-                break
-    if not isinstance(level, int):
-        raise TypeError("Logging level must be an integer or a valid string representation")
-    
-    if level < NOTSET or level > CRITICAL:
-        raise ValueError(f"Invalid logging level: {level}")
-    
-    return core_logging.lib.vortex_logging_set_level(level)
 
 def add_filter(filter):
     """
@@ -173,6 +163,50 @@ def add_filter(filter):
         if status != 0:
             return status
     return 0
+
+def get_level_value(level):
+    """
+    Convert level into it's numerical value and validate it.
+    Raises TypeError if level is not an integer or a valid
+    logging level name. Raises ValueError if level is not a
+    valid logging level numerical value.
+
+    :param level: The level to check.
+    :return: Logging level numerical value
+    """
+    if isinstance(level, str):
+        for key, value in LOG_LEVELS.items():
+            if value.lower() == level.lower():
+                level = key
+                break
+
+    if not isinstance(level, int):
+        raise TypeError("Logging level must be an integer or a valid string representation")
+
+    if level <= NOTSET or level > CRITICAL:
+        raise ValueError(f"Invalid logging level: {level}")
+
+    return level
+
+def add_output_stream(stream, level):
+    """
+    Add an additional output stream.
+
+    :param stream: An open file descriptor of the stream.
+    :return: 0 on success, or an error code of failure.
+    """
+    level = get_level_value(level)
+
+    if not isinstance(stream, int):
+        return errno.EINVAL
+
+    return core_logging.lib.vortex_logging_add_stream(stream, level)
+
+def remove_output_stream(stream):
+    if not isinstance(stream, int):
+        return errno.EINVAL
+
+    return core_logging.lib.vortex_logging_remove_stream(stream)
 
 def get_level():
     """

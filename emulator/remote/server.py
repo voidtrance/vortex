@@ -16,6 +16,7 @@
 import threading
 import socket
 import pickle
+import time
 import os
 import errno
 import ctypes
@@ -25,6 +26,50 @@ from vortex.core import ObjectTypes
 from vortex.lib.ctypes_helpers import is_simple_char_array
 
 log = logging.getLogger("vortex.core.server")
+
+class RemoteLog(threading.Thread):
+    path = "/tmp/vortex-remote-log"
+    def __init__(self, level):
+        super().__init__(None, None, "vortex-remote-log-thread")
+        self._stop = threading.Event()
+        self._level = level
+        self._path = None
+        self._error = 0
+
+    def run(self):
+        self._path = f"{self.path}-{self.native_id}"
+        if os.path.exists(self._path):
+            os.unlink(self._path)
+        self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._socket.bind(self._path)
+        self._socket.listen(1)
+        self._monitor_run = True
+        _conn, address = self._socket.accept()
+        self._error = logging.add_output_stream(_conn.fileno(), self._level)
+        if self._error != 0:
+            return
+        while not self._stop.is_set():
+            time.sleep(1)
+        self._error = logging.remove_output_stream(_conn.fileno())
+        try:
+            _conn.close()
+        except OSError:
+            # The file description might have been
+            # closed by the logging code.
+            pass
+
+    def get_socket_path(self):
+        return self._path
+
+    def get_error(self):
+        return self._error
+
+    def stop(self):
+        self._stop.set()
+        self._socket.shutdown(socket.SHUT_RDWR)
+        self._socket.close()
+        os.unlink(self._path)
+
 class RemoteThread(threading.Thread):
     def __init__(self, index, connection, emulation):
         self._conn = connection
@@ -33,6 +78,7 @@ class RemoteThread(threading.Thread):
         self._frontend = emulation.get_frontend()
         self._stop = threading.Event()
         self._objects = {}
+        self._log_threads = {}
         self._klasses = {x: str(x) for x in ObjectTypes}
         for klass, name, id in self._controller.objects:
             if klass not in self._objects:
@@ -111,6 +157,22 @@ class RemoteThread(threading.Thread):
             status = self._frontend.wait_for_command(request.command)
             response.status = 0
             response.data = status
+        elif request.type == api.RequestType.OPEN_LOG_STREAM:
+            try:
+                level = logging.get_level_value(request.data)
+                thread = RemoteLog(level)
+                thread.start()
+                self._log_threads[thread.native_id] = thread
+                response.data = {"id": thread.native_id, "path": thread.get_socket_path()}
+            except (TypeError, ValueError):
+                response.status = errno.EINVAL
+        elif request.type == api.RequestType.CLOSE_LOG_STREAM:
+            thread_id = request.data
+            if thread_id in self._log_threads and self._log_threads[thread_id]:
+                self._log_threads[thread_id].stop()
+                self._log_threads.pop(thread_id)
+            else:
+                response.status = errno.ENOENT
         return response
     def _cmd_complete(self, cmd_id, result, data=None):
         return
@@ -185,6 +247,10 @@ class RemoteThread(threading.Thread):
         return events
     def stop(self):
         self._stop.set()
+        for thread in self._log_threads.values():
+            if thread:
+                thread.stop()
+                thread.join()
         try:
             self._conn.shutdown(socket.SHUT_RDWR)
             self._conn.close()

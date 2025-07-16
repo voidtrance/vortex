@@ -36,11 +36,12 @@ const char *log_level_names[LOG_LEVEL_MAX] = { "NOTSET",  "DEBUG",   "VERBOSE",
 
 typedef struct logger vortex_logger_t;
 
-int vortex_logging_init(const char *logfile);
+int vortex_logging_init(void);
 int vortex_logging_set_extended(bool extended);
-int vortex_logging_set_level(log_level_t level);
 log_level_t vortex_logging_get_level(void);
 int vortex_logging_add_filter(const char *filter);
+int vortex_logging_add_stream(int stream, log_level_t level);
+int vortex_logging_remove_stream(int stream);
 int vortex_logger_create(const char *name, vortex_logger_t **logger);
 int vortex_logger_set_prefix(vortex_logger_t *logger, const char *prefix);
 int vortex_logger_log(vortex_logger_t *logger, log_level_t level,
