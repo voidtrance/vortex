@@ -30,11 +30,14 @@ class RequestType(enum.IntEnum):
     EMULATION_GET_TIME = enum.auto()
     EXECUTE_COMMAND = enum.auto()
     COMMAND_STATUS = enum.auto()
+    OPEN_LOG_STREAM = enum.auto()
+    CLOSE_LOG_STREAM = enum.auto()
 
     
 class Request(Namespace):
     def __init__(self, type):
         self.type = type
+        self.data = None
 
 class Response(Namespace):
     def __init__(self, type):

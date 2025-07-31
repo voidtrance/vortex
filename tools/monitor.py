@@ -14,21 +14,24 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import os
 import gi
 import sys
 import time
 import socket
 import pickle
+import threading
 import vortex.emulator.remote.api as api
 from argparse import Namespace
 from vortex.core import ObjectTypes
 from vortex.core.kinematics import AxisType
+from vortex.core.lib.logging import LOG_LEVELS
 gi.require_version("Adw", "1")
 gi.require_version("Gtk", "4.0")
+gi.require_version("Vte", "3.91")
 from gi.repository import Gtk, GLib, GObject, GdkPixbuf, Gdk, Gio, Adw
+from gi.repository import Vte
 
-style = b"""
+style = """
 button#reset-button { background-image: none; background-color: red; color: white;}
 frame > label { font-size: 14pt;}
 """
@@ -56,7 +59,10 @@ class Communicator:
         self.connected = False
 
     def send(self, request):
-        self.socket.sendall(pickle.dumps(request))
+        if self.connected:
+            self.socket.sendall(pickle.dumps(request))
+        else:
+            raise ConnectionTermiated
 
     def receive(self):
         data = b""
@@ -76,6 +82,10 @@ class Communicator:
         except (BrokenPipeError, ConnectionResetError, pickle.UnpicklingError):
             self.disconnect()
             raise ConnectionTermiated()
+        except OSError:
+            response = api.Response(request.type)
+            response.status = -1
+            response.data = None
         return response
 
     def get_time(self):
@@ -92,6 +102,41 @@ class Communicator:
         if response.status == -1:
             return None
         return response.data
+
+class Buffer:
+    def __init__(self):
+        self._buffer = ""
+        self.lock = threading.Lock()
+    def append(self, data):
+        with self.lock:
+            self._buffer += data
+    def consume(self):
+        with self.lock:
+            content = self._buffer
+            self._buffer = ""
+        return content
+
+class LogReader(threading.Thread):
+    def __init__(self, buffer, path):
+        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.socket.connect(path)
+        self.do_run = threading.Event()
+        self.buffer = buffer
+        super().__init__(None, None, f"monitor-log-thread-{self.socket.fileno()}")
+
+    def run(self):
+        while not self.do_run.is_set():
+            try:
+                data = self.socket.recv(8192)
+            except ConnectionResetError:
+                break
+            if not data:
+                break
+            self.buffer.append(data.decode())
+
+    def stop(self):
+        self.do_run.set()
+        self.socket.close()
 
 class KlassCommandOption:
     def __init__(self, klass, name, type):
@@ -196,9 +241,7 @@ class KlassCommands(Gtk.Grid):
         button.connect("clicked", self.exec_cmd, cmd_id, obj_box, cmd_opts)
         self.n_cmds += 1
     def exec_cmd(self, button, cmd_id, combo, cmd_opts):
-        position = combo.get_selected()
-        model = combo.get_model()
-        item = model.get_item(position)
+        item = combo.get_selected_item()
         object_id = item.get_property("object_id")
         opts = {}
         for opt in cmd_opts:
@@ -428,11 +471,27 @@ class KlassFrame(Gtk.Frame):
         for obj_id, obj in self._objects.items():
             yield obj
 
+class DebugLevelObject(GObject.Object):
+    __gtype_name__ = "debug_level_object"
+    def __init__(self, level, name):
+        super().__init__()
+        self._level = level
+        self._name = name
+    @GObject.Property(type=int)
+    def level(self):
+        return self._level
+    @GObject.Property(type=str)
+    def name(self):
+        return self._name
+
 class MonitorWindow(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.set_default_size(1024, 800)
         self.klass_frames = {}
+        self.log_thread = None
+        self.log_thread_id = 0
+        self.debug_buffer = Buffer()
 
         # Create the main horizontal box. This will contain
         # the emulation data box and the button box
@@ -441,13 +500,13 @@ class MonitorWindow(Gtk.ApplicationWindow):
 
         # Create the box for all of the high level emulation
         # data.
-        monitor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        main_box.append(monitor_box)
+        self.monitor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        main_box.append(self.monitor_box)
 
         # Runtime/tick frame
         frame = Gtk.Frame.new()
         frame.set_label_align(0.01)
-        monitor_box.append(frame)
+        self.monitor_box.append(frame)
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3)
         set_widget_margin(box, 5)
         frame.set_child(box)
@@ -462,7 +521,7 @@ class MonitorWindow(Gtk.ApplicationWindow):
 
         # Now, the main object box - selectors and klass frames
         object_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        monitor_box.append(object_box)
+        self.monitor_box.append(object_box)
 
         selector_frame = Gtk.Frame()
         object_box.append(selector_frame)
@@ -499,6 +558,56 @@ class MonitorWindow(Gtk.ApplicationWindow):
             setattr(self, f"{klass}_selector_switch", switch)
         object_box.append(scroll)
 
+        # Below is the code to setup the log window:
+        # frame:
+        #   vbox:
+        #     hbox:
+        #       label
+        #       dropdown
+        #       button
+        #       label
+        #       scrollback spinbutton
+        #     scrolledwindow
+        #       VTE terminal
+        log_frame = Gtk.Frame.new()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        level_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        box.append(level_box)
+        label = Gtk.Label.new("Debug Level")
+        level_box.append(label)
+        set_widget_margin(box, 5)
+        log_frame.set_child(box)
+        self.debug_level_store = Gio.ListStore.new(item_type=DebugLevelObject)
+        def _object_item_setup(factory, list_item):
+            list_item.set_child(Gtk.Label())
+        def _object_item_bind(factory, list_item):
+            label = list_item.get_child()
+            object = list_item.get_item()
+            object.bind_property("name", label, "label", GObject.BindingFlags.SYNC_CREATE)
+        for level, name in LOG_LEVELS.items():
+            self.debug_level_store.append(DebugLevelObject(level, name))
+        item_factory = Gtk.SignalListItemFactory()
+        item_factory.connect("setup", _object_item_setup)
+        item_factory.connect("bind", _object_item_bind)
+        drop_down = Gtk.DropDown(model=self.debug_level_store, factory=item_factory)
+        drop_down.set_expression(Gtk.ClosureExpression.new(str, lambda x: x.get_property("name"), None))
+        drop_down.set_enable_search(True)
+        level_box.append(drop_down)
+        start_log_button = Gtk.ToggleButton(label="Start")
+        start_log_button.connect("toggled", self.start_stop_log, drop_down)
+        level_box.append(start_log_button)
+        label = Gtk.Label.new("Scrollback lines")
+        level_box.append(label)
+        scrollback_spin = Gtk.SpinButton.new_with_range(-1, 10000, 1)
+        level_box.append(scrollback_spin)
+        scrollback_spin.connect("value-changed", self.change_vte_scrollback)
+        scroll = Gtk.ScrolledWindow()
+        box.append(scroll)
+        self.vte = Vte.Terminal.new()
+        self.vte.set_vexpand(True)
+        scrollback_spin.set_value(self.vte.get_scrollback_lines())
+        scroll.set_child(self.vte)
+
         # Create application status bar.
         #self.statusbar = Gtk.Statusbar.new()
 
@@ -532,6 +641,11 @@ class MonitorWindow(Gtk.ApplicationWindow):
                                         "The emulation will be paused during capture.")
         control_box.append(capture_button)
 
+        self.log_button = Gtk.ToggleButton(label="Show Log")
+        self.log_button.connect("toggled", self.open_log, start_log_button, log_frame)
+        self.log_button.set_tooltip_text("Open emulation log output window.")
+        control_box.append(self.log_button)
+
         reset_button = Gtk.Button(label="Reset", name="reset-button")
         reset_button.set_action_name("app.emulation-reset")
         reset_button.set_tooltip_text("Reset the emulation.")
@@ -551,10 +665,58 @@ class MonitorWindow(Gtk.ApplicationWindow):
         else:
             self.klass_frames[klass].set_visible(False)
 
+    def open_log(self, button, start_stop_button, log_frame):
+        if button.get_active():
+            self.monitor_box.append(log_frame)
+            button.set_label("Hide Log")
+        else:
+            start_stop_button.set_active(False)
+            self.monitor_box.remove(log_frame)
+            button.set_label("Show Log")
+
+    def start_stop_log(self, button, drop_down):
+        if button.get_active():
+            item = drop_down.get_selected_item()
+            level = item.get_property("level")
+            request = api.Request(api.RequestType.OPEN_LOG_STREAM)
+            request.data = level
+            try:
+                response = self.get_application().connection.send_with_response(request)
+            except ConnectionTermiated:
+                button.set_active(False)
+                return
+            print(response)
+            if response.status == 0:
+                self.log_thread_id = response.data["id"]
+                self.log_thread = LogReader(self.debug_buffer, response.data["path"])
+                self.log_thread.start()
+                button.set_label("Stop")
+            else:
+                button.set_active(False)
+        else:
+            if self.log_thread_id:
+                request = api.Request(api.RequestType.CLOSE_LOG_STREAM)
+                request.data = self.log_thread_id
+                try:
+                    response = self.get_application().connection.send_with_response(request)
+                    print(response)
+                except ConnectionTermiated:
+                    return
+                if self.log_thread:
+                    self.log_thread.stop()
+                    button.set_label("Start")
+
+    def insert_and_scroll(self, content):
+        content = content.replace("\n", "\n\r")
+        self.vte.feed(content.encode("utf-8"))
+
+    def change_vte_scrollback(self, spinbutton):
+        count = spinbutton.get_value_as_int()
+        self.vte.set_scrollback_lines(count)
+
     def set_emulation_time(self, runtime, ticks):
         self.runtime_entry.set_text(str(runtime))
         self.ticks_entry.set_text(str(ticks))
-
 
     def populate_objects(self, objects, data):
         for klass in objects.objects:
@@ -586,6 +748,9 @@ class MonitorWindow(Gtk.ApplicationWindow):
                 obj_id = obj["id"]
                 kobj = self.klass_frames[klass].get_object(obj_id)
                 kobj.update(status[obj_id])
+        if self.log_thread and self.log_thread.is_alive():
+            content = self.debug_buffer.consume()
+            self.insert_and_scroll(content)
 
     def set_object_value_precision(self, spinbutton):
         precision = spinbutton.get_value_as_int()
@@ -598,8 +763,16 @@ class MonitorWindow(Gtk.ApplicationWindow):
             frame.clear()
             switch = getattr(self, f"{klass}_selector_switch")
             switch.set_active(False)
-
-        
+        request = api.Request(api.RequestType.CLOSE_LOG_STREAM)
+        request.data = self.log_thread_id
+        try:
+            self.get_application().connection.send_with_response(request)
+        except ConnectionTermiated:
+            pass
+        if self.log_thread:
+            self.log_thread.stop()
+            self.log_thread.join()
+        self.log_button.set_active(False)
 
 class MonitorApplication(Adw.Application):
     def __init__(self, *args, **kwargs):
@@ -610,7 +783,7 @@ class MonitorApplication(Adw.Application):
         self.object_data = None
         self.connection = Communicator()
         self.css = Gtk.CssProvider.new()
-        self.css.load_from_data(style)
+        self.css.load_from_string(style)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), self.css,
                                                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
@@ -776,6 +949,7 @@ class MonitorApplication(Adw.Application):
 
     def on_quit(self, action, param):
         GLib.source_remove(self.timeout)
+        self.main_window.clear()
         self.quit()
 
 
