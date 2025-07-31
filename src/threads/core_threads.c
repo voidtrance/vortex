@@ -70,6 +70,7 @@ typedef struct {
     struct timespec start;
     uint64_t controller_ticks;
     uint64_t controller_runtime;
+    core_thread_data_t *time_control_thread;
     int32_t trigger;
 } core_time_data_t;
 
@@ -82,6 +83,7 @@ static core_time_data_t global_time_data = {
     .controller_ticks = 0,
     .controller_runtime = 0,
     .trigger = TIMER_TRIGGER_WAKE,
+    .time_control_thread = NULL,
 };
 
 #define DEFAULT_SCHED_POLICY SCHED_FIFO
@@ -405,6 +407,8 @@ int core_thread_create(core_thread_type_t type, core_thread_args_t *args) {
             thread->args.kmod_fd = fd;
             thread->thread_func = core_time_control_thread_kmod;
         }
+
+        global_time_data.time_control_thread = thread;
         break;
     case CORE_THREAD_TYPE_TIMER:
         thread->thread_func = core_timer_thread;
@@ -463,6 +467,17 @@ int core_threads_start(void) {
 
 void core_threads_stop(void) {
     core_thread_data_t *thread;
+
+    /*
+     * If the time control thread is paused, it has
+     * to be resumed first because all other threads
+     * need to be woken up from the futex wait so they
+     * can properly exit.
+     */
+    if (get_value(global_time_data.time_control_thread->args.control) ==
+        THREAD_CONTROL_PAUSED)
+        set_value(global_time_data.time_control_thread->args.control,
+                  THREAD_CONTROL_RUN);
 
     /*
      * Stop all threads except the time control one.
@@ -548,25 +563,18 @@ uint64_t core_get_runtime(void) {
 }
 
 int core_threads_pause(void) {
-    core_thread_data_t *thread;
     core_thread_data_t *time_thread = NULL;
 
-    STAILQ_FOREACH(thread, &core_threads, entry) {
-        if (thread->type == CORE_THREAD_TYPE_UPDATE) {
-            time_thread = thread;
-            break;
-        }
-    }
-
+    time_thread = global_time_data.time_control_thread;
     if (!time_thread)
         return ENOENT;
 
-    if (thread->args.kmod_fd) {
-        if (ioctl(thread->args.kmod_fd, VORTEX_CMD_PAUSE, 0) == -1)
+    if (time_thread->args.kmod_fd) {
+        if (ioctl(time_thread->args.kmod_fd, VORTEX_CMD_PAUSE, 0) == -1)
             return errno;
     }
 
-    set_value(thread->args.control, THREAD_CONTROL_PAUSE);
+    set_value(time_thread->args.control, THREAD_CONTROL_PAUSE);
 
     /* Wait for pause */
     while (1) {
@@ -578,25 +586,18 @@ int core_threads_pause(void) {
 }
 
 int core_threads_resume(void) {
-    core_thread_data_t *thread;
     core_thread_data_t *time_thread = NULL;
 
-    STAILQ_FOREACH(thread, &core_threads, entry) {
-        if (thread->type == CORE_THREAD_TYPE_UPDATE) {
-            time_thread = thread;
-            break;
-        }
-    }
-
+    time_thread = global_time_data.time_control_thread;
     if (!time_thread)
         return ENOENT;
 
-    if (get_value(thread->args.control) != THREAD_CONTROL_PAUSED)
+    if (get_value(time_thread->args.control) != THREAD_CONTROL_PAUSED)
         return EINVAL;
 
-    set_value(thread->args.control, THREAD_CONTROL_RUN);
-    if (thread->args.kmod_fd) {
-        if (ioctl(thread->args.kmod_fd, VORTEX_CMD_RESUME, 0) == -1)
+    set_value(time_thread->args.control, THREAD_CONTROL_RUN);
+    if (time_thread->args.kmod_fd) {
+        if (ioctl(time_thread->args.kmod_fd, VORTEX_CMD_RESUME, 0) == -1)
             return errno;
     }
 
@@ -604,27 +605,21 @@ int core_threads_resume(void) {
 }
 
 int core_threads_reset(void) {
-    core_thread_data_t *thread;
     core_thread_data_t *time_thread = NULL;
 
-    STAILQ_FOREACH(thread, &core_threads, entry) {
-        if (thread->type == CORE_THREAD_TYPE_UPDATE) {
-            time_thread = thread;
-            break;
-        }
-    }
-
+    time_thread = global_time_data.time_control_thread;
     if (!time_thread)
         return ENOENT;
-    if (get_value(thread->args.control) != THREAD_CONTROL_PAUSED)
+
+    if (get_value(time_thread->args.control) != THREAD_CONTROL_PAUSED)
         return EINVAL;
 
-    if (thread->args.kmod_fd) {
-        if (ioctl(thread->args.kmod_fd, VORTEX_CMD_RESET, 0) == -1)
+    if (time_thread->args.kmod_fd) {
+        if (ioctl(time_thread->args.kmod_fd, VORTEX_CMD_RESET, 0) == -1)
             return errno;
     } else {
         clock_gettime(THREAD_CLOCK, &global_time_data.start);
-        thread->args.pause_offset = 0;
+        time_thread->args.pause_offset = 0;
     }
 
     return 0;
