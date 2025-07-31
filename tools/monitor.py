@@ -34,6 +34,9 @@ from gi.repository import Vte
 style = """
 button#reset-button { background-image: none; background-color: red; color: white;}
 frame > label { font-size: 14pt;}
+toastoverlay > toast { background-color: gray; border-radius: 20px; }
+toastoverlay > toast > widget { margin: 10px; }
+banner { background-color: #22346e; }
 """
 
 class ConnectionTermiated(Exception):
@@ -493,15 +496,26 @@ class MonitorWindow(Gtk.ApplicationWindow):
         self.log_thread_id = 0
         self.debug_buffer = Buffer()
 
+        # The toast overlay will be used to display notifications
+        self.toasts = Adw.ToastOverlay()
+        self.set_child(self.toasts)
+
         # Create the main horizontal box. This will contain
         # the emulation data box and the button box
         main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         set_widget_margin(main_box, 5)
+        self.toasts.set_child(main_box)
 
         # Create the box for all of the high level emulation
         # data.
         self.monitor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         main_box.append(self.monitor_box)
+
+        self.banner = Adw.Banner.new("Emulation paused")
+        self.banner.set_button_label("Resume")
+        self.banner.set_action_name("app.emulation-resume")
+        self.monitor_box.append(self.banner)
+
 
         # Runtime/tick frame
         frame = Gtk.Frame.new()
@@ -608,9 +622,6 @@ class MonitorWindow(Gtk.ApplicationWindow):
         scrollback_spin.set_value(self.vte.get_scrollback_lines())
         scroll.set_child(self.vte)
 
-        # Create application status bar.
-        #self.statusbar = Gtk.Statusbar.new()
-
         button_boxes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         main_box.append(button_boxes)
 
@@ -629,11 +640,6 @@ class MonitorWindow(Gtk.ApplicationWindow):
         pause_button.set_action_name("app.emulation-pause")
         pause_button.set_tooltip_text("Pause the emulation.")
         control_box.append(pause_button)
-
-        resume_button = Gtk.Button(label="Resume")
-        resume_button.set_action_name("app.emulation-resume")
-        resume_button.set_tooltip_text("Resume the emulation.")
-        control_box.append(resume_button)
 
         capture_button = Gtk.Button(label="Capture State")
         capture_button.set_action_name("app.emulation-capture")
@@ -656,8 +662,6 @@ class MonitorWindow(Gtk.ApplicationWindow):
         quit_button = Gtk.Button.new_with_label("Quit")
         quit_button.set_action_name("app.quit")
         quit_button_box.append(quit_button)
-
-        self.set_child(main_box)
         
     def object_frame_toggle(self, switch, gparam, klass):
         if switch.get_active():
@@ -685,7 +689,7 @@ class MonitorWindow(Gtk.ApplicationWindow):
             except ConnectionTermiated:
                 button.set_active(False)
                 return
-            print(response)
+            self.notify(repr(response))
             if response.status == 0:
                 self.log_thread_id = response.data["id"]
                 self.log_thread = LogReader(self.debug_buffer, response.data["path"])
@@ -699,7 +703,7 @@ class MonitorWindow(Gtk.ApplicationWindow):
                 request.data = self.log_thread_id
                 try:
                     response = self.get_application().connection.send_with_response(request)
-                    print(response)
+                    self.notify(repr(response))
                 except ConnectionTermiated:
                     return
                 if self.log_thread:
@@ -758,6 +762,15 @@ class MonitorWindow(Gtk.ApplicationWindow):
             for obj in frame:
                 obj.precision = precision
 
+    def set_paused_state(self, paused):
+        self.banner.set_revealed(paused)
+
+    def notify(self, msg, action=None):
+        msg = msg.replace("<", "&lt;").replace(">", "&gt;")
+        toast = Adw.Toast.new(msg)
+        toast.set_timeout(3)
+        self.toasts.add_toast(toast)
+
     def clear(self):
         for klass, frame in self.klass_frames.items():
             frame.clear()
@@ -773,6 +786,7 @@ class MonitorWindow(Gtk.ApplicationWindow):
             self.log_thread.stop()
             self.log_thread.join()
         self.log_button.set_active(False)
+        self.banner.set_revealed(False)
 
 class MonitorApplication(Adw.Application):
     def __init__(self, *args, **kwargs):
@@ -868,7 +882,7 @@ class MonitorApplication(Adw.Application):
             self.object_data = None
             return True
         except Exception as e:
-            print(f"STATUS UPDATE ERROR: {e}, {type(e)}")
+            self.notify(f"STATUS UPDATE ERROR: {e}, {type(e)}")
             status = None
 
         if status is None:
@@ -883,36 +897,20 @@ class MonitorApplication(Adw.Application):
     def pause_emulation(self, action, param):
         request = api.Request(api.RequestType.EMULATION_PAUSE)
         response = self.connection.send_with_response(request)
-        #if response.status == 0:
-        #    self.statusbar.push(self.emulation_ctxt, "Emulation paused")
-        #else:
-        #    self.statusbar.push(self.emulation_ctxt,
-        #                        f"Emulation failed to pause: {os.strerror(response.data)}")
-        #GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
+        self.main_window.set_paused_state(True)
         return response.data
 
     def resume_emulation(self, action, param):
+        self.main_window.set_paused_state(False)
         request = api.Request(api.RequestType.EMULATION_RESUME)
         response = self.connection.send_with_response(request)
-        #if response.status == 0:
-        #    self.statusbar.push(self.emulation_ctxt, "Emulation resumed")
-        #else:
-        #    self.statusbar.push(self.emulation_ctxt,
-        #                        f"Emulation failed to resume: {os.strerror(response.data)}")
-        #GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
         return response.data
 
     def reset_emulation(self, action, param):
         request = api.Request(api.RequestType.EMULATION_RESET)
         response = self.connection.send_with_response(request)
-        print(response)
-        #if response.status == 0:
-        #    self.statusbar.push(self.emulation_ctxt, "Emulation reset")
-        #else:
-        #    self.statusbar.push(self.emulation_ctxt,
-        #                        f"Emulation failed to reset: {os.strerror(response.data)}")
-        #GLib.timeout_add(5000, self.status_bar_clear, self.emulation_ctxt)
-
+        self.main_window.notify("Emulation reset")
+        self.main_window.notify(repr(response))
         return response.data
 
     def save_state(self, dialog, task, user_data):
@@ -936,15 +934,14 @@ class MonitorApplication(Adw.Application):
                      user_data=self)
 
     def exec_cmd(self, klass, obj, cmd, opts):
-        print(klass, obj, cmd, opts)
+        self.main_window.notify(f"Executiong cmd: {cmd} ({opts}) for obj {klass}:{obj}")
         request = api.Request(api.RequestType.EXECUTE_COMMAND)
         request.klass = klass
         request.object = obj
         request.command = cmd
         request.opts = opts
         response = self.connection.send_with_response(request)
-        self.statusbar.push(self.cmd_ctxt, f"Command result: status={response.status}, {response.data}")
-        GLib.timeout_add(5000, self.status_bar_clear, self.cmd_ctxt)
+        self.main_window.notify(repr(response))
         return response.data
 
     def on_quit(self, action, param):
