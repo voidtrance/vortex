@@ -213,10 +213,10 @@ class Controller(core.VortexCore):
 
     def _load_virtual_objects(self):
         vobjs = {}
-        mod_base = "vortex.controllers.objects"
-        vobj_base = importlib.import_module(f"{mod_base}.vobj_base")
+        mod_base = "vortex.controllers.objects.virtual"
+        vobj_base = importlib.import_module(f"{mod_base}.base")
         base_class = getattr(vobj_base, "VirtualObjectBase")
-        vobj_path = pathlib.Path(__file__).parent / "objects"
+        vobj_path = pathlib.Path(__file__).parent / "objects/virtual"
         for filename in vobj_path.glob("*.py"):
             vobj_module = importlib.import_module(f"{mod_base}.{filename.stem}")
             members = inspect.getmembers(vobj_module, inspect.isclass)

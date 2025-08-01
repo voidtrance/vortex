@@ -29,7 +29,7 @@ output_file = sys.argv[3]
 def find_virtual_objects():
     objects = []
     object_reg = re.compile(r'^class (?P<klass>[^\(]+)\([^.]*.?VirtualObjectBase\):$', re.MULTILINE)
-    for file in (top / "controllers/objects").iterdir():
+    for file in (top / "controllers/objects/virtual").iterdir():
         if file.is_dir():
             continue
         with open(file, 'r') as fd:

@@ -13,5 +13,5 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['object_defs.py'], subdir: 'vortex/controllers/objects')
-subdir('virtual')
+py.install_sources(['base.py', 'dpin.py', 'display.py', 'encoder.py'],
+                   subdir: 'vortex/controllers/objects/virtual')

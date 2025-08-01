@@ -173,7 +173,7 @@ def gen_header(target, name, defs, structs):
 def gen_vobj_defs(root, target, name):
     vobj_defs = {}
     structs = {}
-    for filename in (root / "controllers/objects").iterdir():
+    for filename in (root / "controllers/objects/virtual").iterdir():
         if filename.suffix != ".py":
             continue
         with open(filename, 'r') as fd:

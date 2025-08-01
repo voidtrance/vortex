@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import vortex.controllers.objects.vobj_base as vobj
+import vortex.controllers.objects.virtual.base as vobj
 from vortex.core import ObjectTypes, PIN_NAME_SIZE
 import vortex.core.lib.logging as logging
 import ctypes
