@@ -438,11 +438,15 @@ class Controller(core.VortexCore):
         command = self._Command(*[x for x in commands if x[0] == cmd_id][0])
         if command.opts is None:
             return None
-        opts_defaults = command.defaults
         opts_struct = command.opts()
-        # TODO: Use the default values to initial the structs
+        # Set command options default values
+        opts_defaults = command.defaults
+        opts_dict = {}
+        for i, option in enumerate(opts_struct._fields_):
+            opts_dict[option[0]] = opts_defaults[i]
+        opts_dict.update(opts)
         try:
-            vortex.lib.ctypes_helpers.fill_ctypes_struct(opts_struct, opts)
+            vortex.lib.ctypes_helpers.fill_ctypes_struct(opts_struct, opts_dict)
         except TypeError as e:
             self.log.error(f"Failed to convert command options: {str(e)}")
         if not klass_def.virtual:

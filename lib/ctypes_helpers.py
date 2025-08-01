@@ -76,7 +76,8 @@ def fill_ctypes_struct(instance, data):
     elif issubclass(t, ctypes.Union):
         logging.error("Unions are not supported in object configuration")
     elif issubclass(t, ctypes.Array):
-        if not isinstance(data, list) and not isinstance(data, bytes):
+        if not isinstance(data, list) and not isinstance(data, bytes) and \
+            not isinstance(data, tuple):
             raise TypeError("'data' should be a list")
         for i, val in enumerate(data):
             if is_simple(t._type_):
@@ -90,7 +91,10 @@ def fill_ctypes_struct(instance, data):
         data = [data] if not isinstance(data, list) else data
         arr = (instance._type_ * (len(data) + 1))()
         fill_ctypes_struct(arr, data)
-        arr[-1] = None
+        if is_simple_pointer(instance._type_):
+            arr[-1] = None
+        else:
+            arr[-1] = 0
         instance.contents = arr
     else:
         raise TypeError(f"Unknown ctypes type {t}")
@@ -114,7 +118,9 @@ def parse_ctypes_struct(instance):
             return list(instance)
         return [parse_ctypes_struct(x) for x in instance]
     elif is_simple_pointer(instance):
-        return instance.contents
+        if instance:
+            return instance.contents
+        return 0
     return data
 
 

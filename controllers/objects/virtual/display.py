@@ -46,8 +46,8 @@ class DisplayState(ctypes.Structure):
 class Display(vobj.VirtualObjectBase):
     type = ObjectTypes.DISPLAY
     commands = [(0, "read", DisplayReadArgs, None, (0,)),
-                (1, "write", DisplayWriteArgs, None, (0,)),
-                (2, "reset", DisplayResetArgs, None, (0,))]
+                (1, "write", DisplayWriteArgs, None, (0, 256, [0] * 256)),
+                (2, "reset", DisplayResetArgs, None, None)]
     state  = DisplayState
     def get_status(self):
         return vars(self.config)
