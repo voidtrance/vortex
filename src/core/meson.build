@@ -29,6 +29,7 @@ py.extension_module('_vortex_core',
                     link_args: ['-Wl,-rpath=$ORIGIN/lib',
                                 '-Wl,-rpath=$ORIGIN/threads',
                                 '-Wl,-rpath=$ORIGIN/kinematics',
-                                '-Wl,-rpath=$ORIGIN/lib/atomics'],)
+                                '-Wl,-rpath=$ORIGIN/lib/atomics',
+                                '-Wl,-rpath=$ORIGIN/lib/logging'],)
                     #install_rpath: '$ORIGIN/lib')
 py.install_sources(['__init__.py'], subdir: 'vortex/core')
