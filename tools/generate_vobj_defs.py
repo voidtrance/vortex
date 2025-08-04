@@ -123,6 +123,7 @@ def gen_commands(fd, name, commands, structs, constants):
                 #print(ast.dump(field))
                 if not isinstance(field, ast.Tuple):
                     return -1
+                #print(ast.dump(field))
                 if isinstance(field.elts[1], ast.Attribute):
                     fd.write(f"\t{get_type(field.elts[1].attr[2:])} {field.elts[0].value};\n")
                 elif isinstance(field.elts[1], ast.BinOp):
@@ -133,6 +134,10 @@ def gen_commands(fd, name, commands, structs, constants):
                             size = f"{name}_{size}".upper()
                         fd.write(f"[{size}]")
                     fd.write(";\n")
+                elif isinstance(field.elts[1], ast.Call):
+                    if field.elts[1].func.attr == "POINTER":
+                        ptype = get_type(field.elts[1].args[0].attr[2:])
+                        fd.write(f"\t{ptype} *{field.elts[0].value};\n")
         fd.write("};\n\n")
     return 0
 
@@ -140,6 +145,7 @@ def gen_status(fd, name, structs, constants):
     fd.write("typedef struct {\n")
     c_arg_name = f"{name.lower()}_state"
     arg_name = "".join([x.capitalize() for x in c_arg_name.split("_")])
+    #print(arg_name, structs)
     if arg_name not in structs:
         return -1
     node = structs[arg_name]
@@ -164,6 +170,10 @@ def gen_status(fd, name, structs, constants):
                         size = f"{name}_{size}".upper()
                     fd.write(f"[{size}]")
                 fd.write(";\n")
+            elif isinstance(field.elts[1], ast.Call):
+                if field.elts[1].func.attr == "POINTER":
+                    ptype = get_type(field.elts[1].args[0].attr[2:])
+                    fd.write(f"\t{ptype} *{field.elts[0].value};\n")
     fd.write(f"}} {name.lower()}_status_t;\n\n")
     return 0
 
