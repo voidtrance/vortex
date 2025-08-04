@@ -303,3 +303,19 @@ The PWM object emulates PWM control done by the HW controller (instead of softwa
 | Setting | Type | Description |
 | :- | :-: | :- |
 | pin | string | The name of the pin controlled by the PWM object. |
+
+### Neopixel
+```
+[neopixel LEDS]
+type:
+count:
+pin:
+```
+
+Emulate a set of Neopixel/WS2812 LEDs.
+
+| Setting | Type | Description |
+| :--- | :---: | :--- |
+| type | string | The type of the LEDs (RGB, GRB, RGBW, etc.) |
+| count | integer | The number of LEDs in the chain. |
+| pin | string | The pin used to send color data to the LEDs. |

@@ -412,6 +412,15 @@ def generate_kinematics_config(kconfig : Type[configparser.ConfigParser],
         econfig.set("kinematics", "tower_angle", ",".join(tower_angles))
     return True
 
+def generate_neopixel_config(section : str, kconfig : Type[configparser.ConfigParser],
+                             econfig : Type[configparser.ConfigParser]) -> bool:
+    print(f"Generating neopixel config for section '{section}...")
+    econfig.add_section(section)
+    econfig.set(section, "pin", kconfig.get(section, "pin"))
+    econfig.set(section, "count", kconfig.get(section, "chain_count"))
+    econfig.set(section, "type", kconfig.get(section, "color_order"))
+    return True
+
 KLIPPER_SECTION_HANDLERS = {
     "stepper" : generate_stepper_config,
     "extruder": generate_heater_config,
@@ -420,6 +429,7 @@ KLIPPER_SECTION_HANDLERS = {
     "temperature_sensor": generate_thermistor_config,
     "button": generate_digital_pin_config,
     "display": generate_display_config,
+    "neopixel": generate_neopixel_config,
 }
 
 parser = argparse.ArgumentParser()

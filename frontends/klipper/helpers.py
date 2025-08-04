@@ -23,7 +23,7 @@ from vortex.lib.utils import div_round_up
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
 __all__ = ["AnalogPin", "DigitalPin", "HeaterPin", "EndstopPin",
-           "Stepper", "TRSync", "SPI", "Buttons", "PWM"]
+           "Stepper", "TRSync", "SPI", "Buttons", "PWM", "Neopixel"]
 
 class HelperException(Exception):
     pass
@@ -773,3 +773,27 @@ class PWM(HelperBase):
         return self.waketime
     def event_end(self, ticks):
         self.frontend.shutdown("Missed scheduling of next PWM event")
+
+class Neopixel(HelperBase):
+    def __init__(self, frontend, queue, oid, obj_id, klass, name, data_size):
+        super().__init__(frontend, queue, oid, obj_id, klass, name)
+        self._log = logging.getLogger(f"vortex.frontend.neopixel.{self.name}")
+        self._log.add_prefix(f"[{self.oid}]")
+        self.data_size = data_size
+        self.data = [0] * self.data_size
+        status = self.frontend.query_object([obj_id])[obj_id]
+        self.unit_len = len(status["type"])
+
+    def update(self, position, data):
+        if position < 0 or position + len(data) > len(self.data):
+            return -1
+        self.data[position:position+len(data)] = list(data)
+        return 0
+
+    def send(self):
+        for i in range(0, len(self.data), self.unit_len):
+            cmd_id = self.frontend.queue_command(self.klass, self.name, "set",
+                                                 {"index": i / self.unit_len,
+                                                  "color":  self.data[i:i+self.unit_len]})
+            completion = self.frontend.wait_for_command(cmd_id)
+        return completion[0][0]

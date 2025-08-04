@@ -374,3 +374,33 @@ The encoder object does not support any events.
 | pin_a | The name of the first control pin. |
 | pin_b | The name of the second control pin. |
 | state | A dictionary containing the current state of both pins. |
+
+### Neopixel
+
+The Neopixel object is a simple object that emulates multi-color, individually-addressable LEDs.
+The object can emulate various color orders/types (RGB, GRB, RGBW, etc.).
+
+A single neopixel object can support up to 1024 LEDs.
+
+#### Available Commands
+
+<table>
+  <thead><tr><th colspan=3>set index=&lt;int&gt; color=[r,g,b,w]</th></tr></thead>
+  <tr><td>Description</td><td colspan=2>Set the color of one of the LEDs in the set/chain</td></tr>
+  <tr><td rowspan=2>Arguments</td><td>index</td><td>The position of the LED.</td></tr>
+  <tr><td>color</td><td>The color for the LED. This is a list of 4 values in the range 0-255
+  representing the four color channels Red, Green, Blue, and White. For LEDs that do not have
+  white diode, the White value can </td></tr>
+</table>
+
+#### Events
+
+The neopixel object does not support any events.
+
+#### Status
+
+| Field | Description |
+| :- | :- |
+| count | The number of LEDs in the set/chain. |
+| type | The type of the LEDs (RGB, GRB, RGBW, etc.) |
+| colors | A list of collor sets for each of the LEDs in the chain. |

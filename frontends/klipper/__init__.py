@@ -200,6 +200,9 @@ class KlipperFrontend(BaseFrontend):
         if self.find_object(ObjectTypes.DISPLAY) is not None:
             self._add_commands(proto.KLIPPER_PROTOCOL.buttons)
 
+        if self.query_hw("NEOPIXEL_COUNT"):
+            self._add_commands(proto.KLIPPER_PROTOCOL.neopixel)
+
         self.identity_resp = json.dumps(self.identity).encode()
         # Create local command maps
         self.mp.process_identify(self.identity_resp, False)
@@ -577,6 +580,27 @@ class KlipperFrontend(BaseFrontend):
 
     def set_pwm_out(self, cmd, oid, pin, cycle_ticks, value):
         return self.config_pwm_out(cmd, oid, pin, cycle_ticks, value, 0, 0)
+
+    def config_neopixel(self, cmd, oid, pin, data_size, bit_max_ticks, reset_min_ticks):
+        obj_id, klass = self.find_object_from_pin(pin, ObjectTypes.NEOPIXEL)
+        if obj_id is None:
+            return False
+        name = self.get_object_name(klass, obj_id)
+        neopixel = Neopixel(self, self.move_queue, oid, obj_id, klass, name, data_size)
+        self._oid_map[oid] = neopixel
+        return True
+
+    def neopixel_update(self, cmd, oid, pos, data):
+        neopixel = self._oid_map[oid]
+        if neopixel.update(pos, data):
+            return False
+        return True
+
+    def neopixel_send(self, cmd, oid):
+        neopixel = self._oid_map[oid]
+        status = neopixel.send()
+        self.respond(proto.ResponseTypes.RESPONSE, cmd, oid=oid, success=status)
+        return True
 
     def _process_command(self, data):
         self.serial_data += data

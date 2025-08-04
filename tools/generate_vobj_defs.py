@@ -92,7 +92,14 @@ def get_size(node):
         size.append(node.right.value)
     return f_name, size
 
-def gen_commands(fd, name, commands, structs):
+def gen_constants(fd, name, constants):
+    for const, value in constants.items():
+        const = f"{name}_{const}".upper()
+        fd.write(f"#define {const} {value}\n")
+    fd.write("\n")
+    return 0
+
+def gen_commands(fd, name, commands, structs, constants):
     fd.write("enum {\n")
     for cmd in commands:
         fd.write(f"\t{name.upper()}_{cmd[1].upper()} = {cmd[0]},\n")
@@ -122,12 +129,14 @@ def gen_commands(fd, name, commands, structs):
                     f_type, sizes = get_size(field.elts[1])
                     fd.write(f"\t{get_type(f_type[2:])} {field.elts[0].value}")
                     for size in sizes:
+                        if size in constants:
+                            size = f"{name}_{size}".upper()
                         fd.write(f"[{size}]")
                     fd.write(";\n")
         fd.write("};\n\n")
     return 0
 
-def gen_status(fd, name, structs):
+def gen_status(fd, name, structs, constants):
     fd.write("typedef struct {\n")
     c_arg_name = f"{name.lower()}_state"
     arg_name = "".join([x.capitalize() for x in c_arg_name.split("_")])
@@ -151,6 +160,8 @@ def gen_status(fd, name, structs):
                 #print(f_type, sizes)
                 fd.write(f"\t{get_type(f_type[2:])} {field.elts[0].value}")
                 for size in sizes:
+                    if size in constants:
+                        size = f"{name}_{size}".upper()
                     fd.write(f"[{size}]")
                 fd.write(";\n")
     fd.write(f"}} {name.lower()}_status_t;\n\n")
@@ -161,10 +172,12 @@ def gen_header(target, name, defs, structs):
     with open(header, 'w') as out:
         out.write(VOBJ_DEF_H_PREFIX)
         for obj in defs:
-            ret = gen_commands(out, obj, defs[obj]["commands"], structs)
+            ret = gen_constants(out, obj, defs[obj]["constants"])
+            ret = gen_commands(out, obj, defs[obj]["commands"], structs,
+                               defs[obj]["constants"])
             if ret != 0:
                 return ret
-            ret = gen_status(out, obj, structs)
+            ret = gen_status(out, obj, structs, defs[obj]["constants"])
             if ret != 0:
                 return ret
         out.write(VOBJ_DEF_H_SUFFIX)
@@ -178,7 +191,20 @@ def gen_vobj_defs(root, target, name):
             continue
         with open(filename, 'r') as fd:
             tree = ast.parse(fd.read(), filename)
+        constants = {}
         for node in ast.walk(tree):
+            if isinstance(node, ast.Module):
+                # This is a bit hacky since there is not clear
+                # way to identify Python constants.
+                # What the code does is iterate over the children
+                # of the Module node and collect all Assign nodes.
+                for child in node.body:
+                    if isinstance(child, ast.Assign) and \
+                        isinstance(child.value, ast.Constant):
+                        #print(ast.dump(child))
+                        for assign_target in child.targets:
+                            constants[assign_target.id] = child.value.value
+                continue
             if not is_vobj(node) and not is_struct(node):
                 continue
             if is_struct(node):
@@ -205,11 +231,7 @@ def gen_vobj_defs(root, target, name):
                         vobj_defs[obj_type]["commands"].append(c)
                 else:
                     vobj_defs[obj_type]["status"] = b.value.id
-
-                #if b.targets[0].id == "commands":
-                #    vobj_defs[obj_type]["commands"] = c
-                #else:
-
+            vobj_defs[obj_type]["constants"] = constants
     return gen_header(target, name, vobj_defs, structs)
 
 

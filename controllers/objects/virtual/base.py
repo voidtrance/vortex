@@ -16,6 +16,9 @@
 import errno
 from vortex.core import ObjectTypes
 
+class VirtualObjectError(Exception):
+    pass
+
 class VirtualObjectBase:
     type = ObjectTypes.NONE
     commands = []
@@ -47,7 +50,7 @@ class VirtualObjectBase:
         self._cmd_complete(cmd_id, status, data)
         self._cmd_id = 0
     def get_status(self):
-        return {}
+        return vars(self.config)
     def reset(self):
         if self._cmd_id:
             self._cmd_id = 0

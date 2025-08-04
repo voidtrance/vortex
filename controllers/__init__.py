@@ -24,6 +24,7 @@ import vortex.core
 import vortex.lib.ctypes_helpers
 from vortex.lib.utils import Counter, parse_frequency
 from vortex.lib.constants import hz_to_nsec, khz_to_hz
+from vortex.controllers.objects.virtual.base import VirtualObjectError
 import vortex.core.lib.logging as logging
 import vortex.controllers.timers as timers
 
@@ -261,10 +262,14 @@ class Controller(core.VortexCore):
                 self._free_object_counts[klass] -= 1
             if getattr(self.object_factory[klass], "virtual", False) or \
                 inspect.isfunction(self.object_factory[klass]):
-                obj = self.object_factory[klass](options, self.objects,
-                                                 self.query_objects,
-                                                 self.virtual_command_complete,
-                                                 self.event_submit)
+                try:
+                    obj = self.object_factory[klass](options, self.objects,
+                                                     self.query_objects,
+                                                     self.virtual_command_complete,
+                                                     self.event_submit)
+                except VirtualObjectError as error:
+                    self.log.error(f"Failed to create virtual object {klass}:{name}: {error}")
+                    continue
                 self.object_defs[klass] = obj.__class__
                 object_id = self.register_virtual_object(klass, name, self.vobj_cmd_exec,
                                                          self.vobj_get_state)

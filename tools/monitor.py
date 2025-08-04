@@ -327,9 +327,11 @@ class DisplayObject(KlassObject):
         self.image.set_halign(Gtk.Align.START)
         self.width = 0
         self.height = 0
+        self.pixels = []
     def set_size(self, width, height):
         self.width = width
         self.height = height
+        self.pixels = [0] * self.width * self.height * 4
         self.image.set_size_request(self.width * self.SCALE_FACTOR,
                                     self.height * self.SCALE_FACTOR)
     def update(self, data):
@@ -337,31 +339,29 @@ class DisplayObject(KlassObject):
         if not self.width and not self.height:
             self.set_size(data["width"], data["height"])
         image_data = data["data"]
-        pixels = [0] * self.width * self.height * 3
         for byte in range(8):
             for bit in range(8):
                 for column in range(self.width):
                     pixel_color = 255 * bool((image_data[column][byte] & (1 << bit)))
-                    self._put_pixel(pixels, column, byte * 8 + bit,
+                    self._put_pixel(column, byte * 8 + bit, pixel_color, pixel_color,
                                     pixel_color)
-        b = GLib.Bytes.new(pixels)
-        pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(b, GdkPixbuf.Colorspace.RGB, False, 8,
+        self.update_image()
+    def update_image(self):
+        b = GLib.Bytes.new(self.pixels)
+        pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(b, GdkPixbuf.Colorspace.RGB, True, 8,
                                                   self.width, self.height,
-                                                  self.width * 3)
+                                                  self.width * 4)
         pixbuf = pixbuf.scale_simple(self.width * self.SCALE_FACTOR,
                                      self.height * self.SCALE_FACTOR,
                                      GdkPixbuf.InterpType.BILINEAR)
         texture = Gdk.Texture.new_for_pixbuf(pixbuf)
         self.image.set_paintable(texture)
-    def _put_pixel(self, pixels, x, y, r, g=None, b=None):
-        if g is None:
-            g = r
-        if b is None:
-            b = r
-        offset = y * self.width + x
-        pixels[offset * 3 + 0] = r
-        pixels[offset * 3 + 1] = g
-        pixels[offset * 3 + 2] = b
+    def _put_pixel(self, x, y, r, g, b, a=255):
+        offset = y * self.width * 4 + x * 4
+        self.pixels[offset + 0] = r
+        self.pixels[offset + 1] = g
+        self.pixels[offset + 2] = b
+        self.pixels[offset + 3] = a
 
 class TooheadObject(KlassObject):
     type = ObjectTypes.TOOLHEAD
@@ -393,9 +393,54 @@ class TooheadObject(KlassObject):
                 self.properties[axis][1].set_property("can_focus", False)
             self.set_value(axis, position[axis])
 
+class NeopixelObject(DisplayObject):
+    type = ObjectTypes.NEOPIXEL
+    SCALE_FACTOR = 2
+    LED_PIXEL_WIDTH = 10
+    LED_PIXEL_HEIGHT = 10
+    LED_SPACING = 10
+    def __init__(self, name):
+        super().__init__(name)
+        self.count = 0
+        self.R = self.G = self.B = 0
+    def set_color_indexes(self, type):
+        self.R = type.lower().index('r')
+        self.B = type.lower().index('b')
+        self.G = type.lower().index('g')
+        self.W = type.lower().index('w')
+    def set_led_count(self, count):
+        self.count = count
+        width = (count * 2 - 1) * self.LED_PIXEL_WIDTH
+        height = self.LED_PIXEL_HEIGHT
+        super().set_size(width, height)
+    def _compute_white(self, colors):
+        if not colors[3]:
+            return colors
+        white_factor = colors[3] / 256
+        for i in range(3):
+            colors[i] = min(colors[3] + int(colors[i] * white_factor), 255)
+        return colors
+    def update(self, data):
+        super(DisplayObject, self).update(data)
+        if not self.count:
+            self.set_led_count(data["count"])
+            self.set_color_indexes(data["type"])
+        for x in range(self.width):
+            index = x // self.LED_PIXEL_WIDTH
+            if index % 2 == 0:
+                colors = list(data["colors"][index // 2]) + [255]
+            else:
+                colors = [0] * len(data["type"]) + [0]
+            colors = self._compute_white(colors)
+            for y in range(self.LED_PIXEL_HEIGHT):
+                self._put_pixel(x, y, colors[self.R], colors[self.G],
+                                colors[self.B], colors[4])
+        self.update_image()
+
 KLASS_CLASS_MAP = {
     ObjectTypes.DISPLAY: DisplayObject,
-    ObjectTypes.TOOLHEAD: TooheadObject
+    ObjectTypes.TOOLHEAD: TooheadObject,
+    ObjectTypes.NEOPIXEL: NeopixelObject,
 }
 
 class KlassFrame(Gtk.Frame):
@@ -423,7 +468,7 @@ class KlassFrame(Gtk.Frame):
         top_attach = len(self._objects)
         obj.name.set_margin_end(10)
         obj.name.set_hexpand(True)
-        if self.klass == ObjectTypes.DISPLAY:
+        if self.klass in (ObjectTypes.DISPLAY, ObjectTypes.NEOPIXEL):
             self.table.attach(obj.name, 0, top_attach, 1, 2)
         else:
             self.table.attach(obj.name, 0, top_attach, 1, 1)
@@ -433,7 +478,7 @@ class KlassFrame(Gtk.Frame):
             self.table.attach(prop, j * 2 + 1, top_attach, 1, 1)
             entry.set_margin_end(3)
             self.table.attach(entry, j * 2 + 2, top_attach, 1, 1)
-        if self.klass == ObjectTypes.DISPLAY:
+        if self.klass in (ObjectTypes.DISPLAY, ObjectTypes.NEOPIXEL):
             obj.image.set_margin_start(10)
             self.table.attach(obj.image, 1, top_attach + 1, len(obj) * 2, 1)
         self._objects[obj_id] = obj
@@ -463,7 +508,7 @@ class KlassFrame(Gtk.Frame):
         for i in range(len(self._objects)):
             self.table.remove_row(0)
         # Display objects have an image, so we need to remove it
-        if self.klass == ObjectTypes.DISPLAY:
+        if self.klass in (ObjectTypes.DISPLAY, ObjectTypes.NEOPIXEL):
             self.table.remove_row(0)
         if self.commands:
             self.box.remove(self.commands)

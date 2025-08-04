@@ -38,6 +38,7 @@ class STM32F446(Controller):
     DISPLAY_COUNT = 1
     ENCODER_COUNT = 1
     DIGITAL_PIN_COUNT = 22
+    NEOPIXEL_COUNT = 1
     ADC_MAX = 4095
     PWM_MAX = 255
     def __init__(self, config):
