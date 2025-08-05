@@ -18,13 +18,13 @@ can then be used by other objects to track other emulation properties, like axis
 #### Available Commands
 
 <table>
-  <thead><tr><th colspan=3>enable enable=0|1</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">enable enable=0|1</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Enables/disables a stepper motor.</td></tr>
   <tr><td>Arguments</td><td>enable=0|1</td><td>`0` to disable the motor, `1` to enable it</td></tr>
 </table>
 
 <table>
-  <thead><tr><th colspan=3>set_speed steps_per_second=&lt;double&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">set_speed steps_per_second=&lt;double&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Set the speed of the stepper motor. This command will set
   the number of steps by which the internal step counter will be incremented each second.</td></tr>
   <tr><td>Arguments</td><td>stepr_per_second</td><td>A floating point number for the number of steps
@@ -32,7 +32,7 @@ can then be used by other objects to track other emulation properties, like axis
 </table>
 
 <table>
-  <thead><tr><th colspan=3>set_accel accel=&lt;int&gt; decel=&lt;int&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">set_accel accel=&lt;int&gt; decel=&lt;int&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Set stepper motor acceleration and deceleration rate.
   Internally, the object will compute the rate by which to increase the steps per second until
   the set motor speed is reached. On deceleration, the motor step rate will be decreased according
@@ -42,14 +42,14 @@ can then be used by other objects to track other emulation properties, like axis
 </table>
 
 <table>
-  <thead><tr><th colspan=3>move direction=1|2; steps=&lt;int&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">move direction=1|2 steps=&lt;int&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Move the stepper motor by "steps" steps in "direction" direction.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>direction</td><td>The direction in which to move the stepper motor. `1` for forward, `2` for backward.</td></tr>
   <tr><td>steps</td><td>The number of steps by which to move the motor.</td></tr>
 </table>
 
 <table>
-  <thead><tr><th colspan=3>use_pins enable=0|1</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">use_pins enable=0|1</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Enable the control of the stepper by using a pin word. This
   will allocated a 32 bits, where different bits of the word control different virtual pins (enable,
   step, direction).</td></tr>
@@ -109,13 +109,13 @@ is attached.
 #### Available Commands
 
 <table>
-  <thead><tr><th colspan=3>set_temperature temperature=&lt;float&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">set_temperature temperature=&lt;float&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Set the temperature that the heater has to reach.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>temperature</td><td>Temperature in C</td></tr>
 </table>
 
 <table>
-  <thead><tr><th colspan=3>use_pins enable=0|1</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">use_pins enable=0|1</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Enable pin control. Setting the control pin to `1` will turn
   the heater on at full power. Setting it to `0` will turn the heater power off.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>enable</td><td>`0` to disable, `1` to enable.</td></tr>
@@ -238,13 +238,13 @@ being used. The frequency, in combination with a configured duty cycle, define t
 #### Available Commands
 
 <table>
-  <thead><tr><th colspan=3>set_params prescaler=&lt;int&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">set_params prescaler=&lt;int&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Set PWM parameters.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>prescaler</td><td>This prescaler is used to define the controller clock ticks and increment the PWM's internal counters.</td></tr>
 </table>
 
 <table>
-  <thead><tr><th colspan=3>set_object klass=&lt;int&gt; name=&lt;string&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">set_object klass=&lt;int&gt; name=&lt;string&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Set the object controller by the PWM object.</td></tr>
   <tr><td rowspan=3>Arguments</td><td>klass</td><td>The klass of the object. This should be a
   digital pin object klass.</td></tr>
@@ -252,7 +252,7 @@ being used. The frequency, in combination with a configured duty cycle, define t
 </table>
 
 <table>
-  <thead><tr><th colspan=3>set_duty_cycle duty_cycle=&lt;int&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">set_duty_cycle duty_cycle=&lt;int&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Set PWM's duty cycle. The duty cycle is the number of counts
   of the internal PWM counter for which the controlled pin will be set to ON.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>duty_cycle</td><td>The duty cycle value.</td></tr>
@@ -281,13 +281,13 @@ interface.
 #### Available Commands
 
 <table>
-  <thead><tr><th colspan=3>read len=&lt;int&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">read len=&lt;int&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Read data from display device.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>len</td><td>Number of bytes to read.</td></tr>
 </table>
 
 <table>
-  <thead><tr><th colspan=3>write is_data=0|1 data=&lt;bytes&gt;</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">write is_data=0|1 data=&lt;bytes&gt;</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Write to display device. This command is used to writ both
   commands and data, depending on the value of `is_data`.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>is_data</td><td>`0` if writing commands, `1` otherwise.</td></tr>
@@ -295,7 +295,7 @@ interface.
 </table>
 
 <table>
-  <thead><tr><th colspan=3>reset</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">reset</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Reset the display. when this command is received, the display
   device should reset all internal state to it's default values.</td></tr>
   <tr><td rowspan=2>Arguments</td><td></td><td></td></tr>
@@ -328,7 +328,7 @@ HIGH) or `False` (for LOW).
 #### Available Commands
 
 <table>
-  <thead><tr><th colspan=3>set state=True|False</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">set state=True|False</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Set the state of the digital pin.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>state</td><td>`True` for HIGH, `False` for LOW.</td></tr>
 </table>
@@ -354,7 +354,7 @@ movement.
 #### Available Commands
 
 <table>
-  <thead><tr><th colspan=3>pulses count=&lt;int&gt; direction=0|1</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">pulses count=&lt;int&gt; direction=0|1</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Generate `count` movement pulses in the direction specified
   by `direction`.</td></tr>
   <tr><td rowspan=2>Arguments</td><td>count</td><td>The number of pulses to generate. This will cause
@@ -385,7 +385,7 @@ A single neopixel object can support up to 1024 LEDs.
 #### Available Commands
 
 <table>
-  <thead><tr><th colspan=3>set index=&lt;int&gt; color=[r,g,b,w]</th></tr></thead>
+  <thead><tr><th colspan=3 align="left">set index=&lt;int&gt; color=[r,g,b,w]</th></tr></thead>
   <tr><td>Description</td><td colspan=2>Set the color of one of the LEDs in the set/chain</td></tr>
   <tr><td rowspan=2>Arguments</td><td>index</td><td>The position of the LED.</td></tr>
   <tr><td>color</td><td>The color for the LED. This is a list of 4 values in the range 0-255
@@ -403,4 +403,4 @@ The neopixel object does not support any events.
 | :- | :- |
 | count | The number of LEDs in the set/chain. |
 | type | The type of the LEDs (RGB, GRB, RGBW, etc.) |
-| colors | A list of collor sets for each of the LEDs in the chain. |
+| colors | A list of color sets for each of the LEDs in the chain. |
