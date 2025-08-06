@@ -199,6 +199,23 @@ class RemoteThread(threading.Thread):
                 data = data[l:]
     def get_object_list(self):
         return self._objects
+    def _convert_type(self, ctype):
+        if issubclass(ctype, (ctypes.c_int, ctypes.c_uint,
+                              ctypes.c_int8, ctypes.c_uint8,
+                              ctypes.c_int16, ctypes.c_uint16,
+                              ctypes.c_int32, ctypes.c_uint32,
+                              ctypes.c_int64, ctypes.c_uint64,
+                              ctypes.c_byte, ctypes.c_ubyte)):
+            return int
+        elif issubclass(ctype, (ctypes.c_float, ctypes.c_double)):
+            return float
+        elif issubclass(ctype, ctypes.c_char) or is_simple_char_array(type):
+            return str
+        elif issubclass(ctype, ctypes.c_bool):
+            return bool
+        elif issubclass(ctype, ctypes.Array):
+            return list
+        return None
     def get_object_commands(self, klass):
         commands = self._controller.get_param("commands")
         _commands = {}
@@ -212,19 +229,14 @@ class RemoteThread(threading.Thread):
                     _commands[klass].append(cmd)
                 elif issubclass(cmd[2], ctypes.Structure):
                     _opts = []
-                    for name, _type in cmd[2]._fields_:
-                        if issubclass(_type, (ctypes.c_int, ctypes.c_uint,
-                                              ctypes.c_int8, ctypes.c_uint8,
-                                              ctypes.c_int16, ctypes.c_uint16,
-                                              ctypes.c_int32, ctypes.c_uint32,
-                                              ctypes.c_int64, ctypes.c_uint64)):
-                            _opts.append((name, int))
-                        elif issubclass(_type, (ctypes.c_float, ctypes.c_double)):
-                            _opts.append((name, float))
-                        elif issubclass(_type, ctypes.c_char) or is_simple_char_array(type):
-                            _opts.append((name, str))
-                        elif issubclass(_type, ctypes.c_bool):
-                            _opts.append((name, bool))
+                    for name, c_type in cmd[2]._fields_:
+                        subtype = None
+                        _type = self._convert_type(c_type)
+                        if _type == None:
+                            continue
+                        elif _type == list:
+                            subtype = self._convert_type(c_type._type_)
+                        _opts.append((name, _type, subtype))
                     _commands[klass].append((cmd[0], cmd[1], _opts, cmd[3]))
         return _commands
     def get_object_events(self, klass):

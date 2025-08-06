@@ -33,7 +33,7 @@ class NeopixelState(ctypes.Structure):
     
 class Neopixel(vobj.VirtualObjectBase):
     type = ObjectKlass.NEOPIXEL
-    commands = [(0, "set", NeopixelSetArgs, None, ([0,0,0,0],) * 4)]
+    commands = [(0, "set", NeopixelSetArgs, None, (0, [0,0,0,0]))]
     state = NeopixelState
 
     def __init__(self, *args):

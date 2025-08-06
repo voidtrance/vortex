@@ -142,10 +142,13 @@ class LogReader(threading.Thread):
         self.socket.close()
 
 class KlassCommandOption:
-    def __init__(self, klass, name, type):
+    def __init__(self, klass, name, type, subtype=None):
         self.klass = klass
         self.name = name
         self.type = type
+        self.subtype = subtype
+        if self.type == list and not self.subtype:
+            raise ValueError("'list' command option type needs a subtype")
         self.widget = None
     def get_label(self):
         label = Gtk.Label(label=self.name)
@@ -179,6 +182,10 @@ class KlassCommandOption:
                 if r.get_active():
                     return r.value
             return False
+        elif self.type == list:
+            values = self.widget.get_text().split(",")
+            values = [self.subtype(v) for v in values]
+            return values
         return self.type(self.widget.get_text())
 
 def set_widget_margin(widget, top, bottom=None, left=None, right=None):
