@@ -24,7 +24,7 @@ Vortex core module. The core module is a CPython module. The reason why it's
 not pure Python will be explain later down.
 
 HW controllers use the configuration file to create and maintain a set of
-HW objects. Each HW object type is suppose to emulate a specific type of HW
+HW objects. Each HW object klass is suppose to emulate a specific klass of HW
 making up the emulated machine. For example, there are stepper motor,endstop,
 probe, and heater objects among others.
 
@@ -33,8 +33,8 @@ are used to tell the HW object what action to perform, events are used to
 asynchronously notify other parts of the emulation about HW object events,
 and report status.
 
-### Types Of Objects
-Vortex defines two different types of objects - HW objects and virtual objects.
+### Klasses Of Objects
+Vortex defines two different klasses of objects - HW objects and virtual objects.
 
 HW objects emulate the behavior of real HW entities. As such, they require
 periodic updates of their intenal states. For performance reasons, all HW
@@ -187,7 +187,7 @@ where the emulator is running. This load can be categories thusly:
      - core event processing thread,
      - remove server thread(s) (if the remote server is used).
   * HW object update threads. There is one such thread per object. Separate
-    threads per objects were chosen instead of a thread per object klass/type
+    threads per objects were chosen instead of a thread per object klass
     in order to avoid interference between threads.
 
 The system load is also affected by the emulation's control loop frequency and

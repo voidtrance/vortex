@@ -22,7 +22,7 @@ import errno
 import ctypes
 import vortex.emulator.remote.api as api
 import vortex.core.lib.logging as logging
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 from vortex.lib.ctypes_helpers import is_simple_char_array
 
 log = logging.getLogger("vortex.core.server")
@@ -79,7 +79,7 @@ class RemoteThread(threading.Thread):
         self._stop = threading.Event()
         self._objects = {}
         self._log_threads = {}
-        self._klasses = {x: str(x) for x in ObjectTypes}
+        self._klasses = {x: str(x) for x in ObjectKlass}
         for klass, name, id in self._controller.objects:
             if klass not in self._objects:
                 self._objects[klass] = []
@@ -230,7 +230,7 @@ class RemoteThread(threading.Thread):
     def get_object_events(self, klass):
         events = {}
         if klass is None:
-            klass_set = ObjectTypes
+            klass_set = ObjectKlass
         else:
             klass_set = [klass]
         params = self._controller.get_param("events")

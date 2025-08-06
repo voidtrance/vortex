@@ -28,9 +28,9 @@
 #define CMD_ID_IS_ERROR(x) ((x) >> 32 == CMD_ERROR_PREFIX)
 #define CMD_ID_ERROR(x) ((int32_t)((x) & ~(CMD_ERROR_PREFIX << 32)))
 
-typedef core_object_t *(*object_lookup_cb_t)(const core_object_type_t,
+typedef core_object_t *(*object_lookup_cb_t)(const core_object_klass_t,
                                              const char *, void *);
-typedef core_object_t **(*object_list_cb_t)(const core_object_type_t, void *);
+typedef core_object_t **(*object_list_cb_t)(const core_object_klass_t, void *);
 typedef void (*complete_cb_t)(uint64_t, int64_t, void *, void *);
 typedef uint64_t (*cmd_submit_cb_t)(core_object_t *, core_object_id_t, uint16_t,
 				    void *, complete_cb_t, void *);
@@ -65,7 +65,7 @@ struct core_object {
      * The type of the object. This is set by the
      * object creation function.
      */
-    core_object_type_t type;
+    core_object_klass_t klass;
 
     /*
      * The object name. Set during object creation.

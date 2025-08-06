@@ -163,7 +163,7 @@ thermistor_t *object_create(const char *name, void *config_ptr) {
     if (!thermistor)
         return NULL;
 
-    thermistor->object.type = OBJECT_TYPE_THERMISTOR;
+    thermistor->object.klass = OBJECT_KLASS_THERMISTOR;
     thermistor->object.init = thermistor_init;
     thermistor->object.update = thermistor_update;
     thermistor->object.update_frequency = 1000; /* 1kHz */
@@ -205,7 +205,7 @@ thermistor_t *object_create(const char *name, void *config_ptr) {
 static int thermistor_init(core_object_t *object) {
     thermistor_t *thermistor = (thermistor_t *)object;
 
-    thermistor->heater = CORE_LOOKUP_OBJECT(thermistor, OBJECT_TYPE_HEATER,
+    thermistor->heater = CORE_LOOKUP_OBJECT(thermistor, OBJECT_KLASS_HEATER,
                                             thermistor->heater_name);
     if (!thermistor->heater)
         return -1;

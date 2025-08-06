@@ -22,7 +22,7 @@ import pickle
 import threading
 import vortex.emulator.remote.api as api
 from argparse import Namespace
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 from vortex.core.kinematics import AxisType
 from vortex.core.lib.logging import LOG_LEVELS
 gi.require_version("Adw", "1")
@@ -165,7 +165,7 @@ class KlassCommandOption:
             r2.value = 0
             self.widget.append(r2)
             self.radio_buttons.append(r2)
-            if self.klass == ObjectTypes.DIGITAL_PIN:
+            if self.klass == ObjectKlass.DIGITAL_PIN:
                 r3 = Gtk.CheckButton(label="Toggle", group=r1)
                 r3.value = -1
                 self.widget.append(r3)
@@ -250,7 +250,7 @@ class KlassCommands(Gtk.Grid):
         for opt in cmd_opts:
             opts[opt.name] = opt.get_value()
         # The toggle option is only available for digital pin objects
-        if self.klass is ObjectTypes.DIGITAL_PIN:
+        if self.klass is ObjectKlass.DIGITAL_PIN:
             if opts["state"] == -1:
                 opts[opt.name] = True
                 self.callback(self.klass, object_id, cmd_id, opts)
@@ -319,7 +319,7 @@ class KlassObject:
             yield prop, entry
 
 class DisplayObject(KlassObject):
-    type = ObjectTypes.DISPLAY
+    type = ObjectKlass.DISPLAY
     SCALE_FACTOR = 2
     def __init__(self, name):
         super().__init__(name)
@@ -364,7 +364,7 @@ class DisplayObject(KlassObject):
         self.pixels[offset + 3] = a
 
 class TooheadObject(KlassObject):
-    type = ObjectTypes.TOOLHEAD
+    type = ObjectKlass.TOOLHEAD
     def __init__(self, name):
         super().__init__(name)
     def add_property(self, prop):
@@ -394,7 +394,7 @@ class TooheadObject(KlassObject):
             self.set_value(axis, position[axis])
 
 class NeopixelObject(DisplayObject):
-    type = ObjectTypes.NEOPIXEL
+    type = ObjectKlass.NEOPIXEL
     SCALE_FACTOR = 2
     LED_PIXEL_WIDTH = 10
     LED_PIXEL_HEIGHT = 10
@@ -438,9 +438,9 @@ class NeopixelObject(DisplayObject):
         self.update_image()
 
 KLASS_CLASS_MAP = {
-    ObjectTypes.DISPLAY: DisplayObject,
-    ObjectTypes.TOOLHEAD: TooheadObject,
-    ObjectTypes.NEOPIXEL: NeopixelObject,
+    ObjectKlass.DISPLAY: DisplayObject,
+    ObjectKlass.TOOLHEAD: TooheadObject,
+    ObjectKlass.NEOPIXEL: NeopixelObject,
 }
 
 class KlassFrame(Gtk.Frame):
@@ -468,7 +468,7 @@ class KlassFrame(Gtk.Frame):
         top_attach = len(self._objects)
         obj.name.set_margin_end(10)
         obj.name.set_hexpand(True)
-        if self.klass in (ObjectTypes.DISPLAY, ObjectTypes.NEOPIXEL):
+        if self.klass in (ObjectKlass.DISPLAY, ObjectKlass.NEOPIXEL):
             self.table.attach(obj.name, 0, top_attach, 1, 2)
         else:
             self.table.attach(obj.name, 0, top_attach, 1, 1)
@@ -478,7 +478,7 @@ class KlassFrame(Gtk.Frame):
             self.table.attach(prop, j * 2 + 1, top_attach, 1, 1)
             entry.set_margin_end(3)
             self.table.attach(entry, j * 2 + 2, top_attach, 1, 1)
-        if self.klass in (ObjectTypes.DISPLAY, ObjectTypes.NEOPIXEL):
+        if self.klass in (ObjectKlass.DISPLAY, ObjectKlass.NEOPIXEL):
             obj.image.set_margin_start(10)
             self.table.attach(obj.image, 1, top_attach + 1, len(obj) * 2, 1)
         self._objects[obj_id] = obj
@@ -508,7 +508,7 @@ class KlassFrame(Gtk.Frame):
         for i in range(len(self._objects)):
             self.table.remove_row(0)
         # Display objects have an image, so we need to remove it
-        if self.klass in (ObjectTypes.DISPLAY, ObjectTypes.NEOPIXEL):
+        if self.klass in (ObjectKlass.DISPLAY, ObjectKlass.NEOPIXEL):
             self.table.remove_row(0)
         if self.commands:
             self.box.remove(self.commands)
@@ -598,8 +598,8 @@ class MonitorWindow(Gtk.ApplicationWindow):
         object_frame_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         scroll.set_child(object_frame_box)
 
-        for i, klass in enumerate(ObjectTypes):
-            if klass is ObjectTypes.NONE:
+        for i, klass in enumerate(ObjectKlass):
+            if klass is ObjectKlass.NONE:
                 continue
             label = str(klass).replace('_', " ") + " Objects"
             self.klass_frames[klass] = KlassFrame(klass, label=label.title())

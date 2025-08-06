@@ -30,7 +30,7 @@ import vortex.emulator.remote.api as api
 from vortex.emulator import config
 from vortex.lib.ext_enum import ExtIntEnum, auto
 from vortex.frontends.proto import *
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 from testutils import TestStatus
 
 VORTEX_PATH = "/tmp/vortex"
@@ -407,7 +407,7 @@ class TestFramework:
                 status = test_func(self)
                 self.show_result(test, status)
             else:
-                klass = ObjectTypes[klass.upper()]
+                klass = ObjectKlass[klass.upper()]
                 if klass not in self._objects:
                     self.show_result(test, TestStatus.WAIVE(f"No {klass} objects in configuration."))
                     continue

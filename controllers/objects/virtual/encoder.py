@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.virtual.base as vobj
-from vortex.core import ObjectTypes, PIN_NAME_SIZE
+from vortex.core import ObjectKlass, PIN_NAME_SIZE
 import vortex.core.lib.logging as logging
 import ctypes
 import time
@@ -31,7 +31,7 @@ class EncoderState(ctypes.Structure):
                 ("state", ctypes.c_bool * 2)]
 
 class Encoder(vobj.VirtualObjectBase):
-    type = ObjectTypes.ENCODER
+    type = ObjectKlass.ENCODER
     commands = [(0, "pulses", EncoderPulsesArgs, None, (0,))]
     status = EncoderState
     def __init__(self, config, lookup, query, complete, submit):

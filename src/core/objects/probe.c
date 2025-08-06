@@ -59,8 +59,8 @@ static object_cache_t *probe_event_cache = NULL;
 static int probe_init(core_object_t *object) {
     probe_t *probe = (probe_t *)object;
 
-    probe->toolhead = CORE_LOOKUP_OBJECT(probe, OBJECT_TYPE_TOOLHEAD,
-                                         probe->toolhead_name);
+    probe->toolhead =
+        CORE_LOOKUP_OBJECT(probe, OBJECT_KLASS_TOOLHEAD, probe->toolhead_name);
     if (!probe->toolhead) {
         log_error(probe, "Did not find toolhead object '%s'",
                   probe->toolhead_name);
@@ -136,7 +136,7 @@ probe_t *object_create(const char *name, void *config_ptr) {
     if (!probe)
         return NULL;
 
-    probe->object.type = OBJECT_TYPE_PROBE;
+    probe->object.klass = OBJECT_KLASS_PROBE;
     probe->object.name = strdup(name);
     probe->object.init = probe_init;
     probe->object.update = probe_update;

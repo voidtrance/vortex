@@ -24,7 +24,7 @@ The `direct` frontend accepts and executes object commands. Object commands use
 the follwoing format:
 
 ```
-<object type>:<object name>:<object command>[:<parameter>=<value>[,<parameter>=<value>]]
+<object klass>:<object name>:<object command>[:<parameter>=<value>[,<parameter>=<value>]]
 ```
 
 The commands are parsed by the frontend, encoded and submitted to the emulator core.
@@ -63,7 +63,7 @@ Emulator elements have their own logging name, which is used when filtering mess
   * `vortex.frontend` is used for log messages from the frontend.
   * `vortex.frontend.<facility>` is used for any helper facility used by the frontend.
   * `vortex.core` is used for messages from the emulator core.
-  * `vortex.core.<object klass>` are messages for each of the object types.
+  * `vortex.core.<object klass>` are messages for each of the object klasses.
   * `vortex.core.<object klass>.<object name>` are messages from specific objects.
 
 When logging is enabled, log messages can be filtered by any of the above names.
@@ -75,12 +75,12 @@ messages:
 
    * Normally, specifying a filter will display any messages at that level and below.
    For example, using the filter `vortex.core` will display messages from the core and
-   all objects of all types. However, if messages only from the core are to be display,
+   all objects of all klasses. However, if messages only from the core are to be display,
    without messages from objects, the filter `vortex.core.` (note the period at the
    end of the filter) can be used.
    * The wildcard (`*`) symbols is supported at any level of the filter name. For
    example, the filter `vortex.core.*.x` will display any messages from all objects
-   with the name `x` regardless of their type. Note that using the filter
+   with the name `x` regardless of their klass. Note that using the filter
    `vortex.core.*` (the wildcard at the end of the filter) is the same as using the
    filter `vortex.core`.
 

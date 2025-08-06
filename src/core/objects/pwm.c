@@ -35,7 +35,7 @@ typedef struct {
     uint32_t pwm_counter_remain;
     uint32_t duty_cycle;
     uint16_t prescaler;
-    core_object_type_t obj_type;
+    core_object_klass_t obj_type;
     bool state;
     object_cache_t *cache;
 } pwm_t;
@@ -117,7 +117,7 @@ pwm_t *object_create(const char *name, void *config_ptr) {
     if (!pwm)
         return NULL;
 
-    pwm->object.type = OBJECT_TYPE_PWM;
+    pwm->object.klass = OBJECT_KLASS_PWM;
     pwm->object.update_frequency = 100000;
     pwm->object.name = strdup(name);
     pwm->object.init = pwm_init;

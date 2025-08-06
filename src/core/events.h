@@ -71,10 +71,9 @@ typedef void (*event_handler_t)(core_object_t *, const char *,
  *    - the object's event handler function,
  *    - the data that needs to be passed.
  */
-typedef int (*event_register_t)(const core_object_type_t,
+typedef int (*event_register_t)(const core_object_klass_t,
                                 const core_object_event_type_t, const char *,
-                                core_object_t *, event_handler_t,
-                                void *);
+                                core_object_t *, event_handler_t, void *);
 
 /*
  * Signature of call to issue an event.

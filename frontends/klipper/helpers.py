@@ -18,7 +18,7 @@ import ctypes
 import vortex.core.lib.logging as logging
 import vortex.core.lib.atomics as atomics
 from collections import namedtuple
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 from vortex.lib.utils import div_round_up
 from vortex.frontends.klipper.klipper_proto import ResponseTypes, KLIPPER_PROTOCOL
 
@@ -117,7 +117,7 @@ class DigitalPin(HelperBase):
         self._log.add_prefix(f"[{oid}]")
         self._cycles = []
     def _set_pin(self, value):
-        self.frontend.queue_command(ObjectTypes.DIGITAL_PIN,
+        self.frontend.queue_command(ObjectKlass.DIGITAL_PIN,
                                     self.name, "set", {"state": int(value)})
     def set_initial_value(self, value, default):
         #self._log.debug(f"value: {value}, default: {default}")
@@ -224,7 +224,7 @@ class HeaterPin(DigitalPin):
         super().__init__(frontend, queue, oid, obj_id, klass, name)
         status = frontend.query([obj_id])[obj_id]
         self.heater_max_temp = status["max_temp"]
-        cmd_id = self.frontend.queue_command(ObjectTypes.HEATER,
+        cmd_id = self.frontend.queue_command(ObjectKlass.HEATER,
                                              self.name, "use_pins",
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)
@@ -289,7 +289,7 @@ class Stepper(HelperBase):
         self.timer.callback = self.send_step
         self._needs_reset = False
         self.move = CurrentMove(0, 0, 0, 0)
-        cmd_id = self.frontend.queue_command(ObjectTypes.STEPPER,
+        cmd_id = self.frontend.queue_command(ObjectKlass.STEPPER,
                                              self.name, "use_pins",
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)
@@ -680,7 +680,7 @@ class Buttons(HelperBase):
         status = 0
         for i, (klass, name, button) in enumerate(self._buttons):
             state = states[button]["state"]
-            if klass == ObjectTypes.ENCODER:
+            if klass == ObjectKlass.ENCODER:
                 state = state[name]
             if state:
                 status |= (1 << i)
@@ -714,8 +714,8 @@ class PWM(HelperBase):
     def finish_config(self):
         status = self.frontend.query([self.id])[self.id]
         self.pin_name = status["pin"]
-        pin_id, pin_klass = self.frontend.find_object_from_pin(self.pin_name, ObjectTypes.DIGITAL_PIN)
-        obj_name = self.frontend.get_object_name(ObjectTypes.DIGITAL_PIN, pin_id)
+        pin_id, pin_klass = self.frontend.find_object_from_pin(self.pin_name, ObjectKlass.DIGITAL_PIN)
+        obj_name = self.frontend.get_object_name(ObjectKlass.DIGITAL_PIN, pin_id)
         cmd_id = self.frontend.queue_command(self.klass, self.id, "set_object",
                                              {"klass": pin_klass, "name": obj_name})
         if cmd_id == -1:
@@ -723,7 +723,7 @@ class PWM(HelperBase):
         result = self.frontend.wait_for_command(cmd_id)
         if not result or result[0][0] != 0:
             raise HelperException(f"Failed command to set PWM object id ({result[0]})")
-        self.pin = DigitalPin(self.frontend, -1, pin_id, ObjectTypes.DIGITAL_PIN, obj_name)
+        self.pin = DigitalPin(self.frontend, -1, pin_id, ObjectKlass.DIGITAL_PIN, obj_name)
         self.pin.set_max_duration(self.pin_max_duration)
         self.pin.set_initial_value(self.pin_value, self.pin_default)
     def set_params(self, ticks, value, default, max_duration):

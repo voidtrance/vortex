@@ -6,7 +6,7 @@ each individual HW object.
 The Vortex configuration file use the following format:
 
 ```
-[<object type> <object name>]
+[<object klass> <object name>]
 <object setting>: <setting value>
 ...
 

@@ -269,10 +269,10 @@ The `core_object_t` structure has the following definition:
  */
 struct core_object {
     /*
-     * The type of the object. This is set by the
+     * The klass of the object. This is set by the
      * object creation function.
      */
-    core_object_type_t type;
+    core_object_klass_t klass;
 
     /*
      * The object name. Set during object creation.
@@ -353,7 +353,7 @@ When a new instance of the HW object is created, it must fill in
 the content of the `core_object_t` structure as part of its creation.
 
 The following members of `core_object_t` must be set:
- * `type` is set to the type of the core object. Adding new types will
+ * `klass` is set to the klass of the core object. Adding new klasses will
  be described later.
  * `name` is set to the name of the object passed in to the object
  creation function.
@@ -367,22 +367,22 @@ The `entry` and `call_data` members are for internal use.
 
 All other members are optional.
 
-#### Adding New HW Object Types
+#### Adding New HW Object Klasses
 Adding new HW objects involves several steps described below.
 
-##### Adding New Types To `auto-types.h.in`
-Each new HW object types has to be added to several data structures in
-`src/core/objects/auto-types.h.in`.
+##### Adding New Klasses To `auto-klass.h.in`
+Each new HW object klass has to be added to several data structures in
+`src/core/objects/auto-klass.h.in`.
 
-1. The `core_object_type_t` enumeration has to be updated by adding the
-new type. Note that the type has to be added before the `@EXTRA_TYPES@`
+1. The `core_object_klass_t` enumeration has to be updated by adding the
+new klass. Note that the klass has to be added before the `@EXTRA_KLASS@`
 member.
-2. The new type has to be added to the `ObjectTypeExportNames` array. The
+2. The new klass has to be added to the `ObjectKlassExportNames` array. The
 new entry should take the form 
-`[OBJECT_TYPE_MY_TYPE] = stringify(OBJECT_TYPE_MY_TYPE),`. The new
-type should be added prior to the `@EXTRA_TYPE_EXPORT_NAMES@` line.
-3. Lastly, the object's name has to be added to the `ObjectTypeNames`
-array. The new name should be added prior to the `@EXTRA_TYPE_NAMES@`
+`[OBJECT_KLASS_MY_KLASS] = stringify(OBJECT_KLASS_MY_KLASS),`. The new
+klass should be added prior to the `@EXTRA_KLASS_EXPORT_NAMES@` line.
+3. Lastly, the object's name has to be added to the `ObjectKlassNames`
+array. The new name should be added prior to the `@EXTRA_KLASS_NAMES@`
 line.
 
 #### Adding New HW Object Events to `auto-events.h.in`
@@ -396,11 +396,11 @@ prior to the `@EXTRA_EVENTS@` line.
 new event type name should be added prior to the `@EXTRA_EVENT_NAMES@`
 line.
 
-##### Adding New Types To `object_defs.py`
+##### Adding New Klasses To `object_defs.py`
 `object_defs.py`, which is in `controller/objects/`, contains Python
 structure definitions which are used to translate C data structures into
 structures that Python can uderstand and use. For this the `ctypes` module
-is used to define structures for each HW object type.
+is used to define structures for each HW object klass.
 
 Each new HW object must define its own class as a subclass of the
 `ObjectDef` class. The HW object class must define `ctypes.Structure`
@@ -408,7 +408,7 @@ subtypes for the object's configuration, status, events, and command
 argument C structures. The `ctypes.Structure` fields types much match
 exactly the types of the corresponding C structure.
 
-##### Building New Types
+##### Building New Klasses
 Newly added HW objects will be built into shared objects automatically.
 The Vortex build infrastructure will search for HW objects and will
 add them to the build set.
@@ -420,12 +420,12 @@ to perform such actions.
 
 These helpers are the following:
 
-##### CORE_LOOKUP_OBJECT(obj, type, name)</td>
+##### CORE_LOOKUP_OBJECT(obj, klass, name)</td>
 Description: Look up other instantiated objects.
 
 Arguments:
 * `obj` is the object doing the lookup.
-* `type` is the type of object to lookup
+* `klass` is the klass of object to lookup
 * `name` is the name of the object to lookup.
 
 Return: A `core_object_t *` pointer to the object or `NULL` if not found.
@@ -458,26 +458,26 @@ completion is processed.
 
 Return: None
 
-##### CORE_EVENT_REGISTER(obj, type, event, name, handler)
+##### CORE_EVENT_REGISTER(obj, klass, event, name, handler)
 Description: Register for event notifications.
 
 Arguments:
 * `obj` is the object registering for the event notifications.
-* `type` is the type of the object which defines the event.
+* `klass` is the klass of the object which defines the event.
 * `event` is the event type for which to register.
 * `name` is the name of the object to which the registration is made. If 
-other objects of type `type` issue matching events, `obj` will not be
+other objects of klass `klass` issue matching events, `obj` will not be
 notified.
 * `handler` is the event notification handler callback function.
 
 Return: `0` on successful registartion, `-1` otherwise.
 
-##### CORE_EVENT_UNREGISTER(obj, type, event, name)
+##### CORE_EVENT_UNREGISTER(obj, klass, event, name)
 Description: Unregister for event notifications.
 
 Arguments:
 * `obj` is the object which is unregistering.
-* `type` is the type of object from which to unregister.
+* `klass` is the klass of object from which to unregister.
 * `event` is the event type from which to unregister.
 * `name` is the object name from which to unregister.
 
@@ -502,18 +502,18 @@ All virtual objects should follow the template below:
 
 ```python
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.controllers.types import ModuleTypes
+from vortex.core import ObjectKlass
 
 class MyVirtualObject(vobj.VirtualObjectBase):
-    type = ModuleTypes.NEW_TYPE
+    klass = ObjectKlass.NEW_KLASS
     commands = [(id, args, defaults)]
     events = [event_type]
 ```
 
-The `type` value is the virtual object's type, which should be a
-`ModuleTypes` enumeration value that does not already exit. This
-value will be added to the core's object types, and in turn, to
-the `ModuleTypes` enumeration automatically.
+The `klass` value is the virtual object's klass, which should be a
+`ObjectKlass` enumeration value that does not already exit. This
+value will be added to the core's object klasses, and in turn, to
+the `ObjectKlass` enumeration automatically.
 
 `commands` is a list of tuples where `id` is the object command ID,
 `args` is a dictionary that describes the command arguments, and `defaults`
@@ -527,11 +527,11 @@ The following is an example of a virtual object that implements a :
 
 ```python
 import vortex.controllers.objects.vobj_base as vobj
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 from vortex.core import ObjectEvents
 
 class MyVirtualObject(vobj.VirtualObjectBase):
-    type = ObjectTypes.NEW_TYPE
+    klass = ObjectKlass.NEW_KLASS
     commands = [(0, {'opt1': }, defaults)]
     events = [ObjectEvents.COMMAND_COMPLETE]
     def __init__(self):
@@ -572,12 +572,12 @@ Each emulator module/object uses a differnt logging name in order to differentia
 object/module issues the message. The logging names use the following format:
 
 ```
-<module>[.<object type>][.<object name>]
+<module>[.<object klass>][.<object name>]
 ```
 
 Some examples for the different sections are:
 * `<module>` can be `core` or `frontend`.
-* `<object type>` can be `stepper`, `axis`, or `endstop`.
+* `<object klass>` can be `stepper`, `axis`, or `endstop`.
 * `<object name>` can be `axisX`, or `stepperX`.
 
 Emulator logging includes support for log message filtering. Filters are given by the
@@ -620,4 +620,4 @@ The emulator also hooks up the Python logging to all of the C code, as well. Whe
 the core initializes, it creates a `VortexLogger()` object for the core, itself, as
 well as a separate logger for each HW object. The name of the core logger is
 `vortex.core` and the name of the loggers for each HW object is
-`vortex.core.<object type>.<object name>`.
+`vortex.core.<object klass>.<object name>`.

@@ -108,7 +108,7 @@ static int toolhead_init(core_object_t *object) {
     core_object_t **axis_ptr;
     size_t i;
 
-    axes = CORE_LIST_OBJECTS(toolhead, OBJECT_TYPE_AXIS);
+    axes = CORE_LIST_OBJECTS(toolhead, OBJECT_KLASS_AXIS);
     if (!axes) {
         log_error(toolhead, "No axis list");
         return -ENOENT;
@@ -226,7 +226,7 @@ toolhead_t *object_create(const char *name, void *config_ptr) {
         return NULL;
     }
 
-    toolhead->object.type = OBJECT_TYPE_TOOLHEAD;
+    toolhead->object.klass = OBJECT_KLASS_TOOLHEAD;
     toolhead->object.name = strdup(name);
     toolhead->object.init = toolhead_init;
     toolhead->object.update = toolhead_update;

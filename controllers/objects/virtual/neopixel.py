@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.virtual.base as vobj
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 import vortex.core.lib.logging as logging
 import ctypes
 
@@ -32,7 +32,7 @@ class NeopixelState(ctypes.Structure):
                 ("colors", ctypes.c_uint8 * MAX_LED_COUNT)]
     
 class Neopixel(vobj.VirtualObjectBase):
-    type = ObjectTypes.NEOPIXEL
+    type = ObjectKlass.NEOPIXEL
     commands = [(0, "set", NeopixelSetArgs, None, ([0,0,0,0],) * 4)]
     state = NeopixelState
 

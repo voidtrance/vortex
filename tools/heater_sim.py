@@ -23,7 +23,7 @@ from functools import reduce
 from argparse import Namespace
 from collections import namedtuple
 from vortex.emulator import config
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 import plotly.graph_objects as go
 
 SIMULATION_RESOLUTION = 0.005
@@ -502,16 +502,16 @@ def main():
     conf.read(args.config)
 
     if not args.heater:
-        args.heater = [name for klass, name, c in conf if klass == ObjectTypes.HEATER]
+        args.heater = [name for klass, name, c in conf if klass == ObjectKlass.HEATER]
 
     heaters = args.heater[:]
     for heater in heaters:
-        if f"{str(ObjectTypes.HEATER).lower()} {heater}" not in conf:
+        if f"{str(ObjectKlass.HEATER).lower()} {heater}" not in conf:
             print(f"ERROR: Heater '{heater}' not found")
             args.heater.remove(heater)
 
     for heater in args.heater:
-        c = conf.get_section(ObjectTypes.HEATER, heater)
+        c = conf.get_section(ObjectKlass.HEATER, heater)
         output = f"{heater}-{args.output}"
         sim_data = create_simulation_data(c)
         graphs = []

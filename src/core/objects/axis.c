@@ -165,7 +165,7 @@ static int axis_init(core_object_t *object) {
     size_t i;
 
     for (i = 0; i < axis->n_motors; i++) {
-        axis->motors[i].obj = CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_STEPPER,
+        axis->motors[i].obj = CORE_LOOKUP_OBJECT(axis, OBJECT_KLASS_STEPPER,
                                                  axis->motors[i].name);
         if (!axis->motors[i].obj) {
             log_error(axis, "Failed to find stepper motor %s",
@@ -184,7 +184,7 @@ static int axis_init(core_object_t *object) {
     if (axis->endstop_name) {
         endstop_status_t status;
         axis->endstop =
-            CORE_LOOKUP_OBJECT(axis, OBJECT_TYPE_ENDSTOP, axis->endstop_name);
+            CORE_LOOKUP_OBJECT(axis, OBJECT_KLASS_ENDSTOP, axis->endstop_name);
         if (!axis->endstop) {
             log_error(axis, "Failed to find endstop %s", axis->endstop_name);
             return -ENODEV;
@@ -197,8 +197,9 @@ static int axis_init(core_object_t *object) {
             axis->endstop_is_max = false;
     }
 
-    CORE_EVENT_REGISTER(axis, OBJECT_TYPE_ENDSTOP, OBJECT_EVENT_ENDSTOP_TRIGGER,
-                        axis->endstop_name, axis_event_handler);
+    CORE_EVENT_REGISTER(axis, OBJECT_KLASS_ENDSTOP,
+                        OBJECT_EVENT_ENDSTOP_TRIGGER, axis->endstop_name,
+                        axis_event_handler);
     axis_reset(object);
     return 0;
 }
@@ -372,7 +373,7 @@ axis_t *object_create(const char *name, void *config_ptr) {
         return NULL;
     }
 
-    axis->object.type = OBJECT_TYPE_AXIS;
+    axis->object.klass = OBJECT_KLASS_AXIS;
     axis->object.name = strdup(name);
     axis->object.init = axis_init;
     axis->object.update = axis_update;

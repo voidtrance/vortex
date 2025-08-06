@@ -68,7 +68,7 @@ typedef struct {
 
 typedef struct event_subscription {
     STAILQ_ENTRY(event_subscription) entry;
-    core_object_type_t object_type;
+    core_object_klass_t klass;
     core_object_id_t object_id;
     bool is_python;
     union {
@@ -85,7 +85,7 @@ typedef struct event_subscription {
 typedef struct event {
     STAILQ_ENTRY(event) entry;
     core_object_event_type_t type;
-    core_object_type_t object_type;
+    core_object_klass_t klass;
     core_object_id_t object_id;
     void *data;
     bool should_free;
@@ -135,9 +135,9 @@ typedef struct {
 } core_process_completions_args_t;
 
 typedef struct {
-    PyObject_HEAD void *object_libs[OBJECT_TYPE_MAX];
-    object_create_func_t object_create[OBJECT_TYPE_MAX];
-    core_object_list_t objects[OBJECT_TYPE_MAX];
+    PyObject_HEAD void *object_libs[OBJECT_KLASS_MAX];
+    object_create_func_t object_create[OBJECT_KLASS_MAX];
+    core_object_list_t objects[OBJECT_KLASS_MAX];
     PyObject *ctypes;
 
     /* Command submission */
@@ -152,19 +152,19 @@ typedef struct {
 
 PyObject *ctypes;
 
-static core_object_t *core_object_find(const core_object_type_t type,
+static core_object_t *core_object_find(const core_object_klass_t klass,
                                        const char *name, void *data);
-static core_object_t **core_object_list(const core_object_type_t type,
+static core_object_t **core_object_list(const core_object_klass_t klass,
                                         void *data);
 
 /* Object callbacks */
 static void core_object_command_complete(uint64_t command_id, int64_t result,
                                          void *, void *data);
-static int core_object_event_register(const core_object_type_t object_type,
+static int core_object_event_register(const core_object_klass_t klass,
                                       const core_object_event_type_t event,
                                       const char *name, core_object_t *object,
                                       event_handler_t handler, void *user_data);
-static int core_object_event_unregister(const core_object_type_t object_type,
+static int core_object_event_unregister(const core_object_klass_t klass,
                                         const core_object_event_type_t event,
                                         const char *name, core_object_t *object,
                                         event_handler_t handler,
@@ -235,7 +235,7 @@ static void core_process_events(void *arg) {
         event_subscription_t *subscription;
 
         core_log(LOG_LEVEL_DEBUG, "processing event = %s %s %lu",
-                 ObjectTypeNames[event->object_type],
+                 ObjectKlassNames[event->klass],
                  OBJECT_EVENT_NAMES[event->type], event->object_id);
         event_next = STAILQ_NEXT(event, entry);
         pthread_mutex_lock(&events->event_lock);
@@ -249,9 +249,9 @@ static void core_process_events(void *arg) {
 
             core_log(LOG_LEVEL_DEBUG,
                      "sub type: %s, sub id: %lu, sub python: %u",
-                     ObjectTypeNames[subscription->object_type],
+                     ObjectKlassNames[subscription->klass],
                      subscription->object_id, subscription->is_python);
-            if (subscription->object_type != event->object_type)
+            if (subscription->klass != event->klass)
                 continue;
 
             if (subscription->object_id != CORE_OBJECT_ID_INVALID &&
@@ -265,7 +265,7 @@ static void core_process_events(void *arg) {
                                            event->data);
             else {
                 PyGILState_STATE state = PyGILState_Ensure();
-                PyObject *args = Py_BuildValue("(isik)", object->type,
+                PyObject *args = Py_BuildValue("(isik)", object->klass,
                                                object->name, event->type,
                                                event->data);
                 if (!args) {
@@ -387,12 +387,12 @@ static void core_object_command_complete(uint64_t cmd_id, int64_t result,
     pthread_mutex_unlock(&comps->comp_lock);
 }
 
-static core_object_t *core_object_find(const core_object_type_t type,
+static core_object_t *core_object_find(const core_object_klass_t klass,
                                        const char *name, void *data) {
     core_t *core = (core_t *)data;
     core_object_t *object;
 
-    LIST_FOREACH(object, &core->objects[type], entry) {
+    LIST_FOREACH(object, &core->objects[klass], entry) {
         if (!strncmp(object->name, name, strlen(object->name)))
             return object;
     }
@@ -400,14 +400,14 @@ static core_object_t *core_object_find(const core_object_type_t type,
     return NULL;
 }
 
-static core_object_t **core_object_list(const core_object_type_t type,
+static core_object_t **core_object_list(const core_object_klass_t klass,
                                         void *data) {
     core_t *core = (core_t *)data;
     core_object_t *object;
     core_object_t **list;
     size_t n_objects = 0;
 
-    LIST_FOREACH(object, &core->objects[type], entry)
+    LIST_FOREACH(object, &core->objects[klass], entry)
         n_objects++;
 
     list = calloc(n_objects + 1, sizeof(*list));
@@ -415,7 +415,7 @@ static core_object_t **core_object_list(const core_object_type_t type,
         return NULL;
 
     n_objects = 0;
-    LIST_FOREACH(object, &core->objects[type], entry)
+    LIST_FOREACH(object, &core->objects[klass], entry)
         list[n_objects++] = object;
 
     return list;
@@ -462,15 +462,15 @@ static PyObject *vortex_core_new(PyTypeObject *type, PyObject *args,
 
 static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
     char *kws[] = { "debug", NULL };
-    core_object_type_t type;
+    core_object_klass_t klass;
     core_object_event_type_t event;
     uint8_t debug_level = 0;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i", kws, &debug_level))
         return -1;
 
-    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++)
-        LIST_INIT(&self->objects[type]);
+    for (klass = OBJECT_KLASS_NONE; klass < OBJECT_KLASS_MAX; klass++)
+        LIST_INIT(&self->objects[klass]);
 
     for (event = 0; event < OBJECT_EVENT_MAX; event++) {
         pthread_mutex_init(&self->events.handlers[event].lock, NULL);
@@ -494,18 +494,18 @@ static int vortex_core_init(core_t *self, PyObject *args, PyObject *kwargs) {
 }
 
 static void vortex_core_dealloc(core_t *self) {
-    core_object_type_t type;
+    core_object_klass_t klass;
 
     core_timers_free();
 
-    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+    for (klass = OBJECT_KLASS_NONE; klass < OBJECT_KLASS_MAX; klass++) {
         core_object_t *object;
         core_object_t *object_next;
 
-        if (LIST_EMPTY(&self->objects[type]))
+        if (LIST_EMPTY(&self->objects[klass]))
             continue;
 
-        object = LIST_FIRST(&self->objects[type]);
+        object = LIST_FIRST(&self->objects[klass]);
         while (object) {
             object_next = LIST_NEXT(object, entry);
             Py_XDECREF(object->call_data.v_cmd_exec);
@@ -520,8 +520,8 @@ static void vortex_core_dealloc(core_t *self) {
             object = object_next;
         }
 
-        if (self->object_libs[type])
-            dlclose(self->object_libs[type]);
+        if (self->object_libs[klass])
+            dlclose(self->object_libs[klass]);
     }
 
     free(self->completions.list->entries);
@@ -533,12 +533,12 @@ static void vortex_core_dealloc(core_t *self) {
 
 static PyObject *vortex_core_initialize_object(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
-    core_object_type_t type;
+    core_object_klass_t klass;
 
-    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+    for (klass = OBJECT_KLASS_NONE; klass < OBJECT_KLASS_MAX; klass++) {
         core_object_t *object;
 
-        LIST_FOREACH(object, &core->objects[type], entry) {
+        LIST_FOREACH(object, &core->objects[klass], entry) {
             if (!object->init)
                 continue;
 
@@ -552,7 +552,7 @@ static PyObject *vortex_core_initialize_object(PyObject *self, PyObject *args) {
 
 static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
     core_t *core = (core_t *)self;
-    core_object_type_t type;
+    core_object_klass_t klass;
     core_thread_args_t thread_args;
     uint16_t arch;
     uint64_t ctlr_frequency;
@@ -619,19 +619,19 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+    for (klass = OBJECT_KLASS_NONE; klass < OBJECT_KLASS_MAX; klass++) {
         core_object_t *object;
 
-        if (LIST_EMPTY(&core->objects[type]))
+        if (LIST_EMPTY(&core->objects[klass]))
             continue;
 
-        LIST_FOREACH(object, &core->objects[type], entry) {
+        LIST_FOREACH(object, &core->objects[klass], entry) {
             char name[256];
 
             if (!object->update)
                 continue;
 
-            snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
+            snprintf(name, sizeof(name), "%s-%s", ObjectKlassNames[klass],
                      object->name);
             thread_args.object.name = strdup(name);
             thread_args.object.frequency = object->update_frequency;
@@ -652,19 +652,19 @@ static PyObject *vortex_core_start(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+    for (klass = OBJECT_KLASS_NONE; klass < OBJECT_KLASS_MAX; klass++) {
         core_object_t *object;
 
-        if (LIST_EMPTY(&core->objects[type]))
+        if (LIST_EMPTY(&core->objects[klass]))
             continue;
 
-        LIST_FOREACH(object, &core->objects[type], entry) {
+        LIST_FOREACH(object, &core->objects[klass], entry) {
             char name[256];
 
             if (!object->update)
                 continue;
 
-            snprintf(name, sizeof(name), "%s-%s", ObjectTypeNames[type],
+            snprintf(name, sizeof(name), "%s-%s", ObjectKlassNames[klass],
                      object->name);
             object->update_thread_id = core_threads_get_thread_id(name);
             core_log(LOG_LEVEL_DEBUG, "Object %s update thread id: %lu", name,
@@ -753,13 +753,13 @@ static PyObject *vortex_core_stop(PyObject *self, PyObject *args) {
     return Py_None;
 }
 
-static core_object_id_t load_object(core_t *core, core_object_type_t klass,
+static core_object_id_t load_object(core_t *core, core_object_klass_t klass,
                                     const char *name, void *config) {
     core_object_t *obj;
     char object_path[PATH_MAX];
     char logger_name[256];
 
-    if (klass == OBJECT_TYPE_NONE || klass >= OBJECT_TYPE_MAX) {
+    if (klass == OBJECT_KLASS_NONE || klass >= OBJECT_KLASS_MAX) {
         core_log(LOG_LEVEL_ERROR, "Invalid object klass %u", klass);
         return CORE_OBJECT_ID_INVALID;
     }
@@ -770,7 +770,7 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
         path = strdup(module_path);
         dir = dirname(path);
         snprintf(object_path, sizeof(object_path), "%s/objects/%s.so", dir,
-                 ObjectTypeNames[klass]);
+                 ObjectKlassNames[klass]);
         free(path);
         core->object_libs[klass] = dlopen(object_path, RTLD_LAZY);
         if (!core->object_libs[klass]) {
@@ -795,23 +795,23 @@ static core_object_id_t load_object(core_t *core, core_object_type_t klass,
         if (!strncmp(obj->name, name, max(strlen(name), strlen(obj->name)))) {
             core_log(LOG_LEVEL_ERROR,
                      "object of klass '%s' and name '%s' already exists",
-                     ObjectTypeNames[klass], name);
+                     ObjectKlassNames[klass], name);
             return CORE_OBJECT_ID_INVALID;
         }
     }
 
     core_log(LOG_LEVEL_DEBUG, "creating object klass %s, name %s",
-             ObjectTypeNames[klass], name);
+             ObjectKlassNames[klass], name);
     obj = core->object_create[klass](name, config);
     if (!obj)
         return CORE_OBJECT_ID_INVALID;
 
     obj->call_data = core_call_data;
     snprintf(logger_name, sizeof(logger_name), "vortex.core.%s.%s",
-             ObjectTypeNames[klass], name);
+             ObjectKlassNames[klass], name);
     if (vortex_logger_create(logger_name, &obj->call_data.logger)) {
         core_log(LOG_LEVEL_ERROR, "Failed to create logger for %s %s",
-                 ObjectTypeNames[klass], name);
+                 ObjectKlassNames[klass], name);
         free((char *)obj->name);
         free(obj);
         return CORE_OBJECT_ID_INVALID;
@@ -837,7 +837,7 @@ static PyObject *vortex_core_create_object(PyObject *self, PyObject *args,
     object_id = load_object((core_t *)self, klass, name, options);
     if (object_id == CORE_OBJECT_ID_INVALID) {
         PyErr_Format(VortexCoreError, "Failed to create object %s of klass %s",
-                     name, ObjectTypeNames[klass]);
+                     name, ObjectKlassNames[klass]);
         return NULL;
     }
 
@@ -858,8 +858,8 @@ static PyObject *vortex_core_destroy_object(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    core_log(LOG_LEVEL_DEBUG, "Destroying object %s of type %s: %p",
-             object->name, ObjectTypeNames[object->type], object->destroy);
+    core_log(LOG_LEVEL_DEBUG, "Destroying object %s of klass %s: %p",
+             object->name, ObjectKlassNames[object->klass], object->destroy);
     LIST_REMOVE(object, entry);
     if (object->destroy) {
         object->destroy(object);
@@ -879,7 +879,7 @@ static int core_vobj_exec_command(core_object_t *object,
 
     gil_state = PyGILState_Ensure();
     result = PyObject_CallFunction(object->call_data.v_cmd_exec, "ikkhk",
-                                   object->type, core_object_to_id(object),
+                                   object->klass, core_object_to_id(object),
                                    cmd->command_id, cmd->object_cmd_id,
                                    cmd->args);
     if (!result || Py_IsFalse(result)) {
@@ -902,7 +902,7 @@ static void core_vobj_get_state(core_object_t *object, void *state) {
 
     gil_state = PyGILState_Ensure();
     ctypes_struct = PyObject_CallFunction(object->call_data.v_get_state, "ik",
-                                          object->type,
+                                          object->klass,
                                           core_object_to_id(object));
     if (ctypes_struct == NULL) {
         PyErr_Print();
@@ -921,14 +921,14 @@ static void core_vobj_get_state(core_object_t *object, void *state) {
     if (addr == 0)
         return;
 
-    switch (object->type) {
-    case OBJECT_TYPE_DIGITAL_PIN:
+    switch (object->klass) {
+    case OBJECT_KLASS_DIGITAL_PIN:
         size = sizeof(digital_pin_status_t);
         break;
-    case OBJECT_TYPE_DISPLAY:
+    case OBJECT_KLASS_DISPLAY:
         size = sizeof(display_status_t);
         break;
-    case OBJECT_TYPE_ENCODER:
+    case OBJECT_KLASS_ENCODER:
         size = sizeof(encoder_status_t);
         break;
     default:
@@ -945,7 +945,7 @@ static void core_vobj_get_state(core_object_t *object, void *state) {
 static PyObject *vortex_core_register_virtual_object(PyObject *self,
                                                      PyObject *args) {
     core_t *core = (core_t *)self;
-    core_object_type_t klass;
+    core_object_klass_t klass;
     core_object_t *obj;
     PyObject *cmd_exec_func = NULL;
     PyObject *get_state_func = NULL;
@@ -955,7 +955,7 @@ static PyObject *vortex_core_register_virtual_object(PyObject *self,
                           &get_state_func))
         return NULL;
 
-    if (klass == OBJECT_TYPE_NONE || klass >= OBJECT_TYPE_MAX) {
+    if (klass == OBJECT_KLASS_NONE || klass >= OBJECT_KLASS_MAX) {
         core_log(LOG_LEVEL_ERROR, "Invalid object klass %u", klass);
         return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
     }
@@ -986,12 +986,12 @@ static PyObject *vortex_core_register_virtual_object(PyObject *self,
     }
 
     core_log(LOG_LEVEL_DEBUG, "creating object klass %s, name %s",
-             ObjectTypeNames[klass], name);
+             ObjectKlassNames[klass], name);
     obj = calloc(1, sizeof(core_object_t));
     if (!obj)
         return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
 
-    obj->type = klass;
+    obj->klass = klass;
     obj->name = strdup(name);
     obj->exec_command = core_vobj_exec_command;
     obj->get_state = core_vobj_get_state;
@@ -1024,7 +1024,7 @@ static PyObject *vortex_core_exec_command(PyObject *self, PyObject *args,
     }
 
     core_log(LOG_LEVEL_DEBUG, "Submitting %u for %s %s", obj_cmd_id,
-             ObjectTypeNames[object->type], object->name);
+             ObjectKlassNames[object->klass], object->name);
     if (object->exec_command) {
         cmd->command_id = cmd_id;
         cmd->object_cmd_id = obj_cmd_id;
@@ -1097,29 +1097,29 @@ static PyObject *vortex_core_get_status(PyObject *self, PyObject *args) {
         if (!object->get_state)
             continue;
 
-        switch (object->type) {
-        case OBJECT_TYPE_AXIS:
+        switch (object->klass) {
+        case OBJECT_KLASS_AXIS:
             state = calloc(1, sizeof(axis_status_t));
             break;
-        case OBJECT_TYPE_ENDSTOP:
+        case OBJECT_KLASS_ENDSTOP:
             state = calloc(1, sizeof(endstop_status_t));
             break;
-        case OBJECT_TYPE_HEATER:
+        case OBJECT_KLASS_HEATER:
             state = calloc(1, sizeof(heater_status_t));
             break;
-        case OBJECT_TYPE_PROBE:
+        case OBJECT_KLASS_PROBE:
             state = calloc(1, sizeof(probe_status_t));
             break;
-        case OBJECT_TYPE_STEPPER:
+        case OBJECT_KLASS_STEPPER:
             state = calloc(1, sizeof(stepper_status_t));
             break;
-        case OBJECT_TYPE_THERMISTOR:
+        case OBJECT_KLASS_THERMISTOR:
             state = calloc(1, sizeof(thermistor_status_t));
             break;
-        case OBJECT_TYPE_TOOLHEAD:
+        case OBJECT_KLASS_TOOLHEAD:
             state = calloc(1, sizeof(toolhead_status_t));
             break;
-        case OBJECT_TYPE_PWM:
+        case OBJECT_KLASS_PWM:
             state = calloc(1, sizeof(pwm_state_t));
             break;
         default:
@@ -1149,7 +1149,7 @@ fail:
     return NULL;
 }
 
-static int core_object_event_register(const core_object_type_t object_type,
+static int core_object_event_register(const core_object_klass_t klass,
                                       const core_object_event_type_t event,
                                       const char *name, core_object_t *object,
                                       event_handler_t handler, void *data) {
@@ -1160,9 +1160,9 @@ static int core_object_event_register(const core_object_type_t object_type,
     if (!subscription)
         return -1;
 
-    subscription->object_type = object_type;
+    subscription->klass = klass;
     if (name) {
-        core_object_t *object = core_object_find(object_type, name, core);
+        core_object_t *object = core_object_find(klass, name, core);
 
         if (!object) {
             free(subscription);
@@ -1183,21 +1183,21 @@ static int core_object_event_register(const core_object_type_t object_type,
     return 0;
 }
 
-static int core_object_event_unregister(const core_object_type_t object_type,
+static int core_object_event_unregister(const core_object_klass_t klass,
                                         const core_object_event_type_t event,
                                         const char *name, core_object_t *object,
                                         event_handler_t handler, void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
     event_subscription_t *next;
-    core_object_t *obj = core_object_find(object_type, name, core);
+    core_object_t *obj = core_object_find(klass, name, core);
 
     pthread_mutex_lock(&core->events.handlers[event].lock);
     subscription = STAILQ_FIRST(&core->events.handlers[event].list);
     pthread_mutex_unlock(&core->events.handlers[event].lock);
     while (subscription != NULL) {
         next = STAILQ_NEXT(subscription, entry);
-        if (subscription->object_type == object_type &&
+        if (subscription->klass == klass &&
             (subscription->object_id == CORE_OBJECT_ID_INVALID ||
              (object && subscription->object_id == core_object_to_id(obj)))) {
             pthread_mutex_lock(&core->events.handlers[event].lock);
@@ -1227,10 +1227,10 @@ static int __core_object_event_submit(const core_object_event_type_t event_type,
         return -1;
 
     core_log(LOG_LEVEL_DEBUG, "submitting event = %s %s, %s, %lu",
-             ObjectTypeNames[object->type], object->name,
+             ObjectKlassNames[object->klass], object->name,
              OBJECT_EVENT_NAMES[event_type], id);
     event->type = event_type;
-    event->object_type = object->type;
+    event->klass = object->klass;
     event->object_id = id;
     event->data = event_data;
     event->should_free = should_free;
@@ -1276,12 +1276,12 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
                                                    PyObject *args) {
     core_t *core = (core_t *)self;
     event_subscription_t *subscription;
-    core_object_type_t object_type;
+    core_object_klass_t klass;
     core_object_event_type_t type;
     PyObject *callback;
     char *name = NULL;
 
-    if (!PyArg_ParseTuple(args, "iisO", &object_type, &type, &name, &callback))
+    if (!PyArg_ParseTuple(args, "iisO", &klass, &type, &name, &callback))
         return NULL;
 
     Py_INCREF(callback);
@@ -1291,7 +1291,7 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
         Py_RETURN_FALSE;
 
     if (name) {
-        core_object_t *object = core_object_find(object_type, name, core);
+        core_object_t *object = core_object_find(klass, name, core);
 
         if (!object) {
             free(subscription);
@@ -1303,7 +1303,7 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
         subscription->object_id = CORE_OBJECT_ID_INVALID;
     }
 
-    subscription->object_type = object_type;
+    subscription->klass = klass;
     subscription->is_python = true;
     subscription->python.handler = callback;
     pthread_mutex_lock(&core->events.handlers[type].lock);
@@ -1317,16 +1317,16 @@ static PyObject *vortex_core_python_event_unregister(PyObject *self,
     core_t *core = (core_t *)self;
     event_subscription_t *subscription;
     event_subscription_t *next;
-    core_object_type_t object_type;
+    core_object_klass_t klass;
     core_object_event_type_t type;
     core_object_id_t object_id = CORE_OBJECT_ID_INVALID;
     char *name;
 
-    if (PyArg_ParseTuple(args, "iis", &object_type, &type, &name))
+    if (PyArg_ParseTuple(args, "iis", &klass, &type, &name))
         return NULL;
 
     if (name) {
-        core_object_t *object = core_object_find(object_type, name, core);
+        core_object_t *object = core_object_find(klass, name, core);
 
         if (object)
             object_id = core_object_to_id(object);
@@ -1338,7 +1338,7 @@ static PyObject *vortex_core_python_event_unregister(PyObject *self,
 
     while (subscription != NULL) {
         next = STAILQ_NEXT(subscription, entry);
-        if (subscription->object_type == object_type &&
+        if (subscription->klass == klass &&
             (subscription->object_id == CORE_OBJECT_ID_INVALID ||
              subscription->object_id == object_id)) {
             pthread_mutex_lock(&core->events.handlers[type].lock);
@@ -1465,12 +1465,12 @@ static PyObject *vortex_core_reset(PyObject *self, PyObject *args) {
             core_reset_object(core, object);
         }
     } else {
-        core_object_type_t type;
+        core_object_klass_t klass;
 
-        for (type = OBJECT_TYPE_NONE; type < OBJECT_TYPE_MAX; type++) {
+        for (klass = OBJECT_KLASS_NONE; klass < OBJECT_KLASS_MAX; klass++) {
             core_object_t *object;
 
-            LIST_FOREACH(object, &core->objects[type], entry)
+            LIST_FOREACH(object, &core->objects[klass], entry)
                 core_reset_object(core, object);
         }
     }
@@ -1572,14 +1572,14 @@ void upper(char *str, const char *name) {
 
 static char *core_create_object_enum(void) {
     const char *def_prefix = "from vortex.lib.ext_enum import ExtIntEnum\n"
-                             "class ObjectTypes(ExtIntEnum):\n";
+                             "class ObjectKlass(ExtIntEnum):\n";
     char *def_string;
     size_t obj_def_size = 4 + /* '    ' */ +32 /* name */ + 3 /* ' = ' */ +
-                          floor(log10(OBJECT_TYPE_MAX)) + 1 /* value */ +
+                          floor(log10(OBJECT_KLASS_MAX)) + 1 /* value */ +
                           1 /* \n */;
     size_t offset;
     size_t string_size =
-        strlen(def_prefix) + OBJECT_TYPE_MAX * obj_def_size + 1;
+        strlen(def_prefix) + OBJECT_KLASS_MAX * obj_def_size + 1;
     size_t i;
 
     def_string = calloc(string_size, sizeof(char));
@@ -1588,10 +1588,10 @@ static char *core_create_object_enum(void) {
 
     strcpy(def_string, def_prefix);
     offset = strlen(def_prefix);
-    for (i = 0; i < OBJECT_TYPE_MAX; i++) {
-        char name[strlen(ObjectTypeNames[i]) + 1];
+    for (i = 0; i < OBJECT_KLASS_MAX; i++) {
+        char name[strlen(ObjectKlassNames[i]) + 1];
 
-        upper(name, ObjectTypeNames[i]);
+        upper(name, ObjectKlassNames[i]);
         offset += snprintf(def_string + offset, string_size - offset,
                            "    %s = %lu\n", name, i);
     }

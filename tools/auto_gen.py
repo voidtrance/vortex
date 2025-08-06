@@ -54,7 +54,7 @@ def find_new_types(object_list):
                     if not isinstance(cnode, ast.Assign):
                         continue
                     if cnode.targets[0].id == "type":
-                        if cnode.value.value.id != "ObjectTypes":
+                        if cnode.value.value.id != "ObjectKlass":
                             continue
                         if cnode.value.attr not in new_types:
                             new_types.append(cnode.value.attr)
@@ -73,22 +73,22 @@ def gen_types(output_file, types):
     content = list()
     with open(top / f"{output_file}.in", 'r') as fd:
         for line in fd:
-            if "@EXTRA_TYPES@" not in line and \
-                "@EXTRA_TYPE_NAMES@" not in line and \
-                "@EXTRA_TYPE_EXPORT_NAMES@" not in line:
+            if "@EXTRA_KLASSES@" not in line and \
+                "@EXTRA_KLASS_NAMES@" not in line and \
+                "@EXTRA_KLASS_EXPORT_NAMES@" not in line:
                 content.append(line)
                 continue
-            if "@EXTRA_TYPES@" in line:
-                content += [" " * 4 + f"OBJECT_TYPE_{x.upper()},\n" \
+            if "@EXTRA_KLASSES@" in line:
+                content += [" " * 4 + f"OBJECT_KLASS_{x.upper()},\n" \
                             for x in types]
-            elif "@EXTRA_TYPE_EXPORT_NAMES@" in line:
+            elif "@EXTRA_KLASS_EXPORT_NAMES@" in line:
                 content += [" " * 4 + \
-                            f"[OBJECT_TYPE_{x.upper()}] = stringify(OBJECT_TYPE_{x.upper()}),\n" \
+                            f"[OBJECT_KLASS_{x.upper()}] = stringify(OBJECT_KLASS_{x.upper()}),\n" \
                             for x in types]
                 
-            elif "@EXTRA_TYPE_NAMES@":
+            elif "@EXTRA_KLASS_NAMES@":
                 content += [" " * 4 + \
-                            f"[OBJECT_TYPE_{x.upper()}] = \"{x.lower()}\",\n" \
+                            f"[OBJECT_KLASS_{x.upper()}] = \"{x.lower()}\",\n" \
                             for x in types]
 
     with open(output_file, 'w') as fd:

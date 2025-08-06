@@ -17,12 +17,12 @@ r = run_command(py, root / 'tools/find_modules.py', '--root',
                  root, 'modules', check: true)
 objects = r.stdout().strip().split()
 
-auto_gen_types = custom_target('auto-types.h', output: 'auto-types.h',
-                         input : root / 'tools/auto_gen_types.py',
+auto_gen_types = custom_target('auto-klass.h', output: 'auto-klass.h',
+                         input : root / 'tools/auto_gen.py',
                          command : [py, '@INPUT@', '-t', root, '@OUTPUT@'])
 
 auto_gen_events = custom_target('auto-events.h', output: 'auto-events.h',
-                         input : root / 'tools/auto_gen_types.py',
+                         input : root / 'tools/auto_gen.py',
                          command : [py, '@INPUT@', '-e', root, '@OUTPUT@'])
 
 auto_gen_vobj = custom_target('vobj_defs.h', output: 'vobj_defs.h',

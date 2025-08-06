@@ -16,7 +16,7 @@
 import zlib
 import json
 from threading import Lock
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 from vortex.core.lib.logging import get_level, DEBUG
 from vortex.frontends import BaseFrontend
 from vortex.frontends.klipper.helpers import *
@@ -197,7 +197,7 @@ class KlipperFrontend(BaseFrontend):
             self._add_commands(proto.KLIPPER_PROTOCOL.spicmds)
             self._add_commands(proto.KLIPPER_PROTOCOL.spi_software)
 
-        if self.find_object(ObjectTypes.DISPLAY) is not None:
+        if self.find_object(ObjectKlass.DISPLAY) is not None:
             self._add_commands(proto.KLIPPER_PROTOCOL.buttons)
 
         if self.query_hw("NEOPIXEL_COUNT"):
@@ -210,7 +210,7 @@ class KlipperFrontend(BaseFrontend):
 
     def _create_object_pin_map(self):
         pmap = {}
-        for klass in ObjectTypes:
+        for klass in ObjectKlass:
             pmap[klass] = {}
             objects = self.get_object_id_set(klass)
             object_status = self.query_object(objects)
@@ -292,7 +292,7 @@ class KlipperFrontend(BaseFrontend):
 
     def find_object_from_pin(self, pin, *klasses):
         if not klasses:
-            klasses = ObjectTypes
+            klasses = ObjectKlass
         for klass in klasses:
             if pin in self._object_pin_map[klass]:
                 return self._object_pin_map[klass][pin], klass
@@ -371,7 +371,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_analog_in(self, cmd, oid, pin):
-        obj_id, klass = self.find_object_from_pin(pin, ObjectTypes.THERMISTOR)
+        obj_id, klass = self.find_object_from_pin(pin, ObjectKlass.THERMISTOR)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -391,14 +391,14 @@ class KlipperFrontend(BaseFrontend):
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
-        if klass == ObjectTypes.HEATER:
+        if klass == ObjectKlass.HEATER:
             pin = HeaterPin(self, self.move_queue, oid, obj_id, klass, name)
-        elif klass == ObjectTypes.STEPPER:
+        elif klass == ObjectKlass.STEPPER:
             stepper = self.find_existing_object(obj_id)
             if stepper is None or not stepper.owns_pin(pin):
                 return False
             pin = stepper.configure_pin(oid, pin)
-        elif klass == ObjectTypes.DISPLAY:
+        elif klass == ObjectKlass.DISPLAY:
             display = self.find_existing_object(obj_id)
             if display is None or not display.owns_pin(pin):
                 return False
@@ -429,7 +429,7 @@ class KlipperFrontend(BaseFrontend):
 
     def config_stepper(self, cmd, oid, step_pin, dir_pin, invert_step,
                        step_pulse_ticks):
-        obj_id, klass = self.find_object_from_pin(step_pin, ObjectTypes.STEPPER)
+        obj_id, klass = self.find_object_from_pin(step_pin, ObjectKlass.STEPPER)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -466,8 +466,8 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_endstop(self, cmd, oid, pin, pull_up):
-        obj_id, klass = self.find_object_from_pin(pin, ObjectTypes.ENDSTOP,
-                                          ObjectTypes.PROBE)
+        obj_id, klass = self.find_object_from_pin(pin, ObjectKlass.ENDSTOP,
+                                          ObjectKlass.PROBE)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -490,7 +490,7 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_trsync(self, cmd, oid):
-        self._oid_map[oid] = TRSync(self, self.move_queue, oid, -1, ObjectTypes.NONE)
+        self._oid_map[oid] = TRSync(self, self.move_queue, oid, -1, ObjectKlass.NONE)
         return True
 
     def trsync_start(self, cmd, oid, report_clock, report_ticks, expire_reason):
@@ -537,14 +537,14 @@ class KlipperFrontend(BaseFrontend):
             return result >= 0
 
     def config_buttons(self, cmd, oid, button_count):
-        self._oid_map[oid] = Buttons(self, self.move_queue, oid, -1, ObjectTypes.NONE,
+        self._oid_map[oid] = Buttons(self, self.move_queue, oid, -1, ObjectKlass.NONE,
                                      "", button_count)
         return True
 
     def buttons_add(self, cmd, oid, pos, pin, pull_up):
         buttons = self._oid_map[oid]
-        button, klass = self.find_object_from_pin(pin, ObjectTypes.DIGITAL_PIN,
-                                          ObjectTypes.ENCODER)
+        button, klass = self.find_object_from_pin(pin, ObjectKlass.DIGITAL_PIN,
+                                          ObjectKlass.ENCODER)
         if button is None:
             return False
         name = self.get_object_name(klass, button)
@@ -561,8 +561,8 @@ class KlipperFrontend(BaseFrontend):
         return True
 
     def config_pwm_out(self, cmd, oid, pin, cycle_ticks, value, default_value, max_duration):
-        obj_id, klass = self.find_object_from_pin(pin, ObjectTypes.PWM)
-        pin_id, _ = self.find_object_from_pin(pin, ObjectTypes.DIGITAL_PIN)
+        obj_id, klass = self.find_object_from_pin(pin, ObjectKlass.PWM)
+        pin_id, _ = self.find_object_from_pin(pin, ObjectKlass.DIGITAL_PIN)
         if obj_id is None or pin_id is None:
             return False
         name = self.get_object_name(klass, obj_id)
@@ -582,7 +582,7 @@ class KlipperFrontend(BaseFrontend):
         return self.config_pwm_out(cmd, oid, pin, cycle_ticks, value, 0, 0)
 
     def config_neopixel(self, cmd, oid, pin, data_size, bit_max_ticks, reset_min_ticks):
-        obj_id, klass = self.find_object_from_pin(pin, ObjectTypes.NEOPIXEL)
+        obj_id, klass = self.find_object_from_pin(pin, ObjectKlass.NEOPIXEL)
         if obj_id is None:
             return False
         name = self.get_object_name(klass, obj_id)

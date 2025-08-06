@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from argparse import Namespace
-from vortex.core import ObjectTypes, ObjectEvents
+from vortex.core import ObjectKlass, ObjectEvents
 from vortex.core import PIN_NAME_SIZE, OBJECT_NAME_SIZE, ENDSTOP_NAME_SIZE, MOTOR_NAME_SIZE, \
                         TOOLHEAD_NAME_SIZE, HEATER_NAME_SIZE, \
                         HEAT_SENSOR_NAME_SIZE
@@ -23,7 +23,7 @@ import ctypes
 
 class ObjectDef(Namespace):
     virtual = False
-    def __init__(self, type=ObjectTypes.NONE):
+    def __init__(self, type=ObjectKlass.NONE):
         self.type = type
         self.config = getattr(self, str(type).capitalize() + "Config", None)
         self.state = getattr(self, str(type).capitalize() + "Status", None)
@@ -70,7 +70,7 @@ class Stepper(ObjectDef):
     class StepperMoveCompleteEvent(ctypes.Structure):
         _fields_ = [("steps", ctypes.c_uint64)]
     def __init__(self):
-        super().__init__(ObjectTypes.STEPPER)
+        super().__init__(ObjectKlass.STEPPER)
         self.commands = [(0, "enable", self.StepperEnableCommandOpts, None, (False,)),
                          (1, "set_speed", self.StepperSetSpeedCommandOpts, None, (0.,)),
                          (2, "set_accel", self.StepperSetAccelCommandOpts, None, (0.,)),
@@ -103,7 +103,7 @@ class Thermistor(ObjectDef):
                     ("adc", ctypes.c_uint16),
                     ("pin", ctypes.c_char * PIN_NAME_SIZE)]
     def __init__(self):
-        super().__init__(ObjectTypes.THERMISTOR)
+        super().__init__(ObjectKlass.THERMISTOR)
 
 class HeaterLayer(ctypes.Structure):
     _fields_ = [("type", ctypes.c_int),
@@ -137,7 +137,7 @@ class Heater(ObjectDef):
     class HeaterEventTempReached(ctypes.Structure):
         _fields_ = [("temp", ctypes.c_float)]
     def __init__(self):
-        super().__init__(ObjectTypes.HEATER)
+        super().__init__(ObjectKlass.HEATER)
         self.commands = [(0, "set_temperature", self.HeaterSetTempCommandOpts, None, (0,)),
                          (1, "use_pins", self.HeaterUsePinsCommandOpts, self.HeaterUsePinsCommandData, (False,))]
         self.events = {ObjectEvents.HEATER_TEMP_REACHED: self.HeaterEventTempReached}
@@ -157,7 +157,7 @@ class Endstop(ObjectDef):
         _fields_ = [("triggered", ctypes.c_bool)]
     def __init__(self):
         super().__init__()
-        self.type = ObjectTypes.ENDSTOP
+        self.type = ObjectKlass.ENDSTOP
         self.config = self.EndstopConfig
         self.events = {ObjectEvents.ENDSTOP_TRIGGER: self.EndstopTriggerEvent}
         self.state = self.EndstopStatus
@@ -179,7 +179,7 @@ class Axis(ObjectDef):
     class AxisEventHomed(ctypes.Structure):
         _fields_ = [("axis", ctypes.c_char_p)]
     def __init__(self):
-        super().__init__(ObjectTypes.AXIS)
+        super().__init__(ObjectKlass.AXIS)
         self.events = {ObjectEvents.AXIS_HOMED : self.AxisEventHomed}
 
 class Probe(ObjectDef):
@@ -199,7 +199,7 @@ class Probe(ObjectDef):
     class ProbeEventTriggered(ctypes.Structure):
         _fields_ = [("position", ctypes.c_double * len(AxisType))]
     def __init__(self):
-        super().__init__(ObjectTypes.PROBE)
+        super().__init__(ObjectKlass.PROBE)
         self.events = {ObjectEvents.PROBE_TRIGGERED: self.ProbeEventTriggered}
 
 class Toolhead(ObjectDef):
@@ -212,7 +212,7 @@ class Toolhead(ObjectDef):
     class ToolheadEventOrigin(ctypes.Structure):
         _fields_ = [("position", ctypes.c_double * len(AxisType))]
     def __init__(self):
-        super().__init__(ObjectTypes.TOOLHEAD)
+        super().__init__(ObjectKlass.TOOLHEAD)
         self.events = {ObjectEvents.TOOLHEAD_ORIGIN: self.ToolheadEventOrigin}
 
 class Pwm(ObjectDef):
@@ -232,7 +232,7 @@ class Pwm(ObjectDef):
                     ("on", ctypes.c_bool),
                     ("pin", ctypes.c_char * PIN_NAME_SIZE)]
     def __init__(self):
-        super().__init__(ObjectTypes.PWM)
+        super().__init__(ObjectKlass.PWM)
         self.commands = [(0, "set_params", self.PwmSetParams, None, (0, )),
                          (1, "set_object", self.PwmSetObject, None, (0, )),
                          (2, "set_duty_cycle", self.PwmSetDutyCycle, None, (0, ))]

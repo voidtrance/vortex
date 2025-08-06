@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <sys/queue.h>
 #include <stdlib.h>
-#include "auto-types.h"
+#include "auto-klass.h"
 
 typedef unsigned long core_object_id_t;
 #define CORE_OBJECT_ID_INVALID (-1UL)

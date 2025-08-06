@@ -16,7 +16,7 @@
 import configparser
 from argparse import Namespace
 import vortex.core.lib.logging as logging
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 
 class Configuration:
     def __init__(self):
@@ -46,8 +46,8 @@ class Configuration:
             logging.debug("CONFIG: " + line)
 
     def get(self, type, name, option):
-        if not isinstance(type, ObjectTypes):
-            raise TypeError("'type' must be a ObjectTypes enumeration value")
+        if not isinstance(type, ObjectKlass):
+            raise TypeError("'type' must be a ObjectKlass enumeration value")
         section = f"{str(type)} {name}"
         if self._parser.has_section(section):
             return self._get(self._parser.get(section, option))
@@ -60,8 +60,8 @@ class Configuration:
         return self.__parse_section("kinematics")
 
     def get_section(self, type, name):
-        if not isinstance(type, ObjectTypes):
-            raise TypeError("'type' must be a ObjectTypes enumeration value")
+        if not isinstance(type, ObjectKlass):
+            raise TypeError("'type' must be a ObjectKlass enumeration value")
         section = f"{str(type).lower()} {name}"
         if self._parser.has_section(section):
             return self.__parse_section(section)
@@ -78,7 +78,7 @@ class Configuration:
             if section in ("machine", "kinematics"):
                 continue
             klass, name = section.split(maxsplit=1)
-            klass_enum = getattr(ObjectTypes, klass.upper(), None)
+            klass_enum = getattr(ObjectKlass, klass.upper(), None)
             if klass_enum is None:
                 logging.error(f"Unknown klass '{klass}'")
                 continue

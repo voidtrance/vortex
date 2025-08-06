@@ -69,7 +69,7 @@ static int endstop_init(core_object_t *object) {
     core_object_t **axes;
     core_object_t **axis_ptr;
 
-    axes = CORE_LIST_OBJECTS(endstop, OBJECT_TYPE_AXIS);
+    axes = CORE_LIST_OBJECTS(endstop, OBJECT_KLASS_AXIS);
     if (!axes) {
         log_error(endstop, "No axis list");
         return -ENOENT;
@@ -165,7 +165,7 @@ endstop_t *object_create(const char *name, void *config_ptr) {
         return NULL;
     }
 
-    endstop->object.type = OBJECT_TYPE_ENDSTOP;
+    endstop->object.klass = OBJECT_KLASS_ENDSTOP;
     endstop->object.name = strdup(name);
     endstop->object.init = endstop_init;
     endstop->object.update = endstop_update;

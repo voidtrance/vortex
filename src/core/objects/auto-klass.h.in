@@ -1,0 +1,62 @@
+/*
+ * vortex - GCode machine emulator
+ * Copyright (C) 2024-2025 Mitko Haralanov
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+#ifndef __AUTO_OBJECT_DEFS_H__
+#define __AUTO_OBJECT_DEFS_H__
+#include <utils.h>
+#include "auto-klass.h"
+
+typedef enum {
+    OBJECT_KLASS_NONE,
+    OBJECT_KLASS_STEPPER,
+    OBJECT_KLASS_ENDSTOP,
+    OBJECT_KLASS_HEATER,
+    OBJECT_KLASS_THERMISTOR,
+    OBJECT_KLASS_PROBE,
+    OBJECT_KLASS_AXIS,
+    OBJECT_KLASS_TOOLHEAD,
+    OBJECT_KLASS_PWM,
+    @EXTRA_KLASSES@,
+    OBJECT_KLASS_MAX
+} core_object_klass_t;
+
+static const char *const ObjectKLASSExportNames[] = {
+    [OBJECT_KLASS_NONE] = stringify(OBJECT_KLASS_NONE),
+    [OBJECT_KLASS_STEPPER] = stringify(OBJECT_KLASS_STEPPER),
+    [OBJECT_KLASS_ENDSTOP] = stringify(OBJECT_KLASS_ENDSTOP),
+    [OBJECT_KLASS_HEATER] = stringify(OBJECT_KLASS_HEATER),
+    [OBJECT_KLASS_THERMISTOR] = stringify(OBJECT_KLASS_THERMISTOR),
+    [OBJECT_KLASS_PROBE] = stringify(OBJECT_KLASS_PROBE),
+    [OBJECT_KLASS_AXIS] = stringify(OBJECT_KLASS_AXIS),
+    [OBJECT_KLASS_TOOLHEAD] = stringify(OBJECT_KLASS_TOOLHEAD),
+    [OBJECT_KLASS_PWM] = stringify(OBJECT_KLASS_PWM),
+    @EXTRA_KLASS_EXPORT_NAMES@,
+};
+
+static const char *const ObjectKlassNames[] = {
+    [OBJECT_KLASS_NONE] = "none",
+    [OBJECT_KLASS_STEPPER] = "stepper",
+    [OBJECT_KLASS_ENDSTOP] = "endstop",
+    [OBJECT_KLASS_HEATER] = "heater",
+    [OBJECT_KLASS_THERMISTOR] = "thermistor",
+    [OBJECT_KLASS_PROBE] = "probe",
+    [OBJECT_KLASS_AXIS] = "axis",
+    [OBJECT_KLASS_TOOLHEAD] = "toolhead",
+    [OBJECT_KLASS_PWM] = "pwm",
+    @EXTRA_KLASS_NAMES@,
+};
+#endif

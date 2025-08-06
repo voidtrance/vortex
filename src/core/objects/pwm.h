@@ -37,7 +37,7 @@ enum {
 };
 
 struct pwm_set_object_args {
-    core_object_type_t type;
+    core_object_klass_t type;
     char object_name[OBJECT_NAME_SIZE];
 };
 

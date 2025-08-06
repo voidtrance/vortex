@@ -23,7 +23,7 @@ import argparse
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, set_props, Patch
 from dash.dependencies import Input, Output
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 import vortex.emulator.remote.api as api
 import collections
 from weakref import proxy
@@ -124,7 +124,7 @@ def get(conn, request):
 def get_toolhead_id(conn):
     request = api.Request(api.RequestType.OBJECT_LIST)
     response = get(conn, request)
-    toolheads = response.data[ObjectTypes.TOOLHEAD]
+    toolheads = response.data[ObjectKlass.TOOLHEAD]
     if len(toolheads) > 1:
         return 0
     return toolheads[0]["id"]
@@ -132,7 +132,7 @@ def get_toolhead_id(conn):
 def get_heaters_id(conn):
     request = api.Request(api.RequestType.OBJECT_LIST)
     response = get(conn, request)
-    heaters = response.data[ObjectTypes.HEATER]
+    heaters = response.data[ObjectKlass.HEATER]
     return [x["id"] for x in heaters]
 
 def get_objects(conn, *args):

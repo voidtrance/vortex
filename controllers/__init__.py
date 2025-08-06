@@ -20,7 +20,6 @@ import vortex.core as core
 import inspect
 from pathlib import PosixPath
 from collections import namedtuple
-import vortex.core
 import vortex.lib.ctypes_helpers
 from vortex.lib.utils import Counter, parse_frequency
 from vortex.lib.constants import hz_to_nsec, khz_to_hz
@@ -84,7 +83,7 @@ class Pins:
 class _Objects:
     _frozen = False
     def __init__(self):
-        self.__objects = {type: [] for type in core.ObjectTypes}
+        self.__objects = {type: [] for type in core.ObjectKlass}
         self._frozen = True
     def __setattr__(self, name, value):
         if not self._frozen:
@@ -123,7 +122,7 @@ class ObjectLookUp:
                 return Object(klass, name, id)
         return Object(None, None, None)
     def object_by_name(self, name, klass=None):
-        if klass and klass in core.ObjectTypes:
+        if klass and klass in core.ObjectKlass:
             generator = getattr(self, "__objects").iter_klass(klass)
         elif klass is not None:
             generator = getattr(self, "__objects")
@@ -191,17 +190,17 @@ class Controller(core.VortexCore):
         self._pin_index = 0
         self._objects = _Objects()
         self.objects = ObjectLookUp(self._objects)
-        self.object_defs = {x: None for x in core.ObjectTypes}
-        self.object_factory = {x: None for x in core.ObjectTypes}
+        self.object_defs = {x: None for x in core.ObjectKlass}
+        self.object_factory = {x: None for x in core.ObjectKlass}
         self._virtual_objects = {}
         self._completion_callback = None
         self._event_handlers = {}
         self._timer_factory = timers.Factory(self)
         self._exec_cmd_map = {}
-        self._free_object_counts = dict.fromkeys(core.ObjectTypes, 0)
-        for klass in (core.ObjectTypes.AXIS, core.ObjectTypes.TOOLHEAD):
+        self._free_object_counts = dict.fromkeys(core.ObjectKlass, 0)
+        for klass in (core.ObjectKlass.AXIS, core.ObjectKlass.TOOLHEAD):
             self._free_object_counts.pop(klass)
-        for klass in core.ObjectTypes:
+        for klass in core.ObjectKlass:
             if hasattr(self, f"{klass}_COUNT"):
                 self._free_object_counts[klass] = getattr(self, f"{klass}_COUNT")
         self._load_objects(config)
@@ -242,7 +241,7 @@ class Controller(core.VortexCore):
         object_factory = [klass for name, klass in members \
                        if issubclass(klass, base)]
         available_objects = [x() for x in object_factory]
-        self.object_factory.update({core.ObjectTypes[x.__class__.__name__.upper()]: x \
+        self.object_factory.update({core.ObjectKlass[x.__class__.__name__.upper()]: x \
                                     for x in available_objects})
         available_objects = self._load_virtual_objects()
         self.object_factory.update(available_objects)
@@ -281,9 +280,9 @@ class Controller(core.VortexCore):
             else:
                 self.object_defs[klass] = self.object_factory[klass]
                 obj_conf = self.object_factory[klass].config()
-                if klass == core.ObjectTypes.THERMISTOR:
+                if klass == core.ObjectKlass.THERMISTOR:
                     options.adc_max = self.ADC_MAX
-                if klass == core.ObjectTypes.PWM:
+                if klass == core.ObjectKlass.PWM:
                     options.pwm_max = self.PWM_MAX
                 options = vortex.lib.ctypes_helpers.expand_substruct_config(options,
                                                                             obj_conf)
@@ -370,13 +369,13 @@ class Controller(core.VortexCore):
 
     def get_param(self, param):
         if param == "commands":
-            cmds = {x: [] for x in core.ObjectTypes}
-            for klass in core.ObjectTypes:
+            cmds = {x: [] for x in core.ObjectKlass}
+            for klass in core.ObjectKlass:
                 if self.object_defs[klass] is not None:
                     cmds[klass] += self.object_defs[klass].commands
             return cmds
         elif param == "objects":
-            objects = {x: [] for x in core.ObjectTypes}
+            objects = {x: [] for x in core.ObjectKlass}
             for klass, name, id in self.objects:
                 status = self.query_objects([id])
                 pins = {}
@@ -386,8 +385,8 @@ class Controller(core.VortexCore):
                 objects[klass].append((name, id, pins))
             return objects
         elif param == "events":
-            events = {x: {} for x in core.ObjectTypes}
-            for klass in core.ObjectTypes:
+            events = {x: {} for x in core.ObjectKlass}
+            for klass in core.ObjectKlass:
                 if self.object_defs[klass] is not None:
                     if not self.object_defs[klass].virtual:
                         events[klass] = \
@@ -537,6 +536,6 @@ class Controller(core.VortexCore):
         for obj in self._virtual_objects.values():
             del obj
         self._virtual_objects.clear()
-        for klass in core.ObjectTypes:
+        for klass in core.ObjectKlass:
             for obj in self.objects.object_by_klass(klass):
                 self.destory_object(obj.id)

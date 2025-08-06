@@ -108,7 +108,7 @@ heater_t *object_create(const char *name, void *config_ptr) {
     if (!heater)
         return NULL;
 
-    heater->object.type = OBJECT_TYPE_HEATER;
+    heater->object.klass = OBJECT_KLASS_HEATER;
     heater->object.update = heater_update;
     heater->object.update_frequency = 25; /* 25 Hz */
     heater->object.init = heater_init;

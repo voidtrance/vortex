@@ -14,13 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import errno
-from vortex.core import ObjectTypes
+from vortex.core import ObjectKlass
 
 class VirtualObjectError(Exception):
     pass
 
 class VirtualObjectBase:
-    type = ObjectTypes.NONE
+    type = ObjectKlass.NONE
     commands = []
     events = []
     virtual = True

@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import vortex.controllers.objects.virtual.base as vobj
-from vortex.core import ObjectTypes, PIN_NAME_SIZE
+from vortex.core import ObjectKlass, PIN_NAME_SIZE
 import vortex.core.lib.logging as logging
 import ctypes
 
@@ -44,7 +44,7 @@ class DisplayState(ctypes.Structure):
                 ("data", ctypes.c_uint8 * 1024)]
 
 class Display(vobj.VirtualObjectBase):
-    type = ObjectTypes.DISPLAY
+    type = ObjectKlass.DISPLAY
     commands = [(0, "read", DisplayReadArgs, None, (0,)),
                 (1, "write", DisplayWriteArgs, None, (0, 256, [0] * 256)),
                 (2, "reset", DisplayResetArgs, None, None)]
