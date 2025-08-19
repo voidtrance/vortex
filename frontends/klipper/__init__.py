@@ -126,9 +126,9 @@ class KlipperFrontend(BaseFrontend):
     def _add_commands(self, cmd_set):
         for name, cmd in vars(cmd_set).items():
             self.all_commands[name] = cmd
-            if cmd.command:
+            if cmd.command and cmd.command not in self.identity["commands"]:
                 self.identity["commands"][cmd.command] = self.counter.next()
-            if cmd.response:
+            if cmd.response and cmd.response not in self.identity["responses"]:
                 self.identity["responses"][cmd.response] = self.counter.next()
 
     def _create_identity(self):
@@ -188,9 +188,13 @@ class KlipperFrontend(BaseFrontend):
             self._add_commands(proto.KLIPPER_PROTOCOL.thermocouple)
             self._add_commands(proto.KLIPPER_PROTOCOL.adccmds)
 
-        if self.query_hw("HEATER_COUNT") or self.query_hw("PWM_COUNT"):
+        if self.query_hw("HEATER_COUNT"):
             self._add_commands(proto.KLIPPER_PROTOCOL.pwmcmds)
+            self._add_commands(proto.KLIPPER_PROTOCOL.gpiocmds)
             self.identity["config"]["ADC_MAX"] = self.query_hw("ADC_MAX")
+
+        if self.query_hw("PWM_COUNT"):
+            self._add_commands(proto.KLIPPER_PROTOCOL.pwmcmds)
             self.identity["config"]["PWM_MAX"] = self.query_hw("PWM_MAX")
 
         if len(self.query_hw("SPI")):
