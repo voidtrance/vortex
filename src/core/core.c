@@ -1422,7 +1422,9 @@ static void core_reset_object(core_t *core, core_object_t *object) {
     pthread_mutex_unlock(&core->commands.cmd_lock);
 
     core_log(LOG_LEVEL_DEBUG, "removing command completions");
+    Py_BEGIN_ALLOW_THREADS;
     core_process_completions(completions);
+    Py_END_ALLOW_THREADS;
 
     return;
 }
