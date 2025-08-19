@@ -160,7 +160,7 @@ static int stepper_enable(core_object_t *object, uint64_t id, void *args) {
     stepper->enabled = !!opts->enable;
     log_debug(stepper, "Enabling %s %u", stepper->object.name,
               stepper->enabled);
-    stepper->current_cmd = NULL;
+    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
     return 0;
 }
 
@@ -170,7 +170,7 @@ static int stepper_set_speed(core_object_t *object, uint64_t id, void *args) {
 
     log_debug(stepper, "SPS: %f", opts->steps_per_second);
     stepper->spns = opts->steps_per_second / SEC_TO_NSEC(1);
-    stepper->current_cmd = NULL;
+    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
     return 0;
 }
 
@@ -192,7 +192,7 @@ static int stepper_set_accel(core_object_t *object, uint64_t id, void *args) {
         0.5 * stepper->accel.rate * pow(stepper->accel.time, 2);
     stepper->decel.time = stepper->spns / stepper->decel.rate;
     stepper->decel.distance = 0.5 * pow(stepper->spns, 2) / stepper->decel.rate;
-    stepper->current_cmd = NULL;
+    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
     return 0;
 }
 
@@ -273,7 +273,6 @@ static int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
     }
 
     CORE_CMD_COMPLETE(stepper, id, ret, data);
-    stepper->current_cmd = NULL;
     return ret;
 }
 
@@ -289,7 +288,9 @@ static int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
     if (ret)
         return ret;
 
-    stepper->current_cmd = cmd;
+    if (cmd->command_id == STEPPER_COMMAND_MOVE)
+        stepper->current_cmd = cmd;
+
     return 0;
 }
 
@@ -320,11 +321,8 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
     if (!stepper->current_cmd)
         goto done;
 
-    if (stepper->current_cmd->object_cmd_id != STEPPER_COMMAND_MOVE) {
-        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
-        stepper->current_cmd = NULL;
+    if (stepper->current_cmd->object_cmd_id != STEPPER_COMMAND_MOVE)
         goto done;
-    }
 
     if (stepper->steps < stepper->move_steps) {
         double current_speed;
