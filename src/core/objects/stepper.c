@@ -92,6 +92,8 @@ static int stepper_use_pins(core_object_t *object, uint64_t id, void *args);
 static void stepper_reset(core_object_t *object);
 static void stepper_status(core_object_t *object, void *status);
 static void stepper_destroy(core_object_t *object);
+static int switch_stepper_control(stepper_t *stepper, uint64_t thread_id,
+                                  bool pins);
 
 typedef int (*command_func_t)(core_object_t *object, uint64_t id, void *args);
 
@@ -148,6 +150,7 @@ static void stepper_reset(core_object_t *object) {
     memset(&stepper->accel, 0, sizeof(stepper->accel));
     memset(&stepper->decel, 0, sizeof(stepper->decel));
     stepper->enabled = false;
+    (void)switch_stepper_control(stepper, object->update_thread_id, false);
 }
 
 static int stepper_enable(core_object_t *object, uint64_t id, void *args) {
@@ -224,34 +227,49 @@ static void stepper_pin_control(core_object_t *object, uint64_t ticks,
         (int64_t)(val & STEPS_MASK) * enabled * (-1 + (dir << 1));
 }
 
+static int switch_stepper_control(stepper_t *stepper, uint64_t thread_id,
+                                  bool pins) {
+    core_thread_args_t thread_args = { 0 };
+    int ret = 0;
+
+    if (pins) {
+        thread_args.object.frequency = 1000000; /* 1us */
+        thread_args.object.callback = (object_callback_t)stepper_pin_control;
+
+        ret = core_threads_update_object_thread(thread_id, &thread_args);
+        if (!ret)
+            stepper->use_pins = true;
+    } else {
+        stepper->use_pins = false;
+        thread_args.object.frequency = 1000; /* 1kHz */
+        thread_args.object.callback = (object_callback_t)stepper_update;
+        ret = core_threads_update_object_thread(thread_id, &thread_args);
+    }
+
+    return ret;
+}
+
 static int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_use_pins_args *opts = (struct stepper_use_pins_args *)args;
     struct stepper_use_pins_data *data = NULL;
-    core_thread_args_t thread_args = { 0 };
-    int ret = 0;
+    int ret;
 
-    if (opts->enable && !stepper->use_pins) {
-        thread_args.object.frequency = 1000000; /* 1us */
-        thread_args.object.callback = (object_callback_t)stepper_pin_control;
-        stepper->use_pins = true;
+    if (opts->enable) {
+        if (!stepper->use_pins) {
+            ret =
+                switch_stepper_control(stepper, object->update_thread_id, true);
 
-        ret = core_threads_update_object_thread(object->update_thread_id,
-                                                &thread_args);
-        if (!ret) {
-            data = calloc(1, sizeof(*data));
-            if (data)
-                data->pin_addr = (unsigned long)&stepper->pin_word;
-            else
-                ret = -ENOMEM;
+            if (!ret) {
+                data = calloc(1, sizeof(*data));
+                if (data)
+                    data->pin_addr = (unsigned long)&stepper->pin_word;
+                else
+                    ret = -ENOMEM;
+            }
         }
     } else if (!opts->enable) {
-        // This will also stop the thread.
-        stepper->use_pins = false;
-        thread_args.object.frequency = 1000; /* 1kHz */
-        thread_args.object.callback = (object_callback_t)stepper_update;
-        ret = core_threads_update_object_thread(object->update_thread_id,
-                                                &thread_args);
+        ret = switch_stepper_control(stepper, object->update_thread_id, false);
     }
 
     CORE_CMD_COMPLETE(stepper, id, ret, data);
@@ -320,7 +338,7 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
                 (timestep - stepper->accel.start) * stepper->accel.rate;
         } else if (stepper->decel.rate &&
                    stepper->move_steps - stepper->steps <=
-                   stepper->decel.distance) {
+                       stepper->decel.distance) {
             current_speed = stepper->spns - ((timestep - stepper->decel.start) *
                                              stepper->decel.rate);
         } else {

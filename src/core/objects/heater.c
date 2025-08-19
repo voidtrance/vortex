@@ -81,7 +81,8 @@ static void heater_update(core_object_t *object, uint64_t ticks,
                           uint64_t timestamp);
 static int heater_set_temp(heater_t *heater,
                            struct heater_set_temperature_args *args);
-static int heater_use_pins(heater_t *heater, struct heater_use_pins_args *args);
+static int heater_use_pins(heater_t *heater, struct heater_use_pins_args *args,
+                           bool is_reset);
 static int heater_exec_cmd(core_object_t *object, core_object_command_t *cmd);
 static void heater_status(core_object_t *object, void *status);
 static int heater_init(core_object_t *object);
@@ -158,6 +159,7 @@ static int heater_init(core_object_t *object) {
 
 static void heater_reset(core_object_t *object) {
     heater_t *heater = (heater_t *)object;
+    struct heater_use_pins_args args;
 
     if (heater->command.command_id) {
         CORE_CMD_COMPLETE(heater, heater->command.command_id, -1, NULL);
@@ -170,6 +172,8 @@ static void heater_reset(core_object_t *object) {
     heater->pid_control.integral = 0;
     heater_compute_set_power(heater->temp_data.compute, 0.0);
     heater_compute_clear(heater->temp_data.compute);
+    args.enable = false;
+    (void)heater_use_pins(heater, &args, true);
     pthread_mutex_unlock(&heater->data_lock);
 }
 
@@ -205,18 +209,22 @@ static void heater_pin_control(core_object_t *object, uint64_t tick,
     pthread_mutex_unlock(&heater->data_lock);
 }
 
-static int heater_use_pins(heater_t *heater,
-                           struct heater_use_pins_args *args) {
+static int heater_use_pins(heater_t *heater, struct heater_use_pins_args *args,
+                           bool is_reset) {
     int ret = 0;
     struct heater_use_pins_data *data = NULL;
     core_thread_args_t thread_args = { 0 };
 
-    if (args->enable && !heater->use_pins) {
-        heater->use_pins = true;
-        thread_args.object.callback = (object_callback_t)heater_pin_control;
+    if (args->enable) {
+        if (!heater->use_pins) {
+            thread_args.object.callback = (object_callback_t)heater_pin_control;
 
-        ret = core_threads_update_object_thread(heater->object.update_thread_id,
-                                                &thread_args);
+            ret = core_threads_update_object_thread(
+                heater->object.update_thread_id, &thread_args);
+            if (!ret)
+                heater->use_pins = true;
+        }
+
         if (!ret) {
             data = calloc(1, sizeof(*data));
             if (data)
@@ -232,8 +240,11 @@ static int heater_use_pins(heater_t *heater,
                                                 &thread_args);
     }
 
-    CORE_CMD_COMPLETE(heater, heater->command.command_id, ret, data);
-    heater->command.command_id = 0;
+    if (!is_reset) {
+        CORE_CMD_COMPLETE(heater, heater->command.command_id, ret, data);
+        heater->command.command_id = 0;
+    }
+
     return ret;
 }
 
@@ -252,7 +263,7 @@ static int heater_exec_cmd(core_object_t *object, core_object_command_t *cmd) {
         ret = heater_set_temp(heater, cmd->args);
         break;
     case HEATER_COMMAND_USE_PINS:
-        ret = heater_use_pins(heater, cmd->args);
+        ret = heater_use_pins(heater, cmd->args, false);
         break;
     }
 
