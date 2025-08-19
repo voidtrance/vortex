@@ -50,10 +50,10 @@ class Kinematics:
         self._kinematics_type = getattr(self._lib,
                                        f"KINEMATICS_{config.type.upper()}",
                                        self._lib.KINEMATICS_NONE)
-        if self._kinematics_type == self._lib.KINEMATICS_NONE:
-            raise AttributeError("Invalid machine kinematics type")
         conf.type = self._kinematics_type
-        if self._kinematics_type == self._lib.KINEMATICS_DELTA:
+        if self._kinematics_type == self._lib.KINEMATICS_NONE:
+            pass
+        elif self._kinematics_type == self._lib.KINEMATICS_DELTA:
             conf.delta.arm_length = config.arm_length
             conf.delta.radius = config.radius
             conf.delta.tower_radius = config.tower_radius

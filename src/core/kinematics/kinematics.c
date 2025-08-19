@@ -30,10 +30,31 @@ int (*toolhead_position)(coordinates_t *, coordinates_t *);
 
 static kinematics_config_t core_kinematics = { 0 };
 
+static inline int none_motor_movement(coordinates_t *delta,
+                                      coordinates_t *movement) {
+    memset(movement, 0, sizeof(coordinates_t));
+    return 0;
+}
+
+static inline int none_axis_movement(coordinates_t *delta,
+                                     coordinates_t *movement) {
+    return none_motor_movement(delta, movement);
+}
+
+static inline int none_toolhead_position(coordinates_t *axis_position,
+                                         coordinates_t *position) {
+    return none_motor_movement(axis_position, position);
+}
+
 int kinematics_init(kinematics_config_t *config) {
     memcpy(&core_kinematics, config, sizeof(*config));
 
     switch (core_kinematics.type) {
+    case KINEMATICS_NONE:
+        motor_movement_func = none_motor_movement;
+        axis_movement_func = none_axis_movement;
+        toolhead_position = none_toolhead_position;
+        break;
     case KINEMATICS_CARTESIAN:
         motor_movement_func = cartesian_motor_movement;
         axis_movement_func = cartesian_axis_movement;

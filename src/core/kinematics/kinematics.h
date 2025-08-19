@@ -54,6 +54,10 @@ typedef struct {
 } axis_limits_t;
 
 typedef struct {
+    char dummy;
+} none_kinematics_config_t;
+
+typedef struct {
     axis_limits_t limits[AXIS_TYPE_MAX];
 } cartesian_kinematics_config_t;
 
@@ -71,6 +75,7 @@ typedef struct {
 typedef struct {
     kinematics_type_t type;
     union {
+        none_kinematics_config_t none;
         cartesian_kinematics_config_t cartesian;
         cartesian_kinematics_config_t corexy;
         cartesian_kinematics_config_t corexz;
