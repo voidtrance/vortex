@@ -524,13 +524,15 @@ class Controller(core.VortexCore):
         handler(klass, event_type, object_name, content)
 
     def reset(self, objects=[]):
+        if not objects:
+            objects = list(self.objects)
         _objects = objects[:]
         for obj in objects:
-            if obj in self._virtual_objects:
-                self.log.debug(f"Resetting virtual object {obj.id}")
-                self._virtual_objec[obj].reset()
+            if obj.id in self._virtual_objects:
+                self.log.debug(f"Resetting virtual object {obj.name} ({obj.id})")
+                self._virtual_objects[obj.id].reset()
                 _objects.remove(obj)
-        return super().reset(_objects)
+        return super().reset([obj.id for obj in _objects])
 
     def cleanup(self):
         for obj in self._virtual_objects.values():
