@@ -828,6 +828,7 @@ class MonitorWindow(Gtk.ApplicationWindow):
             frame.clear()
             switch = getattr(self, f"{klass}_selector_switch")
             switch.set_active(False)
+        self.set_emulation_time("", "")
         request = api.Request(api.RequestType.CLOSE_LOG_STREAM)
         request.data = self.log_thread_id
         try:
