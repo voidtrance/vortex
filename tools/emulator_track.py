@@ -121,49 +121,65 @@ def get(conn, request):
             break
     return pickle.loads(data)
 
-def get_toolhead_id(conn):
+def get_object_ids(conn, klass):
     request = api.Request(api.RequestType.OBJECT_LIST)
     response = get(conn, request)
-    toolheads = response.data[ObjectKlass.TOOLHEAD]
-    if len(toolheads) > 1:
-        return 0
-    return toolheads[0]["id"]
+    if klass not in response.data:
+        return []
+    objects = response.data[klass]
+    return [(x["id"], x["name"]) for x in objects]
 
-def get_heaters_id(conn):
-    request = api.Request(api.RequestType.OBJECT_LIST)
-    response = get(conn, request)
-    heaters = response.data[ObjectKlass.HEATER]
-    return [x["id"] for x in heaters]
-
-def get_objects(conn, *args):
+def get_object_status(conn, *args):
     request = api.Request(api.RequestType.OBJECT_STATUS)
     request.objects = list(args)
-    response =  get(conn, request)
+    response = get(conn, request)
     return response.data
 
-def get_data(conn, toolhead, *heaters):
-    state = get_objects(conn, toolhead, *heaters)
-    idxs = [i for i, axis in enumerate(state[toolhead]["axes"]) if axis != 7]
-    pos = [state[toolhead]["position"][i] for i in idxs]
-    temps = dict.fromkeys(heaters, 0.)
-    for h in heaters:
-        temps[h] = state[h]["temperature"]
-    return pos, temps
+def get_data(conn, objects, properties={}):
+    data = {k: {} for k in properties.keys()}
+    for klass in properties:
+        if not objects[klass]:
+            continue
+        state = get_object_status(conn, *[x[0] for x in objects[klass]])
+        for obj_id, obj_name in objects[klass]:
+            if not properties[klass]:
+                data[klass][obj_id] = state[obj_id]
+            else:
+                data[klass][obj_id] = {k: v for k, v in state[obj_id].items() if k in properties[klass]}
+            if klass == ObjectKlass.TOOLHEAD and "position" in properties[klass]:
+                idxs = [i for i, axis in enumerate(state[obj_id]["axes"]) if axis != 7]
+                pos = [state[obj_id]["position"][i] for i in idxs]
+                data[klass][obj_id]["position"] = pos
+    return data
 
-def draw(filename, data, times, heaters):
-    x = [x[0] for x in data]
-    y = [x[1] for x in data]
-    z = [x[2] for x in data]
-    g = go.Scatter3d(name="shape", mode="lines", x=x, y=y, z=z)
-    l = go.Layout(autosize=False, width=1800, height=1800,
-                  margin=go.layout.Margin(l=50, r=50, b=100, t=100, pad=4))
-    fig = go.Figure(g, layout=l)
+def draw(filename, properties, objects, data, timestamps):
+    layout_3d = go.Layout(autosize=False, width=1800, height=1800,
+                                  margin=go.layout.Margin(l=50, r=50, b=100, t=100, pad=4))
+    layout = go.Layout(autosize=False, width=1800, height=300)
+    figures = {}
+    for klass in properties:
+        figures[klass] = {}
+        for obj_id in objects[klass]:
+            figures[klass][obj_id] = {p: None for p in properties[klass]}
+    for klass in properties:
+        for property in properties[klass]:
+            fig = go.Figure(layout=(layout_3d if klass == ObjectKlass.TOOLHEAD and \
+                                    property == "position" else layout))
+            figures[klass][property] = fig
+            for obj_id, obj_name in objects[klass]:
+                data_set = [d[klass][obj_id][property] for d in data]
+                #print(data_set)
 
-    tl = go.Layout(autosize=False, width=1800, height=300)
-    tfig = go.Figure(layout=tl)
-    for h in heaters:
-        t = go.Scatter(x=times, y=heaters[h], mode="lines", line_shape="spline", name=f"heater {h}")
-        tfig.add_trace(t)
+                if klass == ObjectKlass.TOOLHEAD and property == "position":
+                    x = [x[0] for x in data_set]
+                    y = [x[1] for x in data_set]
+                    z = [x[2] for x in data_set]
+                    g = go.Scatter3d(name=f"Toolhead {obj_name}", mode="lines", x=x, y=y, z=z)
+                    fig.add_trace(g)
+                else:
+                    t = go.Scatter(x=timestamps, y=data_set, mode="lines", line_shape="spline",
+                                   name=f"{str(klass).capitalize()} {obj_name}")
+                    fig.add_trace(t)
 
     prefix = """<html>
 <head>
@@ -171,24 +187,27 @@ def draw(filename, data, times, heaters):
 div.plotly-graph-top { display: inline-block; border: 1px solid #3f87a6; }
 table { display: inline-block; vertical-align: top; }
 th { text-align: left; background-color: #e4f0f5; }
-th.title { text-align: center; background-color: #3f87a6; }
+th.title { text-align: center; background-color: #3f87a6; font-size: 16px;}
+th.subtitle {text-align: center; background-color: lightblue; font-size: 12px;}
 </style>
 </head>
 <body>
 <table>"""
     suffix = "</table></body></html>"""
 
+    include = True
     filename.write(prefix)
-    filename.write("<tr><th class='title'>Toolhead trace</th></tr><tr><td>")
-    html = fig.to_html(full_html=False, include_plotlyjs=True)
-    html = html.replace("<div>", "<div class=\"plotly-graph-top\">")
-    filename.write(html)
-    filename.write("</td></tr>")
-    filename.write("<tr><th class='title'>Heater Temps</th></tr><tr><td>")
-    html = tfig.to_html(full_html=False, include_plotlyjs=False)
-    html = html.replace("<div>", "<div class=\"plotly-graph-top\">")
-    filename.write(html)
-    filename.write("</td></tr>")
+    for klass in properties:
+        filename.write(f"<tr><th class='title'>{str(klass).capitalize()} Traces</th></tr>\n")
+        for property in properties[klass]:
+            filename.write(f"<tr><th class='subtitle'>{property.capitalize()}</th></tr>\n")
+            filename.write("<tr><td>\n")
+            fig = figures[klass][property]
+            html = fig.to_html(full_html=False, include_plotlyjs=include)
+            include = False
+            html = html.replace("<div>", "<div class=\"plotly-graph-top\">")
+            filename.write(html)
+        filename.write("</td></tr>")
     filename.write(suffix)
 
 def run_dash_server(connection, toolhead, *heaters):
@@ -264,6 +283,19 @@ def run_dash_server(connection, toolhead, *heaters):
     
     app.run(debug=True)
 
+def object_track_param(value):
+    try:
+        klass, properties = value.split(":")
+    except ValueError:
+        klass, properties = value, ""
+
+    klass = klass.lower()
+    if klass == "all" and properties:
+        raise argparse.ArgumentTypeError("cannot use properties when tracking all klasses.")
+
+    properties = [x.lower() for x in properties.split(",")]
+    return klass, properties
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--graph", type=argparse.FileType('w'),
@@ -276,37 +308,34 @@ def main():
                         default=None, help="Toolhead coordinates data")
     parser.add_argument("--real-time", action="store_true",
                         help="Create dynamic graph")
+    parser.add_argument("--track", type=object_track_param, action="extend",
+                        nargs="+",
+                        default=[("toolhead", ["position"]), ("heater", ["temperature"])],
+                        help="<klass>[:<property>[,<property>]]")
     args = parser.parse_args()
 
-    positions = []
-    timestamps = []
+    properties = {ObjectKlass[klass.upper()]: p for klass, p in args.track}
+    objects = dict.fromkeys(ObjectKlass, [])
+
     if args.data is None:
         connection = connect(socket_path)
         if connection is None:
             print("Could not connect to emulator socket.")
             return -1
 
-        id = get_toolhead_id(connection)
-        print(f"Toolhead ID: {id}")
-        if id == 0:
-            return -1
-
-        heater_ids = get_heaters_id(connection)
-        print(f"Heaters: {", ".join([str(h) for h in heater_ids])}")
+        for klass in properties:
+            objects[klass] = get_object_ids(connection, klass)
+            print(f"Objects ({str(klass)}): {' '.join([x[1] for x in objects[klass]])}")
     
     if args.real_time:
-        run_dash_server(connection, id, *heater_ids)
+        run_dash_server(connection, objects, properties)
         return 0
 
+    track_data = {}
     if args.data is None:
-        heaters = {x: [] for x in heater_ids}
         while True:
             try:
-                timestamps.append(time.time())
-                position, temps = get_data(connection, id, *heater_ids)
-                positions.append(position)
-                for h in heater_ids:
-                    heaters[h].append(temps[h])
+                track_data[time.time()] = get_data(connection, objects, properties)
                 time.sleep(0.02)
             except KeyboardInterrupt:
                 break
@@ -316,16 +345,19 @@ def main():
 
         if args.csv:
             c = csv.writer(args.csv)
-            for i, p in enumerate(positions):
-                for h in heater_ids:
-                    p.append(heaters[h][i])
-                c.writerow(p)
+            for data_set in track_data:
+                c.writerow(data_set)
             args.csv.close()
     else:
         c = csv.reader(args.data)
-        positions = [x for x in c]
+        for row in c:
+            track_data[row[0]] = row[1:]
         args.data.close()
-    draw(args.graph, positions, timestamps, heaters)
+
+    #print(track_data)
+    origin_time = list(track_data.keys())[0]
+    timestamps = [x - origin_time for x in track_data.keys()]
+    draw(args.graph, properties, objects, track_data.values(), timestamps)
     args.graph.close()
     return 0
 
