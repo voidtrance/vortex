@@ -166,11 +166,11 @@ class UC1701(Display):
         return status
     def _set_bits(self, reg, lsb, msb, value):
         mask = ((1 << (msb - lsb + 1)) - 1) << lsb
-        self.state[reg] = (self.state[reg] & ~mask) | (value << lsb) & mask
+        self.registers[reg] = (self.registers[reg] & ~mask) | (value << lsb) & mask
     def _get_bits(self, reg, lsb=None, msb=None):
         lsb = 0 if lsb is None else lsb
         msb = self.REGS[reg] if msb is None else msb
-        return (self.state[reg] >> lsb) & ((1 << (msb - lsb + 1)) - 1)
+        return (self.registers[reg] >> lsb) & ((1 << (msb - lsb + 1)) - 1)
     def set_column_address_lsb(self, byte):
         self._set_bits("CA", 0, 3, byte)
     def set_column_address_msb(self, byte):
@@ -208,16 +208,16 @@ class UC1701(Display):
     def set_com_direction(self, byte):
         self._set_bits("LC", 1, 1, (byte & 0xf) >> 3)
     def set_cursor_update_mode(self, byte):
-        self.state["AC3"] = 1
-        self.state["CR"] = self.state["CA"]
+        self.registers["AC3"] = 1
+        self.registers["CR"] = self.registers["CA"]
     def display_reset(self, byte):
         self.display = [[0] * int((self.HEIGHT + 7) / 8) for _ in range(self.WIDTH)]
-        self.state = self.DEFAULT_CONFIG.copy()
+        self.registers = self.DEFAULT_CONFIG.copy()
     def noop(self, byte):
         return
     def reset_cursor_update_mode(self, byte):
-        self.state["AC3"] = 0
-        self.state["CA"] = self.state["CR"]
+        self.registers["AC3"] = 0
+        self.registers["CA"] = self.registers["CR"]
     def set_boost_ratio(self, byte, data_byte):
         return
     def set_adv_program_control_0(self, byte, data_byte):
