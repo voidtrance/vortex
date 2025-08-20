@@ -19,6 +19,7 @@ import argparse
 import logging
 import errno
 import traceback
+import threading
 import vortex.emulator
 import vortex.emulator.config
 import vortex.core.lib.logging as logging
@@ -93,6 +94,22 @@ def create_arg_parser():
                         is required.""")
     return parser
 
+def emulator_exception_handler(exc_class, exc, tb):
+    _tb = tb
+    while _tb.tb_next is not None:
+        _tb = _tb.tb_next
+    frame = _tb.tb_frame
+    co = frame.f_code
+    logging.critical(f"Exception occured at {co.co_name}:{frame.f_lineno} [{co.co_filename}]:")
+    logging.critical(f"    {str(exc)}")
+    if logging.get_level() <= logging.DEBUG:
+        lines = traceback.format_tb(tb)
+        for line in lines:
+            logging.critical("   " + line)
+
+def emulator_thread_exception_handler(args):
+    emulator_exception_handler(args.exc_type, args.exc_value, args.exc_traceback)
+
 def main():
     parser = create_arg_parser()
     opts = parser.parse_args()
@@ -109,6 +126,11 @@ def main():
 
     if opts.controller:
         config.override_controller(opts.controller)
+
+    # Setup the exception hook so uncaught exceptions
+    # are handled more gracefully.
+    sys.excepthook = emulator_exception_handler
+    threading.excepthook = emulator_thread_exception_handler
 
     try:
         emulation = vortex.emulator.Emulator(config, opts.frontend, opts.sequential)
@@ -129,9 +151,11 @@ def main():
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        if opts.debug.lower() == "debug":
-            traceback.print_exc(e)
         logging.critical(f"Emulator exception: {e}")
+        if opts.debug.lower() == "debug":
+            lines = traceback.format_exception(e)
+            for line in lines:
+                logging.critical(line)
     finally:
         emulation.stop()
 
