@@ -14,40 +14,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import fcntl
-import inspect
-import importlib
 import cProfile
 import pstats
 from os import strerror, getpid, unlink
 from queue import ShutDown
 import vortex.core.lib.logging as logging
-from vortex.lib.utils import parse_frequency
-from vortex.core import VortexCoreError
 import vortex.emulator.remote.server as remote_server
 import vortex.core.kinematics as kinematics
 import vortex.frontends as frontends
+from vortex.lib.utils import parse_frequency
+from vortex.core import VortexCoreError
+from vortex.controllers import load_mcu
 
 __all__ = ["Emulator", "EmulatorError"]
 
 class EmulatorError(Exception): pass
-
-def load_mcu(name, config):
-    # Get base controller class
-    base_module = importlib.import_module("vortex.controllers")
-    base_class = getattr(base_module, "Controller")
-    try:
-        module = importlib.import_module(f"vortex.controllers.{name}")
-    except ImportError as e:
-        logging.error(f"Failed to create {name} controller: {str(e)}")
-        return None
-    members = inspect.getmembers(module, inspect.isclass)
-    controllers = [x[1] for x in members if issubclass(x[1], base_class) and \
-                   x[1] is not base_class]
-    if len(controllers) == 0:
-        raise EmulatorError(f"Controller '{name}' not found")
-    if len(controllers) > 1:
-        raise EmulatorError(f"Too many controller objects in '{name}'")
-    return controllers[0](config)
 
 class Emulator:
     PID_LOCK_PATH = "/tmp/vortex.pid.lock"
@@ -59,14 +40,12 @@ class Emulator:
         except OSError:
             raise EmulatorError(f"Emulator already running, PID lock file exists: {self.PID_LOCK_PATH}")
         self.lock_fd.write(str(getpid()))
-
         machine = config.get_machine_config()
         kin = config.get_kinematics_config()
         self._kinematics = kinematics.Kinematics(kin)
-        try:
-            self._controller = load_mcu(machine.controller, config)
-        except VortexCoreError as e:
-            raise EmulatorError(e)
+        self._controller = load_mcu(machine.controller, config)
+        if self._controller is None:
+            raise EmulatorError(f"Controller creation failure")
         self._frontend = frontends.create_frontend(frontend)
         if self._frontend is None:
             raise EmulatorError(f"Failed to create frontend '{frontend}'")

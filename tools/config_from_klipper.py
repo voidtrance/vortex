@@ -14,6 +14,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import pathlib
 import argparse
 import configparser
 from sys import exit
@@ -421,6 +422,28 @@ def generate_neopixel_config(section : str, kconfig : Type[configparser.ConfigPa
     econfig.set(section, "type", kconfig.get(section, "color_order"))
     return True
 
+def get_board():
+    import vortex.controllers
+    path = pathlib.PosixPath(vortex.controllers.__file__).parent / "boards"
+    boards = []
+    for board_file in path.glob("*.py"):
+        boards.append(board_file.stem)
+    if not boards:
+        return None
+    if len(boards) == 1:
+        return boards[0]
+    while True:
+        print("Select controller board:")
+        for i, board in enumerate(boards):
+            print(f"   {i+1}: {board}")
+        try:
+            idx = int(input("Selection: "))
+        except EOFError:
+            return 0
+        if idx > 0 or idx <= len(boards):
+            return boards[idx - 1]
+        print("Error: Invalid selection")
+
 KLIPPER_SECTION_HANDLERS = {
     "stepper" : generate_stepper_config,
     "extruder": generate_heater_config,
@@ -442,7 +465,8 @@ klipper_config.read(opts.klipper_config)
 
 emulator_config = configparser.ConfigParser()
 emulator_config.add_section("machine")
-emulator_config.set("machine", "controller", "stm32f4")
+controller_board = get_board()
+emulator_config.set("machine", "controller", controller_board)
 
 if not generate_kinematics_config(klipper_config, emulator_config):
     exit(1)

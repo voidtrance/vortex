@@ -13,7 +13,9 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['__init__.py', 'timers.py'], subdir: 'vortex/controllers')
-subdir('objects')
-subdir('boards')
-subdir('chips')
+
+class STM32F4:
+    ARCH = 32
+    PWM_MAX = 255
+    FREQUENCY = 12000000
+

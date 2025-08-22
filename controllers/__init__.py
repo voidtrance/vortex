@@ -162,6 +162,8 @@ def get_host_cpu_frequency(type="cur"):
 
 
 class Controller(core.VortexCore):
+    ARCH = 0
+    FREQUENCY = 0
     PINS = []
     SPI = []
     STEPPER_COUNT = 0
@@ -175,12 +177,20 @@ class Controller(core.VortexCore):
     DISPLAY_COUNT = 0
     ENCODER_COUNT = 0
     DIGITAL_PIN_COUNT = 0
-    FREQUENCY = 0
-    ARCH = 0
     _libc = ctypes.CDLL("libc.so.6")
     _Command = namedtuple("Command", ['id', 'name', 'opts', 'data', 'defaults'])
 
     def __init__(self, config):
+        # Unfortunately, Python does not deal with merging
+        # class members from multiple classes. So, we can't
+        # set chip architecture and frequency to a default
+        # value here and have the real value be provided by
+        # one of the chip implementations.
+        # Instead, ensure that a value is provided.
+        if getattr(self, "ARCH", 0) == 0:
+            raise core.VortexCoreError("Controller architecture is not defined")
+        if getattr(self, "FREQUENCY", 0) == 0:
+            raise core.VortexCoreError("Controller frequency is not defined")
         self.log = logging.getLogger("vortex.core")
         debug_level = logging.get_level()
         if debug_level <= logging.DEBUG:
@@ -541,3 +551,27 @@ class Controller(core.VortexCore):
         for klass in core.ObjectKlass:
             for obj in self.objects.object_by_klass(klass):
                 self.destory_object(obj.id)
+
+def load_mcu(name, config):
+    # Get base controller class
+    base_module = importlib.import_module("vortex.controllers")
+    base_class = getattr(base_module, "Controller")
+    try:
+        module = importlib.import_module(f"vortex.controllers.boards.{name}")
+    except ImportError as e:
+        logging.error(f"Failed to create {name} controller: {str(e)}")
+        return None
+    members = inspect.getmembers(module, inspect.isclass)
+    controllers = [x[1] for x in members if issubclass(x[1], base_class) and \
+                   x[1] is not base_class]
+    if len(controllers) == 0:
+        raise core.VortexCoreError(f"Controller '{name}' not found")
+    if len(controllers) > 1:
+        raise core.VortexCoreError(f"Too many controller objects in '{name}'")
+    # The Controller class should appear after all other
+    # classes from which the controller inherits in order
+    # to correctly resolve members/methods
+    mro = controllers[0].__mro__
+    if mro[-3] is not Controller or mro[-2] is not core.VortexCore:
+        logging.warning("Controller class inheritance is incorrect.")
+    return controllers[0](config)

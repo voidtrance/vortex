@@ -13,7 +13,4 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['__init__.py', 'timers.py'], subdir: 'vortex/controllers')
-subdir('objects')
-subdir('boards')
-subdir('chips')
+py.install_sources(['btt_octopus.py'], subdir: 'vortex/controllers/boards')

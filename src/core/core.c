@@ -1672,7 +1672,7 @@ static PyMethodDef VortexCoreMethods[] = {
 };
 
 static PyTypeObject Vortex_Core_Type = {
-    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "Core",
+    .ob_base = PyVarObject_HEAD_INIT(NULL, 0).tp_name = "VortexCore",
     .tp_doc = PyDoc_STR("HW Core"),
     .tp_basicsize = sizeof(core_t),
     .tp_itemsize = 0,

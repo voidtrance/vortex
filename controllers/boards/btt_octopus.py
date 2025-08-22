@@ -15,9 +15,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from vortex.controllers import Pins
 from vortex.controllers import Controller
+from vortex.controllers.chips.stm32 import STM32F4
 
-class STM32F446(Controller):
-    ARCH = 32
+class BTTOctopus(STM32F4, Controller):
     PINS = [Pins("PA", 0, 15), Pins("PB", 0, 15),
             Pins("PC", 0, 15), Pins("PD", 0, 15),
             Pins("PE", 0, 15), Pins("PF", 0, 15),
@@ -28,7 +28,6 @@ class STM32F446(Controller):
            ["PC2", "PC3", "PB10"],
            ["PC11", "PC12", "PC10"],
            ["PE13", "PE14", "PE12"]]
-    FREQUENCY = 12000000
     STEPPER_COUNT = 8
     PWM_COUNT = 6
     HEATER_COUNT = 4
@@ -40,6 +39,6 @@ class STM32F446(Controller):
     DIGITAL_PIN_COUNT = 22
     NEOPIXEL_COUNT = 1
     ADC_MAX = 4095
-    PWM_MAX = 255
+
     def __init__(self, config):
         super().__init__(config)
