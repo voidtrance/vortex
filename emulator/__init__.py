@@ -25,6 +25,9 @@ import vortex.frontends as frontends
 from vortex.lib.utils import parse_frequency
 from vortex.core import VortexCoreError
 from vortex.controllers import load_mcu
+from vortex.lib.utils import parse_frequency
+from vortex.core import VortexCoreError
+from vortex.controllers import load_mcu
 
 __all__ = ["Emulator", "EmulatorError"]
 

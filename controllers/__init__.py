@@ -164,6 +164,8 @@ def get_host_cpu_frequency(type="cur"):
 class Controller(core.VortexCore):
     ARCH = 0
     FREQUENCY = 0
+    ARCH = 0
+    FREQUENCY = 0
     PINS = []
     SPI = []
     STEPPER_COUNT = 0
