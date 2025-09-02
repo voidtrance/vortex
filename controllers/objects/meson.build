@@ -1,5 +1,5 @@
 # vortex - GCode machine emulator
-# Copyright (C) 2024-2025 Mitko Haralanov
+# Copyright (C) 2024-2026 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,5 +13,4 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-py.install_sources(['object_defs.py'], subdir: 'vortex/controllers/objects')
 subdir('virtual')

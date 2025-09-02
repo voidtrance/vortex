@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,10 +26,21 @@ typedef struct {
     bool homed;
     float min;
     float max;
-    axis_type_t type;
+    kinematics_axis_type_t type;
     double position;
     char motors[8][MOTOR_NAME_SIZE];
     char endstop[ENDSTOP_NAME_SIZE];
 } axis_status_t;
+
+typedef struct {
+    float length;
+    const char type;
+    const char **steppers;
+    const char endstop[ENDSTOP_NAME_SIZE];
+} axis_config_params_t;
+
+typedef struct {
+    const char *axis;
+} axis_homed_event_data_t;
 
 #endif

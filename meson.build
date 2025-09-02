@@ -1,5 +1,5 @@
 # vortex - GCode machine emulator
-# Copyright (C) 2024-2025 Mitko Haralanov
+# Copyright (C) 2024-2026 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ py = import('python').find_installation(pure: false)
 root = meson.project_source_root()
 
 # Build the core utils library
+subdir('tools')
 subdir('src')
 
 # Install Python source
@@ -32,5 +33,4 @@ subdir('emulator')
 subdir('controllers')
 subdir('frontends')
 subdir('lib')
-subdir('tools')
 install_data('vortex_run.py', install_dir: get_option('bindir'))

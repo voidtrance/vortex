@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2023-2023 Paniel Detersson
- * Copyright (c) 2024  Mitko Haralanov
+ * Copyright (c) 2024,2026 Mitko Haralanov
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files
@@ -26,42 +26,7 @@
 #define __HEATER_COMPUTE_H__
 #include <stdint.h>
 #include <stddef.h>
-
-#define MAX_LAYER_COUNT 8
-
-typedef enum {
-    HEATER_LAYER_TYPE_NONE,
-    HEATER_LAYER_TYPE_HEATER,
-    HEATER_LAYER_TYPE_BODY,
-    HEATER_LAYER_TYPE_OTHER,
-    HEATER_LAYER_TYPE_MAX
-} heater_layer_type_t;
-
-typedef enum {
-    CONV_TOP,
-    CONV_BOTTOM,
-    CONV_MAX
-} convection_type_t;
-
-typedef struct {
-    double x;
-    double y;
-    double z;
-} heater_object_size_t;
-
-typedef struct {
-    double density;
-    double capacity;
-    double conductivity;
-    double emissivity;
-    float convection[CONV_MAX];
-} heater_material_t;
-
-typedef struct {
-    heater_layer_type_t type;
-    heater_material_t material;
-    heater_object_size_t size;
-} heater_layer_t;
+#include "heater.h"
 
 #define AMBIENT_TEMP 25.0
 

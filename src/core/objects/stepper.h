@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,9 +25,9 @@ typedef enum {
     MOVE_DIR_BACK = 0,
     MOVE_DIR_FWD,
     MOVE_DIR_MAX,
-} stepper_move_dir_t;
+} stepper_direction_t;
 
-enum {
+enum stepper_commands {
     STEPPER_COMMAND_ENABLE,
     STEPPER_COMMAND_SET_SPEED,
     STEPPER_COMMAND_SET_ACCEL,
@@ -50,7 +50,7 @@ struct stepper_set_accel_args {
 };
 
 struct stepper_move_args {
-    stepper_move_dir_t direction;
+    stepper_direction_t direction;
     uint32_t steps;
 };
 
@@ -61,6 +61,21 @@ struct stepper_use_pins_args {
 struct stepper_use_pins_data {
     unsigned long pin_addr;
 };
+
+typedef struct {
+    uint64_t steps;
+} stepper_move_complete_event_data_t;
+
+typedef struct {
+    uint32_t steps_per_rotation;
+    uint32_t microsteps;
+    uint32_t start_speed;
+    uint32_t steps_per_mm;
+    const char driver[16];
+    char enable_pin[PIN_NAME_SIZE];
+    char dir_pin[PIN_NAME_SIZE];
+    char step_pin[PIN_NAME_SIZE];
+} stepper_config_params_t;
 
 typedef struct {
     bool enabled;

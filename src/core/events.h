@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,32 +23,6 @@
 #include "objects/auto-events.h"
 #include "objects/object_defs.h"
 
-/*******
- * Event data structure definitions.
- *
- * Each event will have a matching data structure that
- * describes the data the event will provide.
- */
-typedef struct {
-    uint64_t steps;
-} stepper_move_comeplete_event_data_t;
-
-typedef struct {
-    float temp;
-} heater_temp_reached_event_data_t;
-
-typedef struct {
-    bool triggered;
-} endstop_trigger_event_data_t;
-
-typedef struct {
-  const char *axis;
-} axis_homed_event_data_t;
-
-typedef struct {
-    double position[AXIS_TYPE_MAX];
-} toolhead_origin_event_data_t;
-
 typedef unsigned long core_event_token_t;
 
 /*
@@ -61,8 +35,10 @@ typedef unsigned long core_event_token_t;
  *    - The event type.
  *    - The event data.
  */
-typedef void (*event_handler_t)(core_object_t *, const char *,
-                                const core_object_event_type_t, void *);
+typedef void (*event_handler_t)(core_object_t *,
+                                const char *,
+                                const core_object_event_type_t,
+                                void *);
 
 /*
  * Signature of call to register for an object event.
@@ -97,7 +73,8 @@ typedef int (*event_unregister_t)(const core_event_token_t, void *);
  *    - the data that needs to be passed.
  */
 typedef int (*event_submit_t)(const core_object_event_type_t,
-                              const core_object_id_t id, void *, void *);
-
+                              const core_object_id_t id,
+                              void *,
+                              void *);
 
 #endif

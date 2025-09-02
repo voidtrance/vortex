@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,15 +39,9 @@ const char *endstop_type_names[] = {
 };
 
 typedef struct {
-    const char type[4];
-    const char axis;
-    char pin[8];
-} endstop_config_params_t;
-
-typedef struct {
     core_object_t object;
     core_object_t *axis;
-    axis_type_t axis_type;
+    kinematics_axis_type_t axis_type;
     endstop_type_t type;
     char pin[8];
     uint8_t pin_word;
@@ -101,7 +95,7 @@ static int endstop_init(core_object_t *object) {
 static void endstop_update(core_object_t *object, uint64_t ticks,
                            uint64_t runtime) {
     endstop_t *endstop = (endstop_t *)object;
-    endstop_trigger_event_data_t *event;
+    endstop_triggered_event_data_t *event;
     axis_status_t status;
     bool state = endstop->triggered;
 
@@ -127,7 +121,7 @@ static void endstop_update(core_object_t *object, uint64_t ticks,
             return;
 
         event->triggered = endstop->triggered;
-        CORE_EVENT_SUBMIT(endstop, OBJECT_EVENT_ENDSTOP_TRIGGER, event);
+        CORE_EVENT_SUBMIT(endstop, OBJECT_EVENT_ENDSTOP_TRIGGERED, event);
     }
 }
 
@@ -159,8 +153,7 @@ endstop_t *object_create(const char *name, void *config_ptr) {
     if (!endstop)
         return NULL;
 
-    if (object_cache_create(&endstop_event_cache,
-                            sizeof(endstop_trigger_event_data_t))) {
+    if (object_cache_create(&endstop_event_cache, sizeof(endstop_triggered_event_data_t))) {
         free(endstop);
         return NULL;
     }

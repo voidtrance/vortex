@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,17 +32,6 @@
 #include <errno.h>
 
 typedef struct {
-    uint32_t steps_per_rotation;
-    uint32_t microsteps;
-    uint32_t start_speed;
-    uint32_t steps_per_mm;
-    const char driver[16];
-    char enable_pin[8];
-    char dir_pin[8];
-    char step_pin[8];
-} stepper_config_params_t;
-
-typedef struct {
     double rate;
     double time;
     double distance;
@@ -61,7 +50,7 @@ typedef struct {
     double spns;
     accel_data_t accel;
     accel_data_t decel;
-    stepper_move_dir_t dir;
+    stepper_direction_t dir;
     bool enabled;
     bool use_pins;
     uint32_t pin_word;
@@ -125,7 +114,7 @@ stepper_t *object_create(const char *name, void *config_ptr) {
     stepper->spns = (double)config->start_speed / SEC_TO_NSEC(1);
 
     if (object_cache_create(&stepper_event_cache,
-                            sizeof(stepper_move_comeplete_event_data_t))) {
+                            sizeof(stepper_move_complete_event_data_t))) {
         core_object_destroy(&stepper->object);
         free(stepper);
         return NULL;
@@ -222,7 +211,7 @@ static void stepper_pin_control(core_object_t *object, uint64_t ticks,
     uint8_t enabled = !!(val & ENABLE_PIN);
 
     stepper->enabled = enabled;
-    stepper->dir = (stepper_move_dir_t)dir;
+    stepper->dir = (stepper_direction_t)dir;
     stepper->current_step +=
         (int64_t)(val & STEPS_MASK) * enabled * (-1 + (dir << 1));
 }
@@ -357,7 +346,7 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
                   stepper->current_step, steps,
                   stepper->move_steps - stepper->steps);
     } else if (stepper->current_cmd->object_cmd_id == STEPPER_COMMAND_MOVE) {
-        stepper_move_comeplete_event_data_t *data;
+        stepper_move_complete_event_data_t *data;
 
         CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
         stepper->current_cmd = NULL;

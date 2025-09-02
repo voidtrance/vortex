@@ -370,6 +370,53 @@ All other members are optional.
 #### Adding New HW Object Klasses
 Adding new HW objects involves several steps described below.
 
+##### General Structure
+Each HW object klass needs to provide the following:
+
+1. The object klass needs to be organized into one or more header and
+code files. At the very least, the klass needs to provide a header and code
+files with the names `<klass_name>.[ch]`. The header file (`<klass_name>.h`)
+needs to contain all configuration, status, command arguments, event data
+structures. The code file (`<klass_name>.c`) will contain all klass' main
+code.
+2. The klass may implement additional code in other files provied that all
+files related to the object klass start with the klass' name.
+3. Each object klass needs to implement a `object_create(const char *name, void *config_ptr)`
+function, which will create and return an instance of the klass instance
+object.
+4. Each main object header file should provide the following structures
+(these structure need to follow naming patterns for reasonw that will be
+described later):
+    - Object configuration structure. The structure holds the set of value
+  required to properly configure an object instance. The name of the
+  structure has to end with `_config_params_t`.
+    - Object status structure. If the an object instance is to report
+  status, this structure will contain all values that the object reports.
+  The name of this structure has to end with `_status_t`.
+    - Any supported commands should be listed in an `enum`. The enumeration
+  does not need a specific naming pattern.
+    - Any command that accepts command arguments needs a structure containing
+  the set of arguments. These structures have to follow the naming pattern
+  `<command>_args`.
+    - Commands that return data have to define a structure with the data that
+  they return. These structure have to follow the naming pattern
+  `<command>_data`.
+    - If the object defines any events (see ), each event that provides any
+  data needs a separate structure containg the event data. This structure
+  has to have the name `<event name>_event_data_t`.
+
+When the Python side of the emulator needs to work with HW objects, which
+are implemented in C, it does so using matching object klass structures
+created using Python's `ctypes.Structure` class.
+
+In order to avoid the need fore replicating the C object klass structure
+to Python `ctypes.Structure` sub-classes, the build process, uses the C
+header files to automatically generate the Python ones.
+
+The naming patterns ensure that the auto-generation process correctly
+finds all of the structures and enumerations required for proper usage
+of the HW objects.
+
 ##### Adding New Klasses To `auto-klass.h.in`
 Each new HW object klass has to be added to several data structures in
 `src/core/objects/auto-klass.h.in`.
@@ -395,18 +442,6 @@ prior to the `@EXTRA_EVENTS@` line.
 2. Add the new event type name to the array `OBJECT_EVENT_NAMES`. The
 new event type name should be added prior to the `@EXTRA_EVENT_NAMES@`
 line.
-
-##### Adding New Klasses To `object_defs.py`
-`object_defs.py`, which is in `controller/objects/`, contains Python
-structure definitions which are used to translate C data structures into
-structures that Python can uderstand and use. For this the `ctypes` module
-is used to define structures for each HW object klass.
-
-Each new HW object must define its own class as a subclass of the
-`ObjectDef` class. The HW object class must define `ctypes.Structure`
-subtypes for the object's configuration, status, events, and command
-argument C structures. The `ctypes.Structure` fields types much match
-exactly the types of the corresponding C structure.
 
 ##### Building New Klasses
 Newly added HW objects will be built into shared objects automatically.

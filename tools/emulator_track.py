@@ -25,6 +25,7 @@ from dash import Dash, dcc, html, set_props, Patch
 from dash.dependencies import Input, Output
 from vortex.core import ObjectKlass
 import vortex.emulator.remote.api as api
+from vortex.core.kinematics import AxisType
 import collections
 from weakref import proxy
 
@@ -148,7 +149,7 @@ def get_data(conn, objects, properties={}):
                 data[klass][obj_id] = {k: v for k, v in state[obj_id].items() if k in properties[klass]}
             if klass == ObjectKlass.TOOLHEAD and "position" in properties[klass]:
                 idxs = [i for i, axis in enumerate(state[obj_id]["axes"]) if axis != 7]
-                pos = [state[obj_id]["position"][i] for i in idxs]
+                pos = [state[obj_id]["position"][str(AxisType[i]).lower()] for i in idxs]
                 data[klass][obj_id]["position"] = pos
     return data
 
@@ -354,7 +355,7 @@ def main():
             track_data[row[0]] = row[1:]
         args.data.close()
 
-    #print(track_data)
+    print("Generating graph...")
     origin_time = list(track_data.keys())[0]
     timestamps = [x - origin_time for x in track_data.keys()]
     draw(args.graph, properties, objects, track_data.values(), timestamps)

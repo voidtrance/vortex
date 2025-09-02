@@ -1,5 +1,5 @@
 # vortex - GCode machine emulator
-# Copyright (C) 2024-2025 Mitko Haralanov
+# Copyright (C) 2024-2026 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -246,7 +246,7 @@ class Controller(core.VortexCore):
         return vobjs
 
     def _load_objects(self, config):
-        module = importlib.import_module("vortex.controllers.objects.object_defs")
+        module = importlib.import_module("vortex.core.objects.structs")
         base = getattr(module, "ObjectDef")
         members = inspect.getmembers(module, inspect.isclass)
         members = [x for x in members if x[1] is not base]
@@ -292,7 +292,7 @@ class Controller(core.VortexCore):
                 self.object_defs[klass] = self.object_factory[klass]
                 obj_conf = self.object_factory[klass].config()
                 if klass == core.ObjectKlass.THERMISTOR:
-                    options.adc_max = self.ADC_MAX
+                    options.max_adc = self.ADC_MAX
                 if klass == core.ObjectKlass.PWM:
                     options.pwm_max = self.PWM_MAX
                 options = vortex.lib.ctypes_helpers.expand_substruct_config(options,

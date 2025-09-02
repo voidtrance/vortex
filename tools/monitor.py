@@ -398,7 +398,7 @@ class TooheadObject(KlassObject):
                 self.properties[axis][1].set_width_chars(8)
                 self.properties[axis][1].set_property("editable", False)
                 self.properties[axis][1].set_property("can_focus", False)
-            self.set_value(axis, position[axis])
+            self.set_value(axis, position[str(axis).lower()])
 
 class NeopixelObject(DisplayObject):
     type = ObjectKlass.NEOPIXEL

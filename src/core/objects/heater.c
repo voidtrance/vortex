@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -44,16 +43,6 @@ typedef struct {
 } heater_pid_control_t;
 
 typedef struct {
-    uint16_t power;
-    char pin[PIN_NAME_SIZE];
-    float max_temp;
-    float kp;
-    float ki;
-    float kd;
-    heater_layer_t layers[MAX_LAYER_COUNT];
-} heater_config_params_t;
-
-typedef struct {
     float power; /* watts */
     float max_temp;
     float current; /* celsius */
@@ -79,8 +68,7 @@ static object_cache_t *heater_event_cache = NULL;
 
 static void heater_update(core_object_t *object, uint64_t ticks,
                           uint64_t timestamp);
-static int heater_set_temp(heater_t *heater,
-                           struct heater_set_temperature_args *args);
+static int heater_set_temp(heater_t *heater, struct heater_set_temp_args *args);
 static int heater_use_pins(heater_t *heater, struct heater_use_pins_args *args,
                            bool is_reset);
 static int heater_exec_cmd(core_object_t *object, core_object_command_t *cmd);
@@ -178,7 +166,7 @@ static void heater_reset(core_object_t *object) {
 }
 
 static int heater_set_temp(heater_t *heater,
-                           struct heater_set_temperature_args *args) {
+                           struct heater_set_temp_args *args) {
     if (args->temperature < 0 || args->temperature > heater->temp_data.max_temp)
         return -1;
 

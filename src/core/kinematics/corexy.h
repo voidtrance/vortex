@@ -20,8 +20,8 @@
 #include "kinematics.h"
 
 int corexy_init(cartesian_kinematics_config_t *config);
-int corexy_motor_movement(coordinates_t *delta, coordinates_t *movement);
-int corexy_axis_movement(coordinates_t *delta, coordinates_t *movement);
-int corexy_toolhead_position(coordinates_t *axis_positions,
-                             coordinates_t *position);
+int corexy_motor_movement(kinematics_coordinates_t *delta, kinematics_coordinates_t *movement);
+int corexy_axis_movement(kinematics_coordinates_t *delta, kinematics_coordinates_t *movement);
+int corexy_toolhead_position(kinematics_coordinates_t *axis_positions,
+                             kinematics_coordinates_t *position);
 #endif

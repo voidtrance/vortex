@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,15 @@ typedef struct {
 } probe_status_t;
 
 typedef struct {
+    const char toolhead[TOOLHEAD_NAME_SIZE];
+    float offsets[AXIS_TYPE_MAX];
+    const char **axes;
+    float range;
+    char pin[8];
+} probe_config_params_t;
+
+typedef struct {
     double position[AXIS_TYPE_MAX];
-} probe_trigger_event_data_t;
+} probe_triggered_event_data_t;
 
 #endif

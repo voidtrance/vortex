@@ -25,22 +25,22 @@ int corexy_init(cartesian_kinematics_config_t *config) {
     return 0;
 }
 
-int corexy_motor_movement(coordinates_t *delta, coordinates_t *movement) {
+int corexy_motor_movement(kinematics_coordinates_t *delta, kinematics_coordinates_t *movement) {
     *movement = *delta;
     movement->x = delta->x + delta->y;
     movement->y = delta->x - delta->y;
     return 0;
 }
 
-int corexy_axis_movement(coordinates_t *delta, coordinates_t *movement) {
+int corexy_axis_movement(kinematics_coordinates_t *delta, kinematics_coordinates_t *movement) {
     *movement = *delta;
     movement->x = (delta->x + delta->y) * 0.5;
     movement->y = (delta->x - delta->y) * 0.5;
     return 0;
 }
 
-int corexy_toolhead_position(coordinates_t *axis_positions,
-                             coordinates_t *position) {
+int corexy_toolhead_position(kinematics_coordinates_t *axis_positions,
+                             kinematics_coordinates_t *position) {
     *position = *axis_positions;
     return 0;
 }

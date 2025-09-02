@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # vortex - GCode machine emulator
-# Copyright (C) 2024-2025 Mitko Haralanov
+# Copyright (C) 2024-2026 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,19 +14,23 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import re
 import os
+import pathlib
+from clang import cindex
 import argparse
 
-def find_hw_objects(source_path):
-    object_reg = re.compile(r'^class (?P<klass>[^\(]+)\(ObjectDef\):$', re.MULTILINE)
+def find_hw_objects(source_dir):
+    object_dir = pathlib.PosixPath(source_dir)
+    index = cindex.Index.create()
     objects = []
-    with open(os.path.join(source_path, "controllers/objects/object_defs.py")) as fd:
-        for line in fd:
-            match = object_reg.match(line)
-            if not match:
-                continue
-            objects.append(match.group("klass").strip().lower())
+    for file in object_dir.iterdir():
+        if file.suffix != ".c":
+            continue
+        tu = index.parse(file)
+        for node in tu.cursor.walk_preorder():
+            if node.kind == cindex.CursorKind.FUNCTION_DECL and \
+                node.spelling == "object_create":
+                objects.append(file.stem)
     return objects
 
 def main():

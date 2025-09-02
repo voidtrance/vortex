@@ -66,7 +66,7 @@ int delta_init(delta_kinematics_config_t *config) {
     return 0;
 }
 
-int delta_motor_movement(coordinates_t *delta, coordinates_t *movement) {
+int delta_motor_movement(kinematics_coordinates_t *delta, kinematics_coordinates_t *movement) {
     memset(movement, 0, sizeof(*movement));
     movement->a = sqrt(SQ(delta_config.base_config.arm_length) -
                        SQ(delta->x - delta_config.tower_position[TOWER_A].x) -
@@ -83,13 +83,13 @@ int delta_motor_movement(coordinates_t *delta, coordinates_t *movement) {
     return 0;
 }
 
-int delta_axis_movement(coordinates_t *delta, coordinates_t *movement) {
+int delta_axis_movement(kinematics_coordinates_t *delta, kinematics_coordinates_t *movement) {
     *movement = *delta;
     return 0;
 }
 
-int delta_toolhead_position(coordinates_t *axis_positions,
-                            coordinates_t *position) {
+int delta_toolhead_position(kinematics_coordinates_t *axis_positions,
+                            kinematics_coordinates_t *position) {
     // Actuator linear positions
     float LP[TOWER_MAX] = { axis_positions->a, axis_positions->b,
                             axis_positions->c };

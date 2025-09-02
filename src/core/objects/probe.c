@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,14 +31,6 @@
 #include "toolhead.h"
 #include <cache.h>
 #include <random.h>
-
-typedef struct {
-    const char toolhead[TOOLHEAD_NAME_SIZE];
-    float offset[AXIS_TYPE_MAX];
-    const char **axes;
-    float range;
-    char pin[8];
-} probe_config_params_t;
 
 typedef struct {
     core_object_t object;
@@ -108,7 +100,7 @@ static void probe_update(core_object_t *object, uint64_t ticks,
     pthread_mutex_unlock(&probe->lock);
 
     if (probe->triggered && !state) {
-        probe_trigger_event_data_t *data;
+        probe_triggered_event_data_t *data;
 
         data = object_cache_alloc(probe_event_cache);
         if (data) {
@@ -144,13 +136,13 @@ probe_t *object_create(const char *name, void *config_ptr) {
     probe->object.get_state = probe_get_state;
     probe->object.destroy = probe_destroy;
     probe->toolhead_name = strdup(config->toolhead);
-    memcpy(probe->offsets, config->offset, sizeof(probe->offsets));
+    memcpy(probe->offsets, config->offsets, sizeof(probe->offsets));
     probe->range = config->range;
     strncpy(probe->pin, config->pin, sizeof(probe->pin));
     pthread_mutex_init(&probe->lock, NULL);
 
     if (object_cache_create(&probe_event_cache,
-                            sizeof(probe_trigger_event_data_t))) {
+                            sizeof(probe_triggered_event_data_t))) {
         core_object_destroy(&probe->object);
         free(probe);
         return NULL;
@@ -158,7 +150,7 @@ probe_t *object_create(const char *name, void *config_ptr) {
 
     axis = config->axes;
     while (*axis) {
-        axis_type_t type = kinematics_axis_type_from_char(*axis[0]);
+        kinematics_axis_type_t type = kinematics_axis_type_from_char(*axis[0]);
 
         probe->axis_valid[type] = true;
         axis++;

@@ -1,5 +1,5 @@
 # vortex - GCode machine emulator
-# Copyright (C) 2024-2025 Mitko Haralanov
+# Copyright (C) 2024-2026 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ ifeq ($(DEBUG),1)
 endif
 
 all: version
-	$(GCC_BUILD_OPTS) $(PYTHON) -m pip install --no-build-isolation \
+	CC=clang $(GCC_BUILD_OPTS) $(PYTHON) -m pip install --no-build-isolation \
 		--editable . $(MESON_BUILD_OPTS)
 	@if [ ! -L compile_commands.json ]; then \
 		ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
@@ -74,7 +74,7 @@ venv:
 	$(VENV)/bin/pip install -r ./virtualenv.txt
 
 wheel: venv version
-	$(VENV_PYTHON) -m build -w .
+	CC=clang $(VENV_PYTHON) -m build -w .
 
 package: version
 	$(PYTHON) -m build -w .

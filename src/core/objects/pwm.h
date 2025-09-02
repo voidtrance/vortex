@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,15 +22,7 @@
 #include <stdbool.h>
 #include "global.h"
 
-typedef struct {
-    uint32_t counter;
-    uint32_t pwm_max;
-    uint32_t duty_cycle;
-    bool on;
-    char pin[PIN_NAME_SIZE];
-} pwm_state_t;
-
-enum {
+enum pwm_commands {
     PWM_SET_PARAMS,
     PWM_SET_OBJECT,
     PWM_SET_DUTY_CYCLE,
@@ -41,12 +33,25 @@ struct pwm_set_object_args {
     char object_name[OBJECT_NAME_SIZE];
 };
 
-struct pwm_set_parms_args {
+struct pwm_set_params_args {
     uint16_t prescaler;
 };
 
 struct pwm_set_duty_cycle_args {
     uint32_t duty_cycle;
 };
+
+typedef struct {
+    uint8_t pwm_max;
+    char pin[PIN_NAME_SIZE];
+} pwm_config_params_t;
+
+typedef struct {
+    uint32_t counter;
+    uint32_t pwm_max;
+    uint32_t duty_cycle;
+    bool on;
+    char pin[PIN_NAME_SIZE];
+} pwm_status_t;
 
 #endif

@@ -20,9 +20,9 @@
 #include "kinematics.h"
 
 int delta_init(delta_kinematics_config_t *config);
-int delta_motor_movement(coordinates_t *delta, coordinates_t *movement);
-int delta_axis_movement(coordinates_t *delta, coordinates_t *movement);
-int delta_toolhead_position(coordinates_t *axis_positions,
-                            coordinates_t *position);
+int delta_motor_movement(kinematics_coordinates_t *delta, kinematics_coordinates_t *movement);
+int delta_axis_movement(kinematics_coordinates_t *delta, kinematics_coordinates_t *movement);
+int delta_toolhead_position(kinematics_coordinates_t *axis_positions,
+                            kinematics_coordinates_t *position);
 
 #endif

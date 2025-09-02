@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +21,17 @@
 #include <kinematics.h>
 
 typedef struct {
+    const char axes[AXIS_TYPE_MAX];
+    const char attachment[AXIS_TYPE_MAX];
+} toolhead_config_params_t;
+
+typedef struct {
     int axes[AXIS_TYPE_MAX];
-    coordinates_t position;
+    kinematics_coordinates_t position;
 } toolhead_status_t;
+
+typedef struct {
+    double position[AXIS_TYPE_MAX];
+} toolhead_origin_event_data_t;
 
 #endif

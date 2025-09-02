@@ -102,7 +102,7 @@ def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser
         econfig.set(s, "type", str(axis).lower())
         if axis != AxisType.E:
             econfig.set(s, "endstop", f"endstop{name.upper()}")
-        econfig.set(s, "stepper", f"stepper{name.upper()}")
+        econfig.set(s, "steppers", f"stepper{name.upper()}")
 
     # Handle various kinematics types
     if kin == "corexy" and axis in (AxisType.X, AxisType.Y):
@@ -179,19 +179,23 @@ def generate_extruder_layers(section : str, esection : str,
         econfig.set(esection, name, kconfig.get(section, f"pid_{name}"))
     # Generate extruder thermal layers
     econfig.set(esection, "layers_1_type", "1")
-    econfig.set(esection, "layers_1_density", "1100000")
-    econfig.set(esection, "layers_1_capacity", "0.9")
-    econfig.set(esection, "layers_1_conductivity", "0.3")
-    econfig.set(esection, "layers_1_emissivity", "0.9")
-    econfig.set(esection, "layers_1_convection", "0,0")
-    econfig.set(esection, "layers_1_size", "10,10,2")
+    econfig.set(esection, "layers_1_material_density", "1100000")
+    econfig.set(esection, "layers_1_material_capacity", "0.9")
+    econfig.set(esection, "layers_1_material_conductivity", "0.3")
+    econfig.set(esection, "layers_1_material_emissivity", "0.9")
+    econfig.set(esection, "layers_1_material_convection", "0,0")
+    econfig.set(esection, "layers_1_size_x", "10.0")
+    econfig.set(esection, "layers_1_size_y", "10.0")
+    econfig.set(esection, "layers_1_size_z", "2.0")
     econfig.set(esection, "layers_2_type", "2")
-    econfig.set(esection, "layers_2_density", "2650000")
-    econfig.set(esection, "layers_2_capacity", "0.9")
-    econfig.set(esection, "layers_2_conductivity", "120")
-    econfig.set(esection, "layers_2_emissivity", "0.2")
-    econfig.set(esection, "layers_2_convection", "8,4")
-    econfig.set(esection, "layers_2_size", "20.0,20.0,10.0")
+    econfig.set(esection, "layers_2_material_density", "2650000")
+    econfig.set(esection, "layers_2_material_capacity", "0.9")
+    econfig.set(esection, "layers_2_material_conductivity", "120")
+    econfig.set(esection, "layers_2_material_emissivity", "0.2")
+    econfig.set(esection, "layers_2_material_convection", "8,4")
+    econfig.set(esection, "layers_2_size_x", "20.0")
+    econfig.set(esection, "layers_2_size_y", "20.0")
+    econfig.set(esection, "layers_2_size_z", "10.0")
 
 def generate_bed_layers(section : str, esection : str, name : str,
                         kconfig : Type[configparser.ConfigParser],
@@ -212,38 +216,42 @@ def generate_bed_layers(section : str, esection : str, name : str,
 
     # Generate bed thermal layers
     econfig.set(esection, "layers_1_type", "1")
-    econfig.set(esection, "layers_1_density", "1100000")
-    econfig.set(esection, "layers_1_capacity", "0.9")
-    econfig.set(esection, "layers_1_conductivity", "0.3")
-    econfig.set(esection, "layers_1_emissivity", "0.9")
-    econfig.set(esection, "layers_1_convection", "0,0")
-    layer_size = ",".join([str(bed_size["x"] - 50),
-                           str(bed_size["y"] - 50), "1.5"])
-    econfig.set(esection, "layers_1_size", layer_size)
+    econfig.set(esection, "layers_1_material_density", "1100000")
+    econfig.set(esection, "layers_1_material_capacity", "0.9")
+    econfig.set(esection, "layers_1_material_conductivity", "0.3")
+    econfig.set(esection, "layers_1_material_emissivity", "0.9")
+    econfig.set(esection, "layers_1_material_convection", "0,0")
+    bed_size["z"] = 1.5
+    for key in bed_size:
+        econfig.set(esection, f"layers_1_size_{key}",
+                    str(bed_size[key] - 50 if key != "z" else bed_size[key]))
     econfig.set(esection, "layers_2_type", "2")
-    econfig.set(esection, "layers_2_density", "2650000")
-    econfig.set(esection, "layers_2_capacity", "0.9")
-    econfig.set(esection, "layers_2_conductivity", "120")
-    econfig.set(esection, "layers_2_emissivity", "0.2")
-    econfig.set(esection, "layers_2_convection", "8,4")
-    layer_size = ",".join([str(bed_size["x"]), str(bed_size["y"]), "8"])
-    econfig.set(esection, "layers_2_size", layer_size)
+    econfig.set(esection, "layers_2_material_density", "2650000")
+    econfig.set(esection, "layers_2_material_capacity", "0.9")
+    econfig.set(esection, "layers_2_material_conductivity", "120")
+    econfig.set(esection, "layers_2_material_emissivity", "0.2")
+    econfig.set(esection, "layers_2_material_convection", "8,4")
+    bed_size["z"] = 8
+    for key in bed_size:
+        econfig.set(esection, f"layers_2_size_{key}", str(bed_size[key]))
     econfig.set(esection, "layers_3_type", "3")
-    econfig.set(esection, "layers_3_density", "3700000")
-    econfig.set(esection, "layers_3_capacity", "0.9")
-    econfig.set(esection, "layers_3_conductivity", "0.25")
-    econfig.set(esection, "layers_3_emissivity", "0.9")
-    econfig.set(esection, "layers_3_convection", "0,0")
-    layer_size = ",".join([str(bed_size["x"]), str(bed_size["y"]), "1.2"])
-    econfig.set(esection, "layers_3_size", layer_size)
+    econfig.set(esection, "layers_3_material_density", "3700000")
+    econfig.set(esection, "layers_3_material_capacity", "0.9")
+    econfig.set(esection, "layers_3_material_conductivity", "0.25")
+    econfig.set(esection, "layers_3_material_emissivity", "0.9")
+    econfig.set(esection, "layers_3_material_convection", "0,0")
+    bed_size["z"] = 1.2
+    for key in bed_size:
+        econfig.set(esection, f"layers_3_size_{key}", str(bed_size[key]))
     econfig.set(esection, "layers_4_type", "3")
-    econfig.set(esection, "layers_4_density", "5500000")
-    econfig.set(esection, "layers_4_capacity", "0.6")
-    econfig.set(esection, "layers_4_conductivity", "0.6")
-    econfig.set(esection, "layers_4_emissivity", "0.9")
-    econfig.set(esection, "layers_4_convection", "0,0")
-    layer_size = ",".join([str(bed_size["x"]), str(bed_size["y"]), "0.75"])
-    econfig.set(esection, "layers_4_size", layer_size)
+    econfig.set(esection, "layers_4_material_density", "5500000")
+    econfig.set(esection, "layers_4_material_capacity", "0.6")
+    econfig.set(esection, "layers_4_material_conductivity", "0.6")
+    econfig.set(esection, "layers_4_material_emissivity", "0.9")
+    econfig.set(esection, "layers_4_material_convection", "0,0")
+    bed_size["z"] = 0.75
+    for key in bed_size:
+        econfig.set(esection, f"layers_4_size_{key}", str(bed_size[key]))
 
 def generate_heater_config(section : str, kconfig : Type[configparser.ConfigParser],
                            econfig : Type[configparser.ConfigParser]) -> None:

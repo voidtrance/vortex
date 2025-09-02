@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,9 +24,19 @@
 typedef struct {
     bool triggered;
     const char type[4];
-    axis_type_t axis;
+    kinematics_axis_type_t axis;
     char pin[PIN_NAME_SIZE];
     unsigned long pin_addr;
 } endstop_status_t;
+
+typedef struct {
+    bool triggered;
+} endstop_triggered_event_data_t;
+
+typedef struct {
+    const char type[4];
+    const char axis;
+    char pin[8];
+} endstop_config_params_t;
 
 #endif

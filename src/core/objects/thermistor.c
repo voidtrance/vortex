@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,34 +40,6 @@ static float pt1000_base = 1000.0;
 
 #define b3950_nominal_r (100000.0) // in Ohms.
 #define b3950_nominal_t (25.0)  // in C
-
-typedef enum {
-    CONFIG_TYPE_NONE,
-    CONFIG_TYPE_BETA,
-    CONFIG_TYPE_COEFF,
-} thermistor_config_type_t;
-
-typedef struct {
-    uint16_t temp;
-    uint32_t resistance;
-} config_temp_t;
-
-typedef struct {
-    thermistor_config_type_t type;
-    uint16_t resistor;
-    struct {
-        uint16_t beta;
-    } beta;
-    config_temp_t coeff[3];
-} thermistor_config_t;
-
-typedef struct {
-    char sensor_type[HEAT_SENSOR_NAME_SIZE];
-    char heater[HEATER_NAME_SIZE];
-    char pin[PIN_NAME_SIZE];
-    uint16_t max_adc;
-    thermistor_config_t config;
-} thermistor_config_params_t;
 
 typedef struct {
     core_object_t object;
@@ -218,8 +190,7 @@ static void thermistor_status(core_object_t *object, void *status) {
     thermistor_t *thermistor = (thermistor_t *)object;
 
     s->resistance = thermistor->resistance;
-    s->adc = calc_adc_value(thermistor->resistance, thermistor->resistor,
-                            thermistor->max_adc);
+    s->adc = calc_adc_value(thermistor->resistance, thermistor->resistor, thermistor->max_adc);
     strncpy(s->pin, thermistor->pin, sizeof(s->pin));
 }
 

@@ -20,6 +20,7 @@ import time
 import os
 import errno
 import ctypes
+import enum
 import vortex.emulator.remote.api as api
 import vortex.core.lib.logging as logging
 from vortex.core import ObjectKlass
@@ -85,7 +86,7 @@ class RemoteThread(threading.Thread):
                 self._objects[klass] = []
             self._objects[klass].append({"name":name, "id":id})
         super().__init__(None, None, f"vortex-remote-{index}")
-    def _validate_reuest(self, request):
+    def _validate_request(self, request):
         if request.type == api.RequestType.OBJECT_STATUS:
             if not hasattr(request, "objects") or \
                 not isinstance(request.objects, list):
@@ -110,7 +111,7 @@ class RemoteThread(threading.Thread):
                 return False
         return True
     def _process_request(self, request):
-        if not self._validate_reuest(request):
+        if not self._validate_request(request):
             response = api.Response(request.type)
             response.status = errno.EINVAL
             response.data = None
@@ -215,6 +216,8 @@ class RemoteThread(threading.Thread):
             return bool
         elif issubclass(ctype, ctypes.Array):
             return list
+        elif issubclass(ctype, enum.Enum):
+            return int
         return None
     def get_object_commands(self, klass):
         commands = self._controller.get_param("commands")

@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,13 +22,8 @@
 #include "pwm.h"
 
 typedef struct {
-    uint8_t pwm_max;
-    char pin[PIN_NAME_SIZE];
-} pwm_config_t;
-
-typedef struct {
     core_object_t object;
-    pwm_config_t config;
+    pwm_config_params_t config;
     uint64_t last_timestamp;
     char obj_name[OBJECT_NAME_SIZE];
     core_object_t *obj;
@@ -50,7 +45,7 @@ static int pwm_init(core_object_t *object) {
 
 static void pwm_state(core_object_t *object, void *state) {
     pwm_t *pwm = (pwm_t *)object;
-    pwm_state_t *pwm_state = (pwm_state_t *)state;
+    pwm_status_t *pwm_state = (pwm_status_t *)state;
 
     memset(pwm_state, 0, sizeof(*pwm_state));
     pwm_state->counter = pwm->config.pwm_max;
@@ -83,7 +78,7 @@ static int pwm_exec(core_object_t *object, core_object_command_t *cmd) {
     pwm_t *pwm = (pwm_t *)object;
 
     if (cmd->object_cmd_id == PWM_SET_PARAMS) {
-        struct pwm_set_parms_args *args = cmd->args;
+        struct pwm_set_params_args *args = cmd->args;
         pwm->prescaler = args->prescaler;
     } else if (cmd->object_cmd_id == PWM_SET_OBJECT) {
         struct pwm_set_object_args *args = cmd->args;

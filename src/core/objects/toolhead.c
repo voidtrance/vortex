@@ -34,20 +34,15 @@
 static float precision_factor;
 
 typedef struct {
-    const char axes[AXIS_TYPE_MAX];
-    const char attachment[AXIS_TYPE_MAX];
-} toolhead_config_params_t;
-
-typedef struct {
     core_object_t *obj;
-    axis_type_t type;
+    kinematics_axis_type_t type;
 } toolhead_axis_t;
 
 typedef struct {
     core_object_t object;
-    axis_type_t *axes;
+    kinematics_axis_type_t *axes;
     toolhead_axis_t *attachment;
-    coordinates_t position;
+    kinematics_coordinates_t position;
     bool single_event_guard;
     size_t n_axes;
     size_t n_attached;
@@ -55,8 +50,8 @@ typedef struct {
 
 static object_cache_t *toolhead_event_cache = NULL;
 
-static inline double get_axis_position(const coordinates_t *positions,
-                                       axis_type_t type) {
+static inline double get_axis_position(const kinematics_coordinates_t *positions,
+                                       kinematics_axis_type_t type) {
     switch (type) {
     case AXIS_TYPE_X:
         return positions->x;
@@ -77,7 +72,8 @@ static inline double get_axis_position(const coordinates_t *positions,
     }
 }
 
-static inline void set_axis_position(coordinates_t *positions, axis_type_t type,
+static inline void set_axis_position(kinematics_coordinates_t *positions,
+                                     kinematics_axis_type_t type,
                                      double position) {
     switch (type) {
     case AXIS_TYPE_X:
@@ -151,14 +147,14 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
                             uint64_t runtime) {
     toolhead_t *toolhead = (toolhead_t *)object;
     toolhead_origin_event_data_t *event;
-    coordinates_t axis_positions = { 0 };
+    kinematics_coordinates_t axis_positions = { 0 };
     axis_status_t status;
     bool at_origin = true;
     size_t i;
 
     for (i = 0; i < toolhead->n_attached; i++) {
         core_object_t *axis = toolhead->attachment[i].obj;
-        axis_type_t type = toolhead->attachment[i].type;
+        kinematics_axis_type_t type = toolhead->attachment[i].type;
 
         axis->get_state(axis, &status);
         set_axis_position(&axis_positions, type, status.position);

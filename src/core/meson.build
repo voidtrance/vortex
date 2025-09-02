@@ -1,5 +1,5 @@
 # vortex - GCode machine emulator
-# Copyright (C) 2024-2025 Mitko Haralanov
+# Copyright (C) 2024-2026 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,7 +21,8 @@ subdir('objects')
 py.extension_module('_vortex_core',
                     ['core.c', 'timers.c', auto_gen_events, auto_gen_types],
                     dependencies: [core_utils_dep, core_threads_dep,
-                                   core_atomics_dep, core_logging_dep],
+                                   core_atomics_dep, core_logging_dep,
+                                   auto_structs_dep],
                     include_directories: [core_include_general, core_include,
                                           core_kinematics_include],
                     install: true,

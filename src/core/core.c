@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1054,7 +1054,7 @@ static PyObject *vortex_core_get_status(PyObject *self, PyObject *args) {
             state = calloc(1, sizeof(toolhead_status_t));
             break;
         case OBJECT_KLASS_PWM:
-            state = calloc(1, sizeof(pwm_state_t));
+            state = calloc(1, sizeof(pwm_status_t));
             break;
         default:
             break;

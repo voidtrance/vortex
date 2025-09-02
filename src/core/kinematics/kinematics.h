@@ -27,9 +27,9 @@ typedef enum {
     AXIS_TYPE_C,
     AXIS_TYPE_E,
     AXIS_TYPE_MAX,
-} axis_type_t;
+} kinematics_axis_type_t;
 
-typedef struct coordinates {
+typedef struct {
     double x;
     double y;
     double z;
@@ -37,7 +37,7 @@ typedef struct coordinates {
     double b;
     double c;
     double e;
-} coordinates_t;
+} kinematics_coordinates_t;
 
 typedef enum {
     KINEMATICS_NONE,
@@ -51,20 +51,20 @@ typedef enum {
 typedef struct {
     float min;
     float max;
-} axis_limits_t;
+} kinematics_axis_limits_t;
 
 typedef struct {
     char dummy;
 } none_kinematics_config_t;
 
 typedef struct {
-    axis_limits_t limits[AXIS_TYPE_MAX];
+    kinematics_axis_limits_t limits[AXIS_TYPE_MAX];
 } cartesian_kinematics_config_t;
 
 #define DEG2RAD(angle) ((angle) * M_PI / 180.0f)
 
 typedef struct {
-    axis_limits_t limits[AXIS_TYPE_MAX];
+    kinematics_axis_limits_t limits[AXIS_TYPE_MAX];
     float arm_length;
     float radius;
     float tower_radius;
@@ -85,13 +85,14 @@ typedef struct {
 
 int kinematics_init(kinematics_config_t *config);
 kinematics_type_t kinematics_type_get(void);
-axis_type_t kinematics_axis_type_from_char(char type_char);
-char kinematics_axis_type_to_char(const axis_type_t);
+kinematics_axis_type_t kinematics_axis_type_from_char(char type_char);
+char kinematics_axis_type_to_char(const kinematics_axis_type_t);
 void *kinematics_get_config(void);
-int kinematics_get_motor_movement(coordinates_t *delta,
-                                  coordinates_t *movement);
-int kinematics_get_axis_movement(coordinates_t *delta, coordinates_t *movement);
-int kinematics_get_toolhead_position(coordinates_t *axis_position,
-                                     coordinates_t *position);
+int kinematics_get_motor_movement(kinematics_coordinates_t *delta,
+                                  kinematics_coordinates_t *movement);
+int kinematics_get_axis_movement(kinematics_coordinates_t *delta,
+                                 kinematics_coordinates_t *movement);
+int kinematics_get_toolhead_position(kinematics_coordinates_t *axis_position,
+                                     kinematics_coordinates_t *position);
 
 #endif

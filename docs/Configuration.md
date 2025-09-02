@@ -118,13 +118,13 @@ step_pin:
 ```ini
 [axis x]
 type:
-stepper:
+steppers:
 endstop:
 ```
 | Setting | Type | Description |
 | :--- | :---: | :--- |
 | type | char | They axis type. One of `x`, `y`, `z`, `a`, `b`, `c`, or `e` |
-| stepper | list[string] | A comma-separated list of all motors assigned to the axis. |
+| steppers | list[string] | A comma-separated list of all motors assigned to the axis. |
 | endstop | string | The name of the endstop object asigned to the axis. |
 
 ### Endstop
@@ -173,12 +173,14 @@ ki:
 kd:
 pin:
 layers_<n>_type:
-layers_<n>_density:
-layers_<n>_capacity:
-layers_<n>_conductivity:
-layers_<n>_emissivity:
-layers_<n>_convection:
-layers_<n>_size:
+layers_<n>_material_density:
+layers_<n>_material_capacity:
+layers_<n>_material_conductivity:
+layers_<n>_material_emissivity:
+layers_<n>_material_convection:
+layers_<n>_size_x:
+layers_<n>_size_y:
+layers_<n>_size_z:
 ```
 
 Heater objects emulate a heating element that is attached to a heated body. They use an
@@ -203,12 +205,14 @@ configuration section.
 | kd | float | PID derivative gain value. This value can be computed using the [heater_sim.py](/docs/UserGuide.md#available-tools) tool. |
 | pin | string | The heater's control pin name |
 | layer_\<n>_type | integer | Type of the layer: 1 - heating element, 2 - heated body, 3 - other |
-| layer_\<n>_density | float | Material density in g/m^3 |
-| layer_\<n>_capacity | float | Thermal capacity constant for the material (in J/gK) |
-| layer_\<n>_conductivity | float | Material thermal conductivity rate (in W/mK) |
-| layer_\<n>_emissivity | float | |
-| layer_\<n>_convection | list[float] | Two, comma-separated values for the heat convection rate (in W/m^2K) |
-| layer_\<n>_size | list[float] | A comma-separated list of the layer's dimensions (in mm) |
+| layer_\<n>_material_density | float | Material density in g/m^3 |
+| layer_\<n>_material_capacity | float | Thermal capacity constant for the material (in J/gK) |
+| layer_\<n>_material_conductivity | float | Material thermal conductivity rate (in W/mK) |
+| layer_\<n>_material_emissivity | float | |
+| layer_\<n>_material_convection | list[float] | Two, comma-separated values for the heat convection rate (in W/m^2K) |
+| layer_\<n>_size_x | float | Size of object in the X dimension (in mm) |
+| layer_\<n>_size_y | float | Size of object in the Y dimension (in mm) |
+| layer_\<n>_size_y | float | Size of object in the Z dimension (in mm) |
 
 ### Probe
 ```ini
