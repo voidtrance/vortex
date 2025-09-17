@@ -27,7 +27,7 @@ AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: false
 BinPackArguments: true
-BinPackParameters: true
+BinPackParameters: OnePerLine
 BraceWrapping:
   AfterClass: false
   AfterControlStatement: false
@@ -46,13 +46,14 @@ BraceWrapping:
   SplitEmptyNamespace: true
 BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Custom
+BreakFunctionDefinitionParameters: false
 BreakBeforeInheritanceComma: false
 BreakBeforeTernaryOperators: false
 BreakConstructorInitializersBeforeComma: false
 BreakConstructorInitializers: BeforeComma
 BreakAfterJavaFieldAnnotations: false
 BreakStringLiterals: false
-ColumnLimit: 80
+ColumnLimit: 100
 CommentPragmas: '^ IWYU pragma:'
 CompactNamespaces: false
 ConstructorInitializerAllOnOneLineOrOnePerLine: false
@@ -89,8 +90,8 @@ ObjCBinPackProtocolList: Auto
 ObjCBlockIndentWidth: 4
 ObjCSpaceAfterProperty: true
 ObjCSpaceBeforeProtocolList: true
-PenaltyBreakAssignment: 10
-PenaltyBreakBeforeFirstCallParameter: 30
+PenaltyBreakAssignment: 30
+PenaltyBreakBeforeFirstCallParameter: 40
 PenaltyBreakComment: 10
 PenaltyBreakFirstLessLess: 0
 PenaltyBreakString: 10
