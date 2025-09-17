@@ -43,8 +43,6 @@ class BaseFrontend:
         self._queue = CommandQueue(queue_size)
         self._thread = None
         self.is_reset = False
-        self.event_register = lambda a, b, c, d: False
-        self.event_unregister = lambda a, b, c, d: False
         self.emulation_frequency = 0
         try:
             os.mkfifo(self.PIPE_PATH)
@@ -62,7 +60,7 @@ class BaseFrontend:
         self._set_controller_data()
 
     # Implement these as class methods so subclasses can
-    # override them. If they they are implemented as class
+    # override them. If they are implemented as class
     # attributes, any subclass lookup of those methods will
     # return the base class method instead of the overriden
     # one.

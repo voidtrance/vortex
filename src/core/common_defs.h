@@ -43,7 +43,7 @@ typedef struct {
     object_list_cb_t object_list;
     complete_cb_t completion_callback;
     event_register_t event_register;
-    event_register_t event_unregister;
+    event_unregister_t event_unregister;
     event_submit_t event_submit;
     cmd_submit_cb_t cmd_submit;
     void *v_cmd_exec;
@@ -171,11 +171,9 @@ static inline core_object_t *core_id_to_object(core_object_id_t id) {
          ->call_data.event_register(                                       \
              (type), (event), (name), ((core_object_t *)(obj)), (handler), \
              ((core_object_t *)(obj))->call_data.cb_data))
-#define CORE_EVENT_UNREGISTER(obj, type, event, name)                      \
-    (((core_object_t *)(obj))                                              \
-         ->call_data.event_unregister(                                     \
-             (type), (event), (name), ((core_object_t *)(obj)), (handler), \
-             ((core_object_t *)(obj))->call_data.cb_data))
+#define CORE_EVENT_UNREGISTER(obj, token) \
+    (((core_object_t *)(obj))             \
+         ->call_data.event_unregister((token), ((core_object_t *)(obj))->call_data.cb_data))
 #define CORE_EVENT_SUBMIT(obj, event, data)                            \
     (((core_object_t *)(obj))                                          \
          ->call_data.event_submit(                                     \

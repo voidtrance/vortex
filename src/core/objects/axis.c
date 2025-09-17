@@ -67,6 +67,7 @@ typedef struct {
     float length;
     double start_position;
     double position;
+    core_event_token_t endstop_event_token;
     stepper_status_t stepper_status;
 } axis_t;
 
@@ -197,9 +198,9 @@ static int axis_init(core_object_t *object) {
             axis->endstop_is_max = false;
     }
 
-    CORE_EVENT_REGISTER(axis, OBJECT_KLASS_ENDSTOP,
-                        OBJECT_EVENT_ENDSTOP_TRIGGER, axis->endstop_name,
-                        axis_event_handler);
+    axis->endstop_event_token = CORE_EVENT_REGISTER(axis, OBJECT_KLASS_ENDSTOP,
+                                                    OBJECT_EVENT_ENDSTOP_TRIGGER,
+                                                    axis->endstop_name, axis_event_handler);
     axis_reset(object);
     return 0;
 }
@@ -347,6 +348,7 @@ static void axis_destroy(core_object_t *object) {
     axis_t *axis = (axis_t *)object;
     size_t i;
 
+    CORE_EVENT_UNREGISTER(axis, axis->endstop_event_token);
     core_object_destroy(object);
     object_cache_destroy(axis_event_cache);
     free((char *)axis->endstop_name);

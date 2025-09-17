@@ -501,16 +501,17 @@ class Controller(core.VortexCore):
             return self._virtual_objects[object_id].exec_command(command_id,
                                                                  subcommand_id, opts)
 
-    def event_register(self, object_type, event_type, object_name, handler):
-        if not super().event_register(object_type, event_type, object_name,
-                                      self._event_handler):
-            return False
-        self._event_handlers[(object_type, event_type, object_name)] = handler
-        return True
+    def event_register(self, klass, event_type, object_name, handler):
+        subscription_id = super().event_register(klass, event_type, object_name,
+                                                 self._event_handler)
+        if subscription_id is None:
+            return None
+        self._event_handlers[subscription_id] = handler
+        return subscription_id
 
-    def event_unregister(self, object_type, event_type, object_name):
-        self._event_handlers.pop((object_type, event_type, object_name))
-        return super().event_unregister(object_type, event_type, object_name)
+    def event_unregister(self, subscription_id):
+        self._event_handlers.pop(subscription_id)
+        return super().event_unregister(subscription_id)
 
     def _find_event_data(self, klass, event):
         for e, s in self.object_defs[klass].events.items():
@@ -518,20 +519,16 @@ class Controller(core.VortexCore):
                 return s
         return None
 
-    def _event_handler(self, klass, object_name, event_type, data):
-        handler = self._event_handlers.get((klass, event_type, object_name),
-                                            None)
-        if handler is None:
-            return
-        if self.object_defs[klass].virtual:
-            handler(klass, event_type, object_name, data)
-            return
-        event_data_def = self._find_event_data(klass, event_type)
-        if event_data_def is None:
-            raise vortex.core.VortexCoreError(f"Unknown event type {event_type}")
-        pointer = ctypes.cast(data, ctypes.POINTER(event_data_def))
-        content = vortex.lib.ctypes_helpers.parse_ctypes_struct(pointer.contents)
-        handler(klass, event_type, object_name, content)
+    def _event_handler(self, token, klass, object_name, event_type, data):
+        if not self.object_defs[klass].virtual:
+            event_data_def = self._find_event_data(klass, event_type)
+            if event_data_def is None:
+                raise vortex.core.VortexCoreError(f"Unknown event type {event_type}")
+            pointer = ctypes.cast(data, ctypes.POINTER(event_data_def))
+            data = vortex.lib.ctypes_helpers.parse_ctypes_struct(pointer.contents)
+
+        handler = self._event_handlers.get(token)
+        handler(klass, event_type, object_name, data)
 
     def reset(self, objects=[]):
         if not objects:

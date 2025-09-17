@@ -49,6 +49,8 @@ typedef struct {
     double position[AXIS_TYPE_MAX];
 } toolhead_origin_event_data_t;
 
+typedef unsigned long core_event_token_t;
+
 /*
  * Object event handler type.
  * Object event handlers are called to handle events from
@@ -63,7 +65,7 @@ typedef void (*event_handler_t)(core_object_t *, const char *,
                                 const core_object_event_type_t, void *);
 
 /*
- * Signature of call to (un)register for an object event.
+ * Signature of call to register for an object event.
  * The arguments are:
  *    - the event type to register for,
  *    - name of the object issuing the event,
@@ -71,9 +73,20 @@ typedef void (*event_handler_t)(core_object_t *, const char *,
  *    - the object's event handler function,
  *    - the data that needs to be passed.
  */
-typedef int (*event_register_t)(const core_object_klass_t,
-                                const core_object_event_type_t, const char *,
-                                core_object_t *, event_handler_t, void *);
+typedef core_event_token_t (*event_register_t)(const core_object_klass_t,
+                                               const core_object_event_type_t,
+                                               const char *,
+                                               core_object_t *,
+                                               event_handler_t,
+                                               void *);
+
+/*
+ * Signature of call to unregister for an object event.
+ * The arguments are:
+ *    = the event subscription token.
+ *    - the data that needs to be passed.
+*/
+typedef int (*event_unregister_t)(const core_event_token_t, void *);
 
 /*
  * Signature of call to issue an event.

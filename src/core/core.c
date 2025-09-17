@@ -160,15 +160,14 @@ static core_object_t **core_object_list(const core_object_klass_t klass,
 /* Object callbacks */
 static void core_object_command_complete(uint64_t command_id, int64_t result,
                                          void *, void *data);
-static int core_object_event_register(const core_object_klass_t klass,
-                                      const core_object_event_type_t event,
-                                      const char *name, core_object_t *object,
-                                      event_handler_t handler, void *user_data);
-static int core_object_event_unregister(const core_object_klass_t klass,
-                                        const core_object_event_type_t event,
-                                        const char *name, core_object_t *object,
-                                        event_handler_t handler,
-                                        void *user_data);
+static core_event_token_t core_object_event_register(const core_object_klass_t klass,
+                                                     const core_object_event_type_t event,
+                                                     const char *name,
+                                                     core_object_t *object,
+                                                     event_handler_t handler,
+                                                     void *user_data);
+
+static int core_object_event_unregister(const core_event_token_t token, void *user_data);
 static int core_object_event_submit(const core_object_event_type_t event,
                                     const core_object_id_t id, void *event_data,
                                     void *user_data);
@@ -265,8 +264,8 @@ static void core_process_events(void *arg) {
                                            event->data);
             else {
                 PyGILState_STATE state = PyGILState_Ensure();
-                PyObject *args = Py_BuildValue("(isik)", object->klass,
-                                               object->name, event->type,
+                PyObject *args = Py_BuildValue("(kisik)", (core_event_token_t)subscription,
+                                               object->klass, object->name, event->type,
                                                event->data);
                 if (!args) {
                     PyErr_Print();
@@ -1149,10 +1148,12 @@ fail:
     return NULL;
 }
 
-static int core_object_event_register(const core_object_klass_t klass,
-                                      const core_object_event_type_t event,
-                                      const char *name, core_object_t *object,
-                                      event_handler_t handler, void *data) {
+static unsigned long core_object_event_register(const core_object_klass_t klass,
+                                                const core_object_event_type_t event,
+                                                const char *name,
+                                                core_object_t *object,
+                                                event_handler_t handler,
+                                                void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
 
@@ -1180,35 +1181,32 @@ static int core_object_event_register(const core_object_klass_t klass,
     pthread_mutex_lock(&core->events.handlers[event].lock);
     STAILQ_INSERT_TAIL(&core->events.handlers[event].list, subscription, entry);
     pthread_mutex_unlock(&core->events.handlers[event].lock);
-    return 0;
+    return (unsigned long)subscription;
 }
 
-static int core_object_event_unregister(const core_object_klass_t klass,
-                                        const core_object_event_type_t event,
-                                        const char *name, core_object_t *object,
-                                        event_handler_t handler, void *data) {
+static int core_object_event_unregister(const core_event_token_t token, void *data) {
     core_t *core = (core_t *)data;
     event_subscription_t *subscription;
     event_subscription_t *next;
-    core_object_t *obj = core_object_find(klass, name, core);
+    core_object_event_type_t event;
 
-    pthread_mutex_lock(&core->events.handlers[event].lock);
-    subscription = STAILQ_FIRST(&core->events.handlers[event].list);
-    pthread_mutex_unlock(&core->events.handlers[event].lock);
-    while (subscription != NULL) {
-        next = STAILQ_NEXT(subscription, entry);
-        if (subscription->klass == klass &&
-            (subscription->object_id == CORE_OBJECT_ID_INVALID ||
-             (object && subscription->object_id == core_object_to_id(obj)))) {
-            pthread_mutex_lock(&core->events.handlers[event].lock);
-            STAILQ_REMOVE(&core->events.handlers[event].list, subscription,
-                          event_subscription, entry);
-            pthread_mutex_unlock(&core->events.handlers[event].lock);
-            free(subscription);
-            return 0;
+    for (event = OBJECT_EVENT_STEPPER_MOVE_COMPLETE; event <= OBJECT_EVENT_MAX; event++) {
+        pthread_mutex_lock(&core->events.handlers[event].lock);
+        subscription = STAILQ_FIRST(&core->events.handlers[event].list);
+        pthread_mutex_unlock(&core->events.handlers[event].lock);
+        while (subscription != NULL) {
+            next = STAILQ_NEXT(subscription, entry);
+            if ((core_event_token_t)subscription == token) {
+                pthread_mutex_lock(&core->events.handlers[event].lock);
+                STAILQ_REMOVE(&core->events.handlers[event].list, subscription, event_subscription,
+                              entry);
+                pthread_mutex_unlock(&core->events.handlers[event].lock);
+                free(subscription);
+                return 0;
+            }
+
+            subscription = next;
         }
-
-        subscription = next;
     }
 
     return -1;
@@ -1272,6 +1270,11 @@ static uint64_t core_object_command_submit(core_object_t *source,
     return (uint64_t)cmd;
 }
 
+#define EVENT_TOKEN(klass, type, name, sub) \
+    (core_event_token_t)(((unsigned long)type << 60) | ((unsigned long)sub & ((1UL << 60) - 1)))
+
+#define TYPE_FROM_TOKEN(token) (core_object_event_type_t)((token >> 60) & 0xf)
+
 static PyObject *vortex_core_python_event_register(PyObject *self,
                                                    PyObject *args) {
     core_t *core = (core_t *)self;
@@ -1279,6 +1282,7 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
     core_object_klass_t klass;
     core_object_event_type_t type;
     PyObject *callback;
+    PyObject *token;
     char *name = NULL;
 
     if (!PyArg_ParseTuple(args, "iisO", &klass, &type, &name, &callback))
@@ -1287,15 +1291,18 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
     Py_INCREF(callback);
 
     subscription = calloc(1, sizeof(*subscription));
-    if (!subscription)
-        Py_RETURN_FALSE;
+    if (!subscription) {
+        Py_DECREF(callback);
+        Py_RETURN_NONE;
+    }
 
     if (name) {
         core_object_t *object = core_object_find(klass, name, core);
 
         if (!object) {
             free(subscription);
-            Py_RETURN_FALSE;
+            Py_DECREF(callback);
+            Py_RETURN_NONE;
         }
 
         subscription->object_id = core_object_to_id(object);
@@ -1309,49 +1316,40 @@ static PyObject *vortex_core_python_event_register(PyObject *self,
     pthread_mutex_lock(&core->events.handlers[type].lock);
     STAILQ_INSERT_TAIL(&core->events.handlers[type].list, subscription, entry);
     pthread_mutex_unlock(&core->events.handlers[type].lock);
-    Py_RETURN_TRUE;
+    token = Py_BuildValue("k", EVENT_TOKEN(klass, type, name, subscription));
+    return token;
 }
 
 static PyObject *vortex_core_python_event_unregister(PyObject *self,
                                                      PyObject *args) {
     core_t *core = (core_t *)self;
-    event_subscription_t *subscription;
-    event_subscription_t *next;
-    core_object_klass_t klass;
+    core_event_token_t subscription;
     core_object_event_type_t type;
-    core_object_id_t object_id = CORE_OBJECT_ID_INVALID;
-    char *name;
+    event_subscription_t *iter;
+    event_subscription_t *next;
 
-    if (PyArg_ParseTuple(args, "iis", &klass, &type, &name))
+    if (!PyArg_ParseTuple(args, "k", &subscription))
         return NULL;
 
-    if (name) {
-        core_object_t *object = core_object_find(klass, name, core);
-
-        if (object)
-            object_id = core_object_to_id(object);
-    }
+    type = TYPE_FROM_TOKEN(subscription);
 
     pthread_mutex_lock(&core->events.handlers[type].lock);
-    subscription = STAILQ_FIRST(&core->events.handlers[type].list);
+    iter = STAILQ_FIRST(&core->events.handlers[type].list);
     pthread_mutex_unlock(&core->events.handlers[type].lock);
 
-    while (subscription != NULL) {
-        next = STAILQ_NEXT(subscription, entry);
-        if (subscription->klass == klass &&
-            (subscription->object_id == CORE_OBJECT_ID_INVALID ||
-             subscription->object_id == object_id)) {
+    while (iter != NULL) {
+        next = STAILQ_NEXT(iter, entry);
+        if (subscription == (core_event_token_t)iter) {
             pthread_mutex_lock(&core->events.handlers[type].lock);
-            STAILQ_REMOVE(&core->events.handlers[type].list, subscription,
-                          event_subscription, entry);
+            STAILQ_REMOVE(&core->events.handlers[type].list, iter, event_subscription, entry);
             pthread_mutex_unlock(&core->events.handlers[type].lock);
-            if (subscription->is_python)
-                Py_DECREF(subscription->python.handler);
-            free(subscription);
+            if (iter->is_python)
+                Py_DECREF(iter->python.handler);
+            free(iter);
             Py_RETURN_TRUE;
         }
 
-        subscription = next;
+        iter = next;
     }
 
     Py_RETURN_FALSE;
