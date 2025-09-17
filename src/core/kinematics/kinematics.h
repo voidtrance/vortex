@@ -86,6 +86,7 @@ typedef struct {
 int kinematics_init(kinematics_config_t *config);
 kinematics_type_t kinematics_type_get(void);
 axis_type_t kinematics_axis_type_from_char(char type_char);
+char kinematics_axis_type_to_char(const axis_type_t);
 void *kinematics_get_config(void);
 int kinematics_get_motor_movement(coordinates_t *delta,
                                   coordinates_t *movement);

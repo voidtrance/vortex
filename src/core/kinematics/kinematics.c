@@ -117,6 +117,29 @@ axis_type_t kinematics_axis_type_from_char(char type_char) {
     return type;
 }
 
+char kinematics_axis_type_to_char(const axis_type_t type) {
+    switch (type) {
+    case AXIS_TYPE_A:
+        return 'A';
+    case AXIS_TYPE_B:
+        return 'B';
+    case AXIS_TYPE_C:
+        return 'C';
+    case AXIS_TYPE_E:
+        return 'E';
+    case AXIS_TYPE_X:
+        return 'X';
+    case AXIS_TYPE_Y:
+        return 'Y';
+    case AXIS_TYPE_Z:
+        return 'Z';
+    case AXIS_TYPE_MAX:
+        break;
+    }
+
+    return '\0';
+}
+
 void *kinematics_get_config(void) {
     switch (core_kinematics.type) {
     case KINEMATICS_CARTESIAN:
