@@ -21,6 +21,7 @@
 #include <cache.h>
 #include <errno.h>
 #include <utils.h>
+#include <math.h>
 #include <kinematics.h>
 #include <common_defs.h>
 #include <debug.h>
@@ -28,6 +29,9 @@
 #include <events.h>
 #include "toolhead.h"
 #include "axis.h"
+
+#define PRECISION 2
+static float precision_factor;
 
 typedef struct {
     const char axes[AXIS_TYPE_MAX];
@@ -44,6 +48,7 @@ typedef struct {
     axis_type_t *axes;
     toolhead_axis_t *attachment;
     coordinates_t position;
+    bool single_event_guard;
     size_t n_axes;
     size_t n_attached;
 } toolhead_t;
@@ -170,18 +175,31 @@ static void toolhead_update(core_object_t *object, uint64_t ticks,
               toolhead->position.a, toolhead->position.b, toolhead->position.c,
               toolhead->position.e);
     for (i = 0; i < toolhead->n_axes; i++) {
-        if (get_axis_position(&toolhead->position, toolhead->axes[i]) != 0.0) {
+        double axis_position = get_axis_position(&toolhead->position, toolhead->axes[i]);
+
+        axis_position = round(axis_position * precision_factor);
+        axis_position = (double)((long)axis_position) / precision_factor;
+        log_debug(toolhead, "     position %c: %f", kinematics_axis_type_to_char(toolhead->axes[i]),
+                  axis_position);
+        if (axis_position > (1 / precision_factor)) {
             at_origin = false;
             break;
         }
     }
 
-    if (at_origin) {
+    if (!at_origin && toolhead->single_event_guard)
+        toolhead->single_event_guard = false;
+
+    log_debug(toolhead, "at_origin: %u, single_event_guard: %u", at_origin,
+              toolhead->single_event_guard);
+    if (at_origin && !toolhead->single_event_guard) {
         event = object_cache_alloc(toolhead_event_cache);
         if (event) {
             memcpy(event->position, &toolhead->position,
                    sizeof(event->position));
+            log_debug(toolhead, "TOOLHEAD_ORIGIN triggered");
             CORE_EVENT_SUBMIT(toolhead, OBJECT_EVENT_TOOLHEAD_ORIGIN, event);
+            toolhead->single_event_guard = true;
         }
     }
 }
@@ -262,5 +280,6 @@ toolhead_t *object_create(const char *name, void *config_ptr) {
             kinematics_axis_type_from_char(config->attachment[n_axis]);
     }
 
+    precision_factor = pow(10, PRECISION);
     return toolhead;
 }
