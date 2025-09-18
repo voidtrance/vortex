@@ -43,12 +43,13 @@ class Emulator:
         machine = config.get_machine_config()
         kin = config.get_kinematics_config()
         self._kinematics = kinematics.Kinematics(kin)
-        self._controller = load_mcu(machine.controller, config)
-        if self._controller is None:
-            raise EmulatorError(f"Controller creation failure")
         self._frontend = frontends.create_frontend(frontend)
         if self._frontend is None:
             raise EmulatorError(f"Failed to create frontend '{frontend}'")
+        mcu = load_mcu(machine.controller)
+        self._controller = mcu(config, self._frontend.complete_command)
+        if self._controller is None:
+            raise EmulatorError(f"Controller creation failure")
         self._frontend.set_sequential_mode(sequential)
         self._frontend.set_kinematics_model(self._kinematics)
         self._frontend.set_controller(self._controller)
@@ -92,9 +93,7 @@ class Emulator:
             self._profiler.enable()
         try:
            self._controller.start(self._timer_frequency, self._update_frequency,
-                                  self._controller_thread_priority,
-                                  self._frontend.queue_virtual_object_command,
-                                  self._frontend.complete_command)
+                                  self._controller_thread_priority)
         except VortexCoreError as e:
             logging.error(str(e))
             self._controller.stop()

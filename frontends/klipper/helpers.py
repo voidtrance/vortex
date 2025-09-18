@@ -793,7 +793,7 @@ class Neopixel(HelperBase):
     def send(self):
         for i in range(0, len(self.data), self.unit_len):
             cmd_id = self.frontend.queue_command(self.klass, self.name, "set",
-                                                 {"index": i / self.unit_len,
+                                                 {"index": int(i / self.unit_len),
                                                   "color":  self.data[i:i+self.unit_len]})
             completion = self.frontend.wait_for_command(cmd_id)
         return completion[0][0]

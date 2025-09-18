@@ -214,22 +214,6 @@ class BaseFrontend:
             self.wait_for_command(cmd_id)
         return cmd_id
 
-    def queue_virtual_object_command(self, klass, object, cmd_id, cmd, opts, callback=None):
-        check = self._command_check(klass, object, cmd)
-        if check is False:
-            return False
-        obj_id, obj_cmd_id = check
-        opts = self._controller.virtual_object_opts_convert(obj_id, obj_cmd_id, opts)
-        self.log.debug(f"Submitting virtual object command: {self.get_object_name(klass, obj_id)} {obj_cmd_id} {opts}")
-        cmd = Command(obj_id, obj_cmd_id, opts)
-        cmd.id = cmd_id
-        with self._command_completion_lock:
-            self._command_completion[cmd_id] = (cmd, callback)
-        self._queue.put(cmd)
-        if self._run_sequential:
-            self.wait_for_command(cmd_id)
-        return True
-
     def complete_command(self, id, result, data=None):
         self.log.debug(f"Completing command: {id} {result}")
         with self._command_completion_lock:

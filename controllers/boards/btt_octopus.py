@@ -39,6 +39,3 @@ class BTTOctopus(STM32F4, Controller):
     DIGITAL_PIN_COUNT = 22
     NEOPIXEL_COUNT = 1
     ADC_MAX = 4095
-
-    def __init__(self, config):
-        super().__init__(config)

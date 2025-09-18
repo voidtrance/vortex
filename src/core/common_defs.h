@@ -46,8 +46,6 @@ typedef struct {
     event_unregister_t event_unregister;
     event_submit_t event_submit;
     cmd_submit_cb_t cmd_submit;
-    void *v_cmd_exec;
-    void *v_get_state;
     vortex_logger_t *logger;
     void *cb_data;
 } core_call_data_t;
@@ -71,6 +69,11 @@ struct core_object {
      * The object name. Set during object creation.
      */
     const char *name;
+
+    /*
+     * Is this a virtual object?
+     */
+    bool virtual;
 
     /*
      * Object update frequency in HZ. This is how

@@ -208,7 +208,17 @@ static void core_process_commands(void *arg) {
         core_log(LOG_LEVEL_DEBUG,
                  "issuing command for %s, id: %lu, cmd: %u", object->name,
                  cmd->command.command_id, cmd->command.object_cmd_id);
-        (void)object->exec_command(object, &cmd->command);
+        if (!object->virtual) {
+            (void)object->exec_command(object, &cmd->command);
+        } else {
+            PyGILState_STATE gil_state;
+            gil_state = PyGILState_Ensure();
+            PyObject_CallMethod((PyObject *)object->exec_command, "exec_command", "kHO",
+                                cmd->command.command_id, cmd->command.object_cmd_id,
+                                cmd->command.args);
+            PyGILState_Release(gil_state);
+        }
+
         pthread_mutex_lock(&cmds->submit_lock);
         STAILQ_INSERT_TAIL(&cmds->submitted, cmd, entry);
         pthread_mutex_unlock(&cmds->submit_lock);
@@ -507,11 +517,12 @@ static void vortex_core_dealloc(core_t *self) {
         object = LIST_FIRST(&self->objects[klass]);
         while (object) {
             object_next = LIST_NEXT(object, entry);
-            Py_XDECREF(object->call_data.v_cmd_exec);
-            Py_XDECREF(object->call_data.v_get_state);
             if (object->destroy) {
                 object->destroy(object);
             } else {
+                if (object->virtual)
+                    Py_DECREF((PyObject *)object->exec_command);
+
                 core_object_destroy(object);
                 free(object);
             }
@@ -870,88 +881,15 @@ static PyObject *vortex_core_destroy_object(PyObject *self, PyObject *args) {
     Py_RETURN_NONE;
 }
 
-static int core_vobj_exec_command(core_object_t *object,
-                                  core_object_command_t *cmd) {
-    int ret = 0;
-    PyGILState_STATE gil_state;
-    PyObject *result;
-
-    gil_state = PyGILState_Ensure();
-    result = PyObject_CallFunction(object->call_data.v_cmd_exec, "ikkhk",
-                                   object->klass, core_object_to_id(object),
-                                   cmd->command_id, cmd->object_cmd_id,
-                                   cmd->args);
-    if (!result || Py_IsFalse(result)) {
-        if (result)
-            Py_DECREF(result);
-        else
-            PyErr_Print();
-        ret = -1;
-    }
-
-    PyGILState_Release(gil_state);
-    return ret;
-}
-
-static void core_vobj_get_state(core_object_t *object, void *state) {
-    PyObject *ctypes_struct, *py_ptr;
-    PyGILState_STATE gil_state;
-    unsigned long addr;
-    size_t size;
-
-    gil_state = PyGILState_Ensure();
-    ctypes_struct = PyObject_CallFunction(object->call_data.v_get_state, "ik",
-                                          object->klass,
-                                          core_object_to_id(object));
-    if (ctypes_struct == NULL) {
-        PyErr_Print();
-        PyGILState_Release(gil_state);
-        return;
-    }
-
-    py_ptr = PyObject_CallMethod(ctypes, "addressof", "O", ctypes_struct);
-    if (!py_ptr) {
-        PyErr_Print();
-        PyGILState_Release(gil_state);
-    }
-
-    addr = PyLong_AsUnsignedLong(py_ptr);
-
-    if (addr == 0)
-        return;
-
-    switch (object->klass) {
-    case OBJECT_KLASS_DIGITAL_PIN:
-        size = sizeof(digital_pin_status_t);
-        break;
-    case OBJECT_KLASS_DISPLAY:
-        size = sizeof(display_status_t);
-        break;
-    case OBJECT_KLASS_ENCODER:
-        size = sizeof(encoder_status_t);
-        break;
-    default:
-        return;
-    }
-
-    memcpy(state, (void *)addr, size);
-    Py_DECREF(ctypes_struct);
-    Py_DECREF(py_ptr);
-    PyGILState_Release(gil_state);
-    return;
-}
-
 static PyObject *vortex_core_register_virtual_object(PyObject *self,
                                                      PyObject *args) {
     core_t *core = (core_t *)self;
     core_object_klass_t klass;
     core_object_t *obj;
-    PyObject *cmd_exec_func = NULL;
-    PyObject *get_state_func = NULL;
+    PyObject *vobj = NULL;
     char *name = NULL;
 
-    if (!PyArg_ParseTuple(args, "Is|OO", &klass, &name, &cmd_exec_func,
-                          &get_state_func))
+    if (!PyArg_ParseTuple(args, "IsO", &klass, &name, &vobj))
         return NULL;
 
     if (klass == OBJECT_KLASS_NONE || klass >= OBJECT_KLASS_MAX) {
@@ -959,17 +897,7 @@ static PyObject *vortex_core_register_virtual_object(PyObject *self,
         return Py_BuildValue("k", CORE_OBJECT_ID_INVALID);
     }
 
-    if ((cmd_exec_func && !PyCallable_Check(cmd_exec_func)) ||
-        (get_state_func && !PyCallable_Check(get_state_func))) {
-        PyErr_SetString(VortexCoreError, "Invalid virtual object functions");
-        return NULL;
-    }
-
-    if (cmd_exec_func)
-        Py_INCREF(cmd_exec_func);
-
-    if (get_state_func)
-        Py_INCREF(get_state_func);
+    Py_INCREF(vobj);
 
     /*
      * Check if an object with the same name exists in the
@@ -992,11 +920,10 @@ static PyObject *vortex_core_register_virtual_object(PyObject *self,
 
     obj->klass = klass;
     obj->name = strdup(name);
-    obj->exec_command = core_vobj_exec_command;
-    obj->get_state = core_vobj_get_state;
-    obj->call_data.v_cmd_exec = cmd_exec_func;
-    obj->call_data.v_get_state = get_state_func;
-    obj->call_data.cb_data = self;
+    obj->virtual = true;
+    obj->exec_command = (int (*)(core_object_t *, core_object_command_t *))vobj;
+    obj->get_state = (void (*)(core_object_t *, void *))vobj;
+    obj->call_data = core_call_data;
     LIST_INSERT_HEAD(&core->objects[klass], obj, entry);
     return Py_BuildValue("k", (core_object_id_t)obj);
 }
@@ -1012,8 +939,8 @@ static PyObject *vortex_core_exec_command(PyObject *self, PyObject *args,
     PyObject *rc;
     int ret = -1;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "kkHk:exec_command", kw,
-                                     &cmd_id, &object, &obj_cmd_id, &cmd_args))
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "kkHk:exec_command", kw, &cmd_id, &object,
+                                     &obj_cmd_id, &cmd_args))
         return NULL;
 
     cmd = calloc(1, sizeof(*cmd));
@@ -1029,19 +956,27 @@ static PyObject *vortex_core_exec_command(PyObject *self, PyObject *args,
         cmd->object_cmd_id = obj_cmd_id;
         cmd->args = cmd_args;
 
-        /*
-         * Object commands are supposed to be non-blocking -
-         * they should accept/reject the command and handle
-         * it in the object's update() handlers.
-         * However, to avoid deadlocks with logging, release
-         * the Python GIL around the command execution.
-         */
-        Py_BEGIN_ALLOW_THREADS;
-        ret = object->exec_command(object, cmd);
-        Py_END_ALLOW_THREADS;
+        if (!object->virtual) {
+            /*
+             * Object commands are supposed to be non-blocking -
+             * they should accept/reject the command and handle
+             * it in the object's update() handlers.
+             * However, to avoid deadlocks with logging, release
+             * the Python GIL around the command execution.
+             */
+            Py_BEGIN_ALLOW_THREADS;
+            ret = object->exec_command(object, cmd);
+            Py_END_ALLOW_THREADS;
+            rc = Py_BuildValue("i", ret);
+        } else {
+            rc = PyObject_CallMethod((PyObject *)object->exec_command, "exec_command", "kHO",
+                                     cmd_id, obj_cmd_id, cmd_args ? (PyObject *)cmd_args : ({
+                                         Py_INCREF(Py_None);
+                                         Py_None;
+                                     }));
+        }
     }
 
-    rc = Py_BuildValue("i", ret);
     return rc;
 }
 
@@ -1125,12 +1060,16 @@ static PyObject *vortex_core_get_status(PyObject *self, PyObject *args) {
             break;
         }
 
-        if (!state) {
-            Py_INCREF(Py_None);
-            status = Py_None;
+        if (object->virtual) {
+            status = PyObject_CallMethod((PyObject *)object->get_state, "get_status", NULL);
         } else {
-            object->get_state(object, state);
-            status = Py_BuildValue("k", state);
+            if (!state) {
+                Py_INCREF(Py_None);
+                status = Py_None;
+            } else {
+                object->get_state(object, state);
+                status = Py_BuildValue("k", state);
+            }
         }
 
         if (PyList_SetItem(result_list, result_idx, status)) {
