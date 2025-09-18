@@ -395,7 +395,7 @@ int vortex_logger_log(vortex_logger_t *logger, log_level_t level,
     log_stream_t *next;
     char string[2048];
     size_t s = 0;
-    bool do_log;
+    bool do_log = true;
 
     if (!log_setup || !logger)
         return EFAULT;
@@ -407,12 +407,18 @@ int vortex_logger_log(vortex_logger_t *logger, log_level_t level,
         return 0;
 
     /*
-     * Filtering is done with the lock held to protect against
-     * a filter being added while logging is in progress.
+     * Message with levels ERROR and higher (more severe) are
+     * not filtered.
      */
-    pthread_mutex_lock(&log_setup->lock);
-    do_log = filter_record(logger);
-    pthread_mutex_unlock(&log_setup->lock);
+    if (level < LOG_LEVEL_ERROR) {
+        /*
+         * Filtering is done with the lock held to protect against
+         * a filter being added while logging is in progress.
+         */
+        pthread_mutex_lock(&log_setup->lock);
+        do_log = filter_record(logger);
+        pthread_mutex_unlock(&log_setup->lock);
+    }
 
     if (!do_log)
         return 0;

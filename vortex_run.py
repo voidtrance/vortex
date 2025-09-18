@@ -101,11 +101,12 @@ def emulator_exception_handler(exc_class, exc, tb):
     frame = _tb.tb_frame
     co = frame.f_code
     logging.critical(f"Exception occured at {co.co_name}:{frame.f_lineno} [{co.co_filename}]:")
-    logging.critical(f"    {str(exc)}")
+    logging.critical(f"     Exception: {str(exc)}")
     if logging.get_level() <= logging.DEBUG:
         lines = traceback.format_tb(tb)
-        for line in lines:
-            logging.critical("   " + line)
+        for entry in lines:
+            for line in entry.split("\n"):
+                logging.critical("   " + line.rstrip())
 
 def emulator_thread_exception_handler(args):
     emulator_exception_handler(args.exc_type, args.exc_value, args.exc_traceback)
@@ -150,12 +151,6 @@ def main():
         emulation.start()
     except KeyboardInterrupt:
         pass
-    except Exception as e:
-        logging.critical(f"Emulator exception: {e}")
-        if opts.debug.lower() == "debug":
-            lines = traceback.format_exception(e)
-            for line in lines:
-                logging.critical(line)
     finally:
         emulation.stop()
 
