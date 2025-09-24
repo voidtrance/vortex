@@ -45,7 +45,7 @@ class DirectFrontend(BaseFrontend):
             return
 
         klass = ObjectKlass[klass.upper()]
-        cmd_id = self.queue_command(klass, object, cmd, opts)
+        cmd_id = self.queue_command(klass, object, cmd, opts, self.complete_command)
         if cmd_id is False:
             self.log.error("Failed to queue command")
             super().respond(CommandStatus.FAIL, False)

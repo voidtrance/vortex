@@ -46,8 +46,9 @@ class Emulator:
         self._frontend = frontends.create_frontend(frontend)
         if self._frontend is None:
             raise EmulatorError(f"Failed to create frontend '{frontend}'")
+        command_queue = self._frontend.get_queue()
         mcu = load_mcu(machine.controller)
-        self._controller = mcu(config, self._frontend.complete_command)
+        self._controller = mcu(config, command_queue.complete_command)
         if self._controller is None:
             raise EmulatorError(f"Controller creation failure")
         self._frontend.set_sequential_mode(sequential)

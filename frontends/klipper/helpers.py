@@ -228,9 +228,9 @@ class HeaterPin(DigitalPin):
                                              self.name, "use_pins",
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)
-        if not result or result[0][0] != 0:
+        if not result or result[0].id != cmd_id or result[0].result != 0:
             raise ValueError(f"Heater {self.name} pin enable error")
-        self.pin_word = ctypes.cast(result[0][1]["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
+        self.pin_word = ctypes.cast(result[0].data["pin_addr"], ctypes.POINTER(ctypes.c_uint8))
     def _set_pin(self, value):
         self.pin_word.contents.value = int(not (not (Flags.ON & value)))
     def shutdown(self):
@@ -293,9 +293,9 @@ class Stepper(HelperBase):
                                              self.name, "use_pins",
                                              {"enable": True})
         result = self.frontend.wait_for_command(cmd_id)
-        if not result or result[0][0] != 0:
+        if not result or result[0].id != cmd_id or result[0].result != 0:
             raise ValueError(f"Stepper {self.name} pin enable error")
-        self.pin_word = atomics.Atomic(32, var=result[0][1]["pin_addr"])
+        self.pin_word = atomics.Atomic(32, var=result[0].data["pin_addr"])
     def owns_pin(self, pin):
         return pin in self.pins.values()
     def configure_pin(self, oid, pin):
@@ -605,7 +605,7 @@ class SPI(HelperBase):
         result = self.frontend.wait_for_command(cmd_id)
         if not result:
             return -1
-        return result[0][0]
+        return result[0].result
 
 class ButtonsState(enum.IntEnum):
     NONE = 0
@@ -721,8 +721,8 @@ class PWM(HelperBase):
         if cmd_id == -1:
             raise HelperException("Failed to set PWM object id.")
         result = self.frontend.wait_for_command(cmd_id)
-        if not result or result[0][0] != 0:
-            raise HelperException(f"Failed command to set PWM object id ({result[0]})")
+        if not result or result[0].id != cmd_id or result[0].result != 0:
+            raise HelperException(f"Failed command to set PWM object id ({result[0].id})")
         self.pin = DigitalPin(self.frontend, -1, pin_id, ObjectKlass.DIGITAL_PIN, obj_name)
         self.pin.set_max_duration(self.pin_max_duration)
         self.pin.set_initial_value(self.pin_value, self.pin_default)
@@ -756,7 +756,7 @@ class PWM(HelperBase):
             self.frontend.shutdown("Failed to set PWM duty cycle")
             return 0
         result = self.frontend.wait_for_command(cmd_id)
-        if not result or result[0][0] != 0:
+        if not result or result[0].id != cmd_id or result[0].result != 0:
             self.frontend.shutdown("Failed to set PWM duty cycle.")
             return 0
         if self.move_queue.empty(self.oid):
@@ -796,4 +796,4 @@ class Neopixel(HelperBase):
                                                  {"index": int(i / self.unit_len),
                                                   "color":  self.data[i:i+self.unit_len]})
             completion = self.frontend.wait_for_command(cmd_id)
-        return completion[0][0]
+        return completion[0].result

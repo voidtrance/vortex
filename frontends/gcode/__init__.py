@@ -275,7 +275,7 @@ class GCodeFrontend(BaseFrontend):
                     self.log.error("Failed to queue command")
                     return CommandStatus.FAIL
                 cmds.append(cmd_id)
-        self.wait_for_commands(cmds)
+        self.wait_for_command(cmds)
         return CommandStatus.SUCCESS
     def M400(self, cmd):
         while self._command_completion:

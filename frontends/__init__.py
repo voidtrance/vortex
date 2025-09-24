@@ -17,13 +17,12 @@ import threading
 import importlib
 import select
 import os
-import time
 import pickle
 import threading
 import vortex.core.lib.logging as logging
 from vortex.core import ObjectKlass
 from vortex.frontends.lib import create_pty
-from vortex.frontends.queues import CommandQueue, Command
+from vortex.frontends.queues import CommandQueue
 from vortex.frontends.proto import *
 
 class BaseFrontend:
@@ -36,8 +35,6 @@ class BaseFrontend:
         self._obj_id_2_name = {x: {} for x in ObjectKlass}
         self._command_completion = {}
         self._command_completion_lock = threading.Lock()
-        self._command_results = {}
-        self._command_results_lock = threading.Lock()
         self._stop = threading.Event()
         self._run_sequential = False
         self._queue = CommandQueue(queue_size)
@@ -65,8 +62,6 @@ class BaseFrontend:
     # return the base class method instead of the overriden
     # one.
     def reset(self, *args, **kwargs):
-        with self._command_completion_lock:
-            self._command_results.clear()
         self._queue.clear()
         return self._controller.reset(*args, **kwargs)
 
@@ -150,9 +145,6 @@ class BaseFrontend:
         if self._thread:
             self._stop.set()
             self._thread.join()
-        cmds = list(self._command_completion.keys())
-        for cmd in cmds:
-            self.complete_command(cmd, -1)
 
     def set_sequential_mode(self, mode):
         self._run_sequential = mode
@@ -205,36 +197,13 @@ class BaseFrontend:
             opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
         elif not isinstance(opts, dict):
             return False
-        self.log.debug(f"Submitting command: {self.get_object_name(klass, obj_id)} {cmd_id} {opts}")
-        with self._command_completion_lock:
-            cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts)
-            self.log.debug(f"Command ID:{cmd_id}")
-            self._command_completion[cmd_id] = (cmd, callback)
+        cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, callback)
         if self._run_sequential:
             self.wait_for_command(cmd_id)
         return cmd_id
 
-    def complete_command(self, id, result, data=None):
-        self.log.debug(f"Completing command: {id} {result}")
-        with self._command_completion_lock:
-            _, callback = self._command_completion.pop(id)
-        if callback is not None:
-            callback(id, result, data)
-        else:
-            with self._command_results_lock:
-                self._command_results[id] = (result, data)
-
     def wait_for_command(self, cmd_set):
-        if isinstance(cmd_set, int):
-            cmd_set = [cmd_set]
-        if not isinstance(cmd_set, (list, tuple, set)):
-            cmd_set = list(cmd_set)
-        cmd_set = set(cmd_set)
-        completed = set()
-        while not self._stop.is_set() and not cmd_set & completed:
-            with self._command_results_lock:
-                completed = set(self._command_results.keys())
-        return [self._command_results.pop(i) for i in cmd_set & completed]
+        return self._queue.wait_for_command(cmd_set)
 
     def respond(self, code, data):
         response = Response(code, data)
