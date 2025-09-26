@@ -27,6 +27,7 @@ MESON_DEBUG_OPTS :=
 GCC_BUILD_OPTS :=
 VERSION=$(shell git describe --tags --abbrev=0)
 KVER := $(shell uname -r)
+ARCH := $(shell uname -m)
 
 PYTHON_VERSION=$(shell $(PYTHON) -c "import platform; print(platform.python_version())")
 PYTHON_VERSION_NUMS = $(subst ., ,$(PYTHON_VERSION))
@@ -75,6 +76,15 @@ venv:
 wheel: venv version
 	$(VENV_PYTHON) -m build -w .
 
+package: version
+	$(PYTHON) -m build -w .
+	mkdir -p vortex-$(VERSION)-$(ARCH)
+	mkdir vortex-$(VERSION)-$(ARCH)/vortex-kmod
+	cp src/kmod/vortex.[ch] src/kmod/Makefile vortex-$(VERSION)-$(ARCH)/vortex-kmod
+	cp dist/vortex-*.whl vortex-$(VERSION)-$(ARCH)
+	tar -jcf vortex-$(VERSION)-$(ARCH).tar.bz2 vortex-$(VERSION)-$(ARCH)
+	rm -rf vortex-$(VERSION)-$(ARCH)
+
 install: wheel
 	$(VENV_PYTHON) -m pip install --force-reinstall dist/vortex-*.whl
 
@@ -84,4 +94,4 @@ gdb:
 clean:
 	$(MAKE) -C /lib/modules/$(KVER)/build M=$${PWD}/src/kmod clean
 	rm -rf build dist builddir
-	rm -f compile_commands.json version.txt
+	rm -f compile_commands.json version.txt vortex-*.tar.bz2

@@ -18,7 +18,7 @@ import os
 import fcntl
 import termios
 
-__all__ = ["create_pty", "div_round_up"]
+__all__ = ["create_pty"]
 
 def create_pty(filename):
     master, slave = pty.openpty()

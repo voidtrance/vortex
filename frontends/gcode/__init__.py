@@ -147,7 +147,7 @@ class GCodeFrontend(BaseFrontend):
                                                 for x in axes_ids}
         endstop_status = self.query_object(axis_endstop_ids.values())
         for axis in axes_ids:
-            self.log.debug(f"Homing axis {AxisType(status[axis]["type"])}")
+            self.log.debug(f"Homing axis {AxisType(status[axis]['type'])}")
             motor_ids = {}
             for motor in [x for x in status[axis]["motors"] if x]:
                 motor_ids[motor] = self.get_object_id(ObjectKlass.STEPPER, motor)

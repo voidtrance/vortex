@@ -936,7 +936,7 @@ static PyObject *vortex_core_exec_command(PyObject *self, PyObject *args,
     void *cmd_args = NULL;
     core_object_t *object;
     core_object_command_t *cmd;
-    PyObject *rc;
+    PyObject *rc = NULL;
     int ret = -1;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "kkHk:exec_command", kw, &cmd_id, &object,

@@ -18,6 +18,7 @@
 #ifndef __LOGGING_H__
 #define __LOGGING_H__
 #include <stddef.h>
+#include <stdbool.h>
 
 typedef enum {
     LOG_LEVEL_NOTSET,

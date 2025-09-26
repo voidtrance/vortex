@@ -126,7 +126,7 @@ class TestFramework:
         return self._logfile is not None
 
     def begin(self, test_name, klass=None):
-        print(f"Running {"object " if klass else ""}test '{test_name}'...", flush=True)
+        print(f"Running {'object ' if klass else ''}test '{test_name}'...", flush=True)
         self._write_logfile("=" * 30 + "\n")
         self._write_logfile(f"Running test '{test_name}\n")
 

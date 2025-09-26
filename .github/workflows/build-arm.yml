@@ -1,0 +1,72 @@
+name: vortex-build-arm64
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_call:
+    outputs:
+      artifact-url:
+        description: "Artifact URL"
+        value: ${{ jobs.build.outputs.output1 }}
+      artifact-id:
+        description: "Artifact ID"
+        value: ${{ jobs.build.outputs.output2 }}
+      artifact-digest:
+        description: "Artifact Digest SHA"
+        value: ${{ jobs.build.outputs.output3 }}
+      vortex-version:
+        description: "Version of the artifact"
+        value: ${{ jobs.build.outputs.output4 }}
+      build-arch:
+        description: "Build architecture"
+        value: ${{ jobs.build.outputs.output5 }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      output1: ${{ steps.upload-artifact.outputs.artifact-url }}
+      output2: ${{ steps.upload-artifact.outputs.artifact-id }}
+      output3: ${{ steps.upload-artifact.outputs.artifact-digest }}
+      output4: ${{ steps.vortex-version.outputs.vortex-version }}
+      output5: ${{ steps.vortex-arch.outputs.vortex-arch }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Get Version
+        id: vortex-version
+        run: echo "vortex-version=$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
+      - name: Get Arch
+        id: vortex-arch
+        run: echo "vortex-arch=$(uname -m)" >> $GITHUB_OUTPUT
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y meson libgirepository-2.0-dev libcairo2-dev
+          python -m pip install --upgrade pip setuptools wheel flake8 meson
+          pip install -r virtualenv.txt
+#      - name: Lint with flake8
+#        run: |
+#          # stop the build if there are Python syntax errors or undefined names
+#          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+#          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+#          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Build emulator ${{ steps.vortex-version.outputs.vortex-version }}
+        run: make package
+      - name: Upload asset
+        id: upload-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vortex-${{ steps.vortex-version.outputs.vortex-version }}-${{ steps.vortex-arch.outputs.vortex-arch }}
+          path: vortex-${{ steps.vortex-version.outputs.vortex-version }}-${{ steps.vortex-arch.outputs.vortex-arch }}.tar.bz2

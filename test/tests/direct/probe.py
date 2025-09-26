@@ -43,7 +43,7 @@ def test_probe(framework, name, obj_id):
                 cmd_id = framework.run_command(f"stepper:{name}:enable:enable=1")
                 framework.wait_for_completion(cmd_id)
             # Increase motor speed to speed up the test
-            cmd_id = framework.run_command(f"stepper:{name}:set_speed:steps_per_second={50 * motor["spm"]}")
+            cmd_id = framework.run_command(f"stepper:{name}:set_speed:steps_per_second={50 * motor['spm']}")
             framework.wait_for_completion(cmd_id)
     probe_status = framework.get_status(probe.id)[probe.id]
     toolhead_status = framework.get_status(probe.toolhead.id)[probe.toolhead.id]

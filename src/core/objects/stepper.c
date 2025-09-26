@@ -253,7 +253,7 @@ static int stepper_use_pins(core_object_t *object, uint64_t id, void *args) {
     stepper_t *stepper = (stepper_t *)object;
     struct stepper_use_pins_args *opts = (struct stepper_use_pins_args *)args;
     struct stepper_use_pins_data *data = NULL;
-    int ret;
+    int ret = 0;
 
     if (opts->enable) {
         if (!stepper->use_pins) {

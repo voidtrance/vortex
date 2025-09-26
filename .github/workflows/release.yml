@@ -1,0 +1,44 @@
+name: vortex-release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-dep-x64:
+    uses: ./.github/workflows/build-x64.yml
+
+  build-dep-arm:
+    uses: ./.github/workflows/build-arm.yml
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: [build-dep-x64, build-dep-arm]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Download Artifacts
+        uses: actions/download-artifact@v5
+        with:
+          artifact-ids: ${{ needs.build-dep-arm.outputs.artifact-id}}, ${{ needs.build-dep-x64.outputs.artifact-id }}
+          merge-multiple: true
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          repository: voidtrance/vortex
+          files: |
+            vortex-${{ needs.build-dep-x64.outputs.vortex-version }}-${{ needs.build-dep-x64.outputs.build-arch }}.tar.bz2
+            vortex-${{ needs.build-dep-arm.outputs.vortex-version }}-${{ needs.build-dep-arm.outputs.build-arch }}.tar.bz2
+
