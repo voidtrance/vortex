@@ -19,6 +19,7 @@
 #define __THREAD_CONTROL_H__
 #include <stdint.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 typedef enum {
     CORE_THREAD_TYPE_UPDATE,

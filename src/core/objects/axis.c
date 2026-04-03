@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#define _GNU_SOURCE
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
@@ -172,7 +173,7 @@ static int axis_init(core_object_t *object) {
     }
 
     if (axis->endstop_name) {
-        endstop_status_t status;
+        endstop_status_t status = { 0 };
         axis->endstop = CORE_LOOKUP_OBJECT(axis, OBJECT_KLASS_ENDSTOP, axis->endstop_name);
         if (!axis->endstop) {
             log_error(axis, "Failed to find endstop %s", axis->endstop_name);

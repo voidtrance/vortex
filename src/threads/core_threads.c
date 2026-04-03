@@ -1,6 +1,6 @@
 /*
  * vortex - GCode machine emulator
- * Copyright (C) 2024-2025 Mitko Haralanov
+ * Copyright (C) 2024-2026 Mitko Haralanov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -119,7 +119,7 @@ static long timer_update_wait(int32_t *flag) {
 }
 
 static long timer_update_wake(int32_t *flag) {
-    uint32_t wait_value = TIMER_TRIGGER_WAIT;
+    int32_t wait_value = TIMER_TRIGGER_WAIT;
 
     if (__atomic_compare_exchange_n(flag, &wait_value, TIMER_TRIGGER_WAKE,
                                     false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
