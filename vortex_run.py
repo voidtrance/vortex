@@ -25,7 +25,8 @@ import vortex.emulator.config
 import vortex.core.lib.logging as logging
 
 def create_arg_parser():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                     description="""Software-defined machine emulator.""")
     frontend = parser.add_argument_group("Frontend Options")
     frontend.add_argument("-f", "--frontend", default="direct",
                         help="""The frontend that will be started for
