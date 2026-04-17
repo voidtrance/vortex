@@ -17,7 +17,9 @@ cc = meson.get_compiler('c')
 lib_clang = cc.find_library('clang', required: true)
 
 clang_ast_include = include_directories('.')
-clang_ast_lib = library('clang_ast', ['clang_ast.c'], install: false, dependencies: [lib_clang])
+clang_ast_lib = library('clang_ast', ['clang_ast.c'], install: false,
+                        include_directories: [core_include_general],
+                        dependencies: [lib_clang])
 clang_ast_dep = declare_dependency(link_with: clang_ast_lib, include_directories: clang_ast_include)
 
 py_clang_ast = custom_target('py_clang_ast', output: 'py_clang_ast.so',

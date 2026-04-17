@@ -23,11 +23,11 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
-#include <sys/queue.h>
 #include <core_threads.h>
 #include <debug.h>
 #include <utils.h>
 #include <atomics.h>
+#include <dlist.h>
 #include "timers.h"
 
 #define CHECK_TIMER 0
@@ -40,21 +40,14 @@ typedef enum {
 } execute_state_t;
 
 typedef struct core_timers_entry_struct {
-    CIRCLEQ_ENTRY(core_timers_entry_struct) entry;
+    dlist_t entry;
     core_timer_t timer;
     uint64_t timestamp;
     bool armed;
     execute_state_t state;
 } core_timers_entry_t;
 
-/* Some useful CIRCLEQ macros which are aren't provided. */
-#define CIRCLEQ_FOREACH_SAFE(elm, next, head, field)                  \
-    for ((elm) = ((head)->cqh_first), (next) = (elm)->field.cqe_next; \
-         (elm) != (const void *)(head);                               \
-         (elm) = (next), (next) = (next)->field.cqe_next)
-
-typedef CIRCLEQ_HEAD(core_timers_list,
-                     core_timers_entry_struct) core_timers_list_t;
+typedef dlist_t core_timers_list_t;
 
 typedef struct {
     core_timers_list_t list;
@@ -70,8 +63,8 @@ typedef struct {
 } core_timers_t;
 
 static core_timers_t timers = {
-    .armed = { CIRCLEQ_HEAD_INITIALIZER(timers.armed.list), 0 },
-    .disarmed = { CIRCLEQ_HEAD_INITIALIZER(timers.disarmed.list), 0 },
+    .armed = { DLIST_INITIALIZOR(timers.armed.list), 0 },
+    .disarmed = { DLIST_INITIALIZOR(timers.disarmed.list), 0 },
     .lock = PTHREAD_MUTEX_INITIALIZER,
     .current = 0,
     .mask = 0,
@@ -85,15 +78,14 @@ static void core_timers_update(uint64_t ticks, void *data);
 
 #if TIMER_DEBUG
 FILE *__timer_fd;
-#define dump(ticks, timer, list)                                          \
-    do {                                                                  \
-        core_timers_entry_t *__entry;                                     \
-        fprintf(__timer_fd, "[%lu,0x%lx]:", ticks, (unsigned long)timer); \
-        CIRCLEQ_FOREACH(__entry, list, entry)                             \
-            fprintf(__timer_fd, "0x%lx,%lu:", (unsigned long)__entry,     \
-                    __entry->timestamp);                                  \
-        fprintf(__timer_fd, "\n");                                        \
-        fflush(__timer_fd);                                               \
+#define dump(ticks, timer, list)                                                           \
+    do {                                                                                   \
+        core_timers_entry_t *__entry;                                                      \
+        fprintf(__timer_fd, "[%lu,0x%lx]:", ticks, (unsigned long)timer);                  \
+        list_for_each_entry(__entry, list, entry)                                          \
+            fprintf(__timer_fd, "0x%lx,%lu:", (unsigned long)__entry, __entry->timestamp); \
+        fprintf(__timer_fd, "\n");                                                         \
+        fflush(__timer_fd);                                                                \
     } while (0)
 #endif
 
@@ -119,18 +111,18 @@ static void timer_arm_locked(core_timers_entry_t *timer) {
     core_timers_entry_t *entry;
     core_timer_set_t *set = &timers.armed;
 
-    if (unlikely(CIRCLEQ_EMPTY(&set->list)))
+    if (unlikely(dlist_is_empty(&set->list)))
         goto insert_back;
 
-    CIRCLEQ_FOREACH(entry, &set->list, entry) {
+    dlist_for_each_elem_container(entry, &set->list, entry) {
         if (core_timers_compare(timer->timestamp, entry->timestamp) <= 0) {
-            CIRCLEQ_INSERT_BEFORE(&set->list, entry, timer, entry);
+            dlist_elem_insert_tail(&timer->entry, &entry->entry);
             goto inserted;
         }
     }
 
 insert_back:
-    CIRCLEQ_INSERT_TAIL(&set->list, timer, entry);
+    dlist_elem_insert_tail(&timer->entry, &set->list);
 
 inserted:
     timer->armed = true;
@@ -145,7 +137,7 @@ static void timer_arm(core_timers_entry_t *timer) {
 
 static void timer_disarm_locked(core_timers_entry_t *timer) {
     timer->armed = false;
-    CIRCLEQ_INSERT_TAIL(&timers.disarmed.list, timer, entry);
+    dlist_elem_insert_tail(&timer->entry, &timers.disarmed.list);
 }
 
 static void timer_disarm(core_timers_entry_t *timer) {
@@ -155,13 +147,11 @@ static void timer_disarm(core_timers_entry_t *timer) {
 }
 
 static void timer_remove_locked(core_timers_entry_t *timer) {
-    if (timer->armed) {
-        CIRCLEQ_REMOVE(&timers.armed.list, timer, entry);
+    dlist_elem_remove(&timer->entry);
+    if (timer->armed)
         timers.armed.count--;
-    } else {
-        CIRCLEQ_REMOVE(&timers.disarmed.list, timer, entry);
+    else
         timers.disarmed.count--;
-    }
 }
 
 #if 0
@@ -249,7 +239,7 @@ static void core_timers_update(uint64_t ticks, void *data) {
 
     set_now(ticks);
     pthread_mutex_lock(&timers->lock);
-    CIRCLEQ_FOREACH_SAFE(timer, next, &timers->armed.list, entry) {
+    dlist_for_each_elem_container_safe(timer, next, &timers->armed.list, entry) {
         if (core_timers_compare(timer->timestamp, ticks) > 0)
             break;
 
@@ -309,7 +299,7 @@ void core_timers_disarm(void) {
     core_timers_entry_t *next;
 
     pthread_mutex_lock(&timers.lock);
-    CIRCLEQ_FOREACH_SAFE(timer, next, &timers.armed.list, entry) {
+    dlist_for_each_elem_container_safe(timer, next, &timers.armed.list, entry) {
         timer_remove_locked(timer);
         timer_disarm_locked(timer);
     }
@@ -327,11 +317,12 @@ void core_timers_free(void) {
 #endif
 
     pthread_mutex_lock(&timers.lock);
-    CIRCLEQ_FOREACH_SAFE(timer, next, &timers.armed.list, entry) {
+    dlist_for_each_elem_container_safe(timer, next, &timers.armed.list, entry) {
         timer_remove_locked(timer);
         free(timer);
     }
-    CIRCLEQ_FOREACH_SAFE(timer, next, &timers.disarmed.list, entry) {
+
+    dlist_for_each_elem_container_safe(timer, next, &timers.disarmed.list, entry) {
         timer_remove_locked(timer);
         free(timer);
     }

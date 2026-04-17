@@ -22,15 +22,11 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <dlist.h>
 #include "clang_ast.h"
 
 #define __stringify(x) #x
 #define stringify(x) __stringify(x)
-#define container_of(ptr, type, member)              \
-    ({                                               \
-        void *__mptr = (void *)(ptr);                \
-        ((type *)(__mptr - offsetof(type, member))); \
-    })
 #define ARRAY_SIZE(arr) ((sizeof((arr)) / (sizeof((arr)[0]))))
 
 #define CONFIG_STRUCT_SUFFIX "_config_params_t"
@@ -45,105 +41,13 @@
 
 #define CXCursor_Any (CXCursor_OverloadCandidate + 1)
 
-/*             Lists   */
-#define LIST_POISON1 0xdeadc0de
-#define LIST_POISON2 0xc0dedead
-
-struct list_head {
-    struct list_head *prev;
-    struct list_head *next;
-};
-
-#define LIST_HEAD_INIT(name) { &(name), &(name) }
-#define LIST_HEAD(name) struct list_head name = LIST_HEAD_INIT(name)
-
-static inline void INIT_LIST_HEAD(struct list_head *list) {
-    list->next = list;
-    list->prev = list;
-}
-
-static inline void
-__list_add(struct list_head *new, struct list_head *prev, struct list_head *next) {
-    next->prev = new;
-    new->next = next;
-    new->prev = prev;
-    prev->next = new;
-}
-
-static UNUSED inline void list_add(struct list_head *new, struct list_head *head) {
-    __list_add(new, head, head->next);
-}
-
-static inline void list_add_tail(struct list_head *new, struct list_head *head) {
-    __list_add(new, head->prev, head);
-}
-
-static inline void __list_del(struct list_head *prev, struct list_head *next) {
-    next->prev = prev;
-    prev->next = next;
-}
-
-static inline void __list_del_entry(struct list_head *entry) {
-    __list_del(entry->prev, entry->next);
-}
-
-static inline void list_del(struct list_head *entry) {
-    __list_del_entry(entry);
-    entry->next = (void *)LIST_POISON1;
-    entry->prev = (void *)LIST_POISON2;
-}
-
-static inline int list_is_first(const struct list_head *list, const struct list_head *head) {
-    return list->prev == head;
-}
-
-static inline int list_is_last(const struct list_head *list, const struct list_head *head) {
-    return list->next == head;
-}
-
-static inline int list_is_head(const struct list_head *list, const struct list_head *head) {
-    return list == head;
-}
-
-static inline int list_empty(const struct list_head *head) {
-    return head->next == head;
-}
-
-#define list_entry(ptr, type, member) container_of(ptr, type, member)
-#define list_first_entry(ptr, type, member) list_entry((ptr)->next, type, member)
-#define list_last_entry(ptr, type, member) list_entry((ptr)->prev, type, member)
-#define list_first_entry_or_null(ptr, type, member)               \
-    ({                                                            \
-        struct list_head *head__ = (ptr);                         \
-        struct list_head *pos__ = head__->next;                   \
-        pos__ != head__ ? list_entry(pos__, type, member) : NULL; \
-    })
-#define list_next_entry(pos, member) list_entry((pos)->member.next, typeof(*(pos)), member)
-#define list_prev_entry(pos, member) list_entry((pos)->member.prev, typeof(*(pos)), member)
-#define list_entry_is_head(pos, head, member) list_is_head(&pos->member, (head))
-#define list_for_each(pos, head) \
-    for (pos = (head)->next; !list_is_head(pos, (head)); pos = pos->next)
-#define list_for_each_entry(pos, head, member)               \
-    for (pos = list_first_entry(head, typeof(*pos), member); \
-         !list_entry_is_head(pos, head, member); pos = list_next_entry(pos, member))
-#define list_for_each_entry_from(pos, head, member) \
-    for (; !list_entry_is_head(pos, head, member); pos = list_next_entry(pos, member))
-#define list_for_each_entry_from_reverse(pos, head, member) \
-    for (; !list_entry_is_head(pos, head, member); pos = list_prev_entry(pos, member))
-#define list_for_each_entry_continue(pos, head, member)                              \
-    for (pos = list_next_entry(pos, member); !list_entry_is_head(pos, head, member); \
-         pos = list_next_entry(pos, member))
-#define list_for_each_entry_safe(pos, n, head, member)                                         \
-    for (pos = list_first_entry(head, typeof(*pos), member), n = list_next_entry(pos, member); \
-         !list_entry_is_head(pos, head, member); pos = n, n = list_next_entry(n, member))
-
 struct clang_node_struct {
     clang_node_t node;
     CXCursor cursor;
-    struct list_head entry;
+    dlist_t entry;
     struct clang_node_struct *parent;
     struct clang_node_struct *iter;
-    struct list_head children;
+    dlist_t children;
     uint16_t n_children;
 };
 
@@ -314,7 +218,7 @@ static struct clang_node_struct *get_cursor_node(const CXCursor cursor) {
     if (!node)
         return NULL;
 
-    INIT_LIST_HEAD(&node->children);
+    DLIST_INITIALIZE(&node->children);
     node->cursor = cursor;
     node->node.kind = clang_getCursorKind(cursor);
     str = clang_getCursorKindSpelling(node->node.kind);
@@ -353,8 +257,8 @@ static void destroy_nodes(struct clang_node_struct *head) {
     struct clang_node_struct *node;
     struct clang_node_struct *next;
 
-    list_for_each_entry_safe(node, next, &head->children, entry) {
-        list_del(&node->entry);
+    dlist_for_each_elem_container_safe(node, next, &head->children, entry) {
+        dlist_elem_remove(&node->entry);
         destroy_nodes(node);
     }
 
@@ -378,7 +282,7 @@ static void dump_tree(struct clang_node_struct *root, uint8_t level) {
     struct clang_node_struct *child;
 
     print_node(&root->node, level);
-    list_for_each_entry(child, &root->children, entry) dump_tree(child, level + 1);
+    dlist_for_each_elem_container(child, &root->children, entry) dump_tree(child, level + 1);
 }
 
 static struct clang_node_struct *find_cursor_node(struct clang_node_struct *root, CXCursor cursor) {
@@ -388,7 +292,7 @@ static struct clang_node_struct *find_cursor_node(struct clang_node_struct *root
     if (clang_equalCursors(root->cursor, cursor))
         return root;
 
-    list_for_each_entry(child, &root->children, entry) {
+    dlist_for_each_elem_container(child, &root->children, entry) {
         parent = find_cursor_node(child, cursor);
         if (parent)
             break;
@@ -402,22 +306,23 @@ static UNUSED void deduplicate_tree(struct clang_node_struct *root) {
     struct clang_node_struct *next;
     struct clang_node_struct *parent = root->parent;
 
-    if (!parent && !list_empty(&root->children)) {
-        deduplicate_tree(list_first_entry(&root->children, struct clang_node_struct, entry));
+    if (!parent && !dlist_is_empty(&root->children)) {
+        deduplicate_tree(
+            dlist_first_elem_container(&root->children, struct clang_node_struct, entry));
         return;
     }
 
     print_node(&root->node, 0);
-    list_for_each_entry_safe(sibling, next, &parent->children, entry) {
+    dlist_for_each_elem_container_safe(sibling, next, &parent->children, entry) {
         struct clang_node_struct *sibling_child =
-            list_first_entry_or_null(&sibling->children, struct clang_node_struct, entry);
+            dlist_first_elem_container_or_null(&sibling->children, struct clang_node_struct, entry);
 
         if (clang_equalCursors(root->cursor, sibling->cursor))
             continue;
 
         if (sibling_child) {
             if (clang_equalCursors(sibling_child->cursor, root->cursor)) {
-                list_del(&root->entry);
+                dlist_elem_remove(&root->entry);
                 destroy_nodes(root);
             }
 
@@ -448,16 +353,17 @@ visitor(CXCursor cursor, CXCursor cursor_parent, CXClientData clientData) {
     if (!parent)
         return CXChildVisit_Break;
 
+    logp(VERBOSE_DEBUG, "parent = %s\n", node->node.name, parent->node.name);
     duplicate = find_cursor_node(root, cursor);
     if (duplicate) {
-        list_del(&duplicate->entry);
+        dlist_elem_remove(&duplicate->entry);
         destroy_nodes(node);
         duplicate->parent->n_children--;
         node = duplicate;
     }
 
     node->parent = parent;
-    list_add_tail(&node->entry, &parent->children);
+    dlist_elem_insert_tail(&node->entry, &parent->children);
     parent->n_children++;
     return CXChildVisit_Recurse;
 }
@@ -536,12 +442,13 @@ clang_node_t *clang_node_first(clang_node_t *node, const enum CXCursorKind kind)
 clang_node_t *clang_node_next(clang_node_t *node, const enum CXCursorKind kind) {
     struct clang_node_struct *node_ptr = container_of(node, struct clang_node_struct, node);
 
-    if (list_empty(&node_ptr->children) ||
-        (node_ptr->iter && list_is_last(&node_ptr->iter->entry, &node_ptr->children)))
+    if (dlist_is_empty(&node_ptr->children) ||
+        (node_ptr->iter && dlist_elem_is_last(&node_ptr->iter->entry, &node_ptr->children)))
         return NULL;
 
     if (!node_ptr->iter) {
-        node_ptr->iter = list_first_entry(&node_ptr->children, typeof(*node_ptr->iter), entry);
+        node_ptr->iter = dlist_first_elem_container(&node_ptr->children, typeof(*node_ptr->iter),
+                                                    entry);
 
         if (kind == CXCursor_Any)
             return &node_ptr->iter->node;
@@ -549,7 +456,7 @@ clang_node_t *clang_node_next(clang_node_t *node, const enum CXCursorKind kind) 
             return &node_ptr->iter->node;
     }
 
-    list_for_each_entry_continue(node_ptr->iter, &node_ptr->children, entry) {
+    dlist_for_each_elem_container_continue_from(node_ptr->iter, &node_ptr->children, entry) {
         if (kind != CXCursor_Any && kind != node_ptr->iter->node.kind)
             continue;
 
@@ -562,12 +469,13 @@ clang_node_t *clang_node_next(clang_node_t *node, const enum CXCursorKind kind) 
 clang_node_t *clang_node_prev(clang_node_t *node, const enum CXCursorKind kind) {
     struct clang_node_struct *node_ptr = container_of(node, struct clang_node_struct, node);
 
-    if (list_empty(&node_ptr->children) ||
-        (node_ptr->iter && list_is_first(&node_ptr->iter->entry, &node_ptr->children)))
+    if (dlist_is_empty(&node_ptr->children) ||
+        (node_ptr->iter && dlist_elem_is_first(&node_ptr->iter->entry, &node_ptr->children)))
         return NULL;
 
     if (!node_ptr->iter) {
-        node_ptr->iter = list_last_entry(&node_ptr->children, typeof(*node_ptr->iter), entry);
+        node_ptr->iter = dlist_last_elem_container(&node_ptr->children, typeof(*node_ptr->iter),
+                                                   entry);
 
         if (kind == CXCursor_Any)
             return &node_ptr->iter->node;
@@ -575,7 +483,7 @@ clang_node_t *clang_node_prev(clang_node_t *node, const enum CXCursorKind kind) 
             return &node_ptr->iter->node;
     }
 
-    list_for_each_entry_from_reverse(node_ptr->iter, &node_ptr->children, entry) {
+    dlist_for_each_elem_container_start_reverse(node_ptr->iter, &node_ptr->children, entry) {
         if (kind != CXCursor_Any && kind != node_ptr->iter->node.kind)
             continue;
 
@@ -589,7 +497,7 @@ static clang_node_t *node_find(struct clang_node_struct *node, const enum CXCurs
     struct clang_node_struct *node_ptr;
     clang_node_t *match;
 
-    list_for_each_entry(node_ptr, &node->children, entry) {
+    dlist_for_each_elem_container(node_ptr, &node->children, entry) {
         if (node_ptr->node.kind == kind)
             return &node_ptr->node;
         match = node_find(node_ptr, kind);
@@ -612,13 +520,13 @@ clang_node_t *clang_node_find_next(clang_node_t *node, const enum CXCursorKind k
     struct clang_node_struct *parent = node_ptr->parent;
 
     while (parent) {
-        node_ptr = list_next_entry(node_ptr, entry);
-        if (!list_is_head(&node_ptr->entry, &parent->children)) {
+        node_ptr = dlist_next_elem_container(node_ptr, entry);
+        if (!dlist_elem_is_head(&node_ptr->entry, &parent->children)) {
             if (node_ptr->node.kind == kind)
                 return &node_ptr->node;
         }
 
-        list_for_each_entry_from(node_ptr, &parent->children, entry) {
+        dlist_for_each_elem_container_start_from(node_ptr, &parent->children, entry) {
             node = node_find(node_ptr, kind);
             if (node)
                 return node;
@@ -636,13 +544,13 @@ clang_node_t *clang_node_find_prev(clang_node_t *node, const enum CXCursorKind k
     struct clang_node_struct *parent = node_ptr->parent;
 
     while (parent) {
-        node_ptr = list_prev_entry(node_ptr, entry);
-        if (!list_is_head(&node_ptr->entry, &parent->children)) {
+        node_ptr = dlist_prev_elem_container(node_ptr, entry);
+        if (!dlist_elem_is_head(&node_ptr->entry, &parent->children)) {
             if (node_ptr->node.kind == kind)
                 return &node_ptr->node;
         }
 
-        list_for_each_entry_from_reverse(node_ptr, &parent->children, entry) {
+        dlist_for_each_elem_container_start_reverse(node_ptr, &parent->children, entry) {
             node = node_find(node_ptr, kind);
             if (node)
                 return node;
@@ -660,7 +568,7 @@ node_find_by_name(struct clang_node_struct *node, const char *name, const enum C
     struct clang_node_struct *node_ptr;
     clang_node_t *match;
 
-    list_for_each_entry(node_ptr, &node->children, entry) {
+    dlist_for_each_elem_container(node_ptr, &node->children, entry) {
         if (!strncmp(node_ptr->node.name, name, strlen(name)) &&
             (kind == CXCursor_Any || node_ptr->node.kind == kind))
             return &node_ptr->node;

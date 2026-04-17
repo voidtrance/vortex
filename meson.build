@@ -24,6 +24,8 @@ add_project_arguments('-DCACHELINE_SIZE=' + cacheline_size, language: 'c')
 py = import('python').find_installation(pure: false)
 root = meson.project_source_root()
 
+core_include_general = include_directories('src/include')
+
 # Build the core utils library
 subdir('tools')
 subdir('src')

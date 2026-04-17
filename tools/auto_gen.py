@@ -436,7 +436,7 @@ def get_object_defs(top, module, build_top, prereqs_list):
     node = clang_ast_lib.clang_node_find_by_name(event_unit.root, b"core_object_event_type_t",
                                                  clang_ast_lib.EnumDecl)
     if node == clang_ast_ffi.NULL:
-        print("Object event enum not found")
+        print(f"Object event enum not found for '{module}'")
         clang_ast_lib.clang_unit_destroy(event_unit)
         return None
 
@@ -591,7 +591,7 @@ def process_object_prereq_files(top, filename, structs):
         node = clang_ast_lib.clang_node_find_by_name(unit.root, bytes(struct, "ascii"),
                                                      clang_ast_lib.Any)
         if node == clang_ast_ffi.NULL:
-            print("Object event enum not found")
+            print(f"Object event enum not found for '{filename}'")
             break
 
         if node.kind == clang_ast_lib.TypedefDecl:

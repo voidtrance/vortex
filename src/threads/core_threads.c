@@ -30,11 +30,11 @@
 #include <sys/ioctl.h>
 #include <limits.h>
 #include <sys/resource.h>
-#include <sys/queue.h>
 #include <sys/timerfd.h>
 #include <utils.h>
 #include <logging.h>
 #include <vortex.h>
+#include <dlist.h>
 #include "core_threads.h"
 
 enum {
@@ -57,7 +57,8 @@ struct core_thread_args {
 };
 
 typedef struct core_thread_data {
-    STAILQ_ENTRY(core_thread_data) entry;
+    dlist_t entry;
+    //STAILQ_ENTRY(core_thread_data) entry;
     core_thread_type_t type;
     pthread_t thread_id;
     pthread_attr_t attrs;
@@ -91,8 +92,7 @@ static core_time_data_t global_time_data = {
 #define timespec_delta(s, e) \
     ((SEC_TO_NSEC((e).tv_sec - (s).tv_sec)) + ((e).tv_nsec - (s).tv_nsec))
 
-typedef STAILQ_HEAD(core_threads_list, core_thread_data) core_thread_list_t;
-core_thread_list_t core_threads;
+DLIST_DECLARE(core_threads);
 static pthread_once_t initialized = PTHREAD_ONCE_INIT;
 static vortex_logger_t *thread_logger = NULL;
 
@@ -193,8 +193,7 @@ static void *core_time_control_thread(void *arg) {
         timer_update_wake(&global_time_data.trigger);
     }
 
-    VORTEX_LOG(LOG_LEVEL_DEBUG,
-               "Timing Stats: Avg runtime per step: %f, Avg ticks per step: %f",
+    VORTEX_LOG(LOG_LEVEL_INFO, "Timing Stats: Avg runtime per step: %f, Avg ticks per step: %f",
                (float)global_time_data.controller_runtime / loop_count,
                (float)global_time_data.controller_ticks / loop_count);
     pthread_exit(&data->ret);
@@ -371,8 +370,7 @@ static int start_thread(struct core_thread_data *thread) {
                           thread->thread_func, &thread->args);
 }
 
-static void core_thread_list_init(void) {
-    STAILQ_INIT(&core_threads);
+static void core_thread_log_init(void) {
     vortex_logger_create("vortex.core.threads", &thread_logger);
 }
 
@@ -381,7 +379,7 @@ int core_thread_create(core_thread_type_t type, core_thread_args_t *args) {
     float update;
     int fd;
 
-    pthread_once(&initialized, core_thread_list_init);
+    pthread_once(&initialized, core_thread_log_init);
 
     thread = calloc(1, sizeof(*thread));
     if (!thread)
@@ -432,7 +430,7 @@ int core_thread_create(core_thread_type_t type, core_thread_args_t *args) {
         }
     }
 
-    STAILQ_INSERT_TAIL(&core_threads, thread, entry);
+    dlist_elem_insert_tail(&thread->entry, &core_threads);
     return 0;
 }
 
@@ -442,7 +440,7 @@ int core_threads_start(void) {
 
     // Always start the control thread first so other threads
     // don't get stuck in the futex call.
-    STAILQ_FOREACH(thread, &core_threads, entry) {
+    dlist_for_each_elem_container(thread, &core_threads, entry) {
         if (thread->type == CORE_THREAD_TYPE_UPDATE) {
             ret = start_thread(thread);
             if (ret)
@@ -451,7 +449,7 @@ int core_threads_start(void) {
         }
     }
 
-    STAILQ_FOREACH(thread, &core_threads, entry) {
+    dlist_for_each_elem_container(thread, &core_threads, entry) {
         if (thread->type == CORE_THREAD_TYPE_UPDATE)
             continue;
         ret = start_thread(thread);
@@ -484,12 +482,12 @@ void core_threads_stop(void) {
      * on the futex will be woken up and will be able to
      * exit cleanly.
      */
-    STAILQ_FOREACH(thread, &core_threads, entry) {
+    dlist_for_each_elem_container(thread, &core_threads, entry) {
         if (thread->type != CORE_THREAD_TYPE_UPDATE)
             set_value(thread->args.control, THREAD_CONTROL_STOP);
     }
 
-    STAILQ_FOREACH(thread, &core_threads, entry) {
+    dlist_for_each_elem_container(thread, &core_threads, entry) {
         if (thread->type != CORE_THREAD_TYPE_UPDATE && thread->thread_id)
             pthread_join(thread->thread_id, NULL);
     }
@@ -498,7 +496,7 @@ void core_threads_stop(void) {
      * Now that all other threads have exited, stop the
      * time control thread.
      */
-    STAILQ_FOREACH(thread, &core_threads, entry) {
+    dlist_for_each_elem_container(thread, &core_threads, entry) {
         if (thread->type == CORE_THREAD_TYPE_UPDATE && thread->thread_id) {
             set_value(thread->args.control, THREAD_CONTROL_STOP);
             pthread_join(thread->thread_id, NULL);
@@ -511,7 +509,7 @@ void core_threads_stop(void) {
 pthread_t core_threads_get_thread_id(const char *name) {
     core_thread_data_t *thread;
 
-    STAILQ_FOREACH(thread, &core_threads, entry) {
+    dlist_for_each_elem_container(thread, &core_threads, entry) {
         if (!strncmp(thread->args.name, name, strlen(thread->args.name)))
             return thread->thread_id;
     }
@@ -523,7 +521,7 @@ int core_threads_update_object_thread(pthread_t id, core_thread_args_t *args) {
     core_thread_data_t *thread = NULL;
     core_thread_data_t *iter;
 
-    STAILQ_FOREACH(iter, &core_threads, entry) {
+    dlist_for_each_elem_container(iter, &core_threads, entry) {
         if (pthread_equal(iter->thread_id, id)) {
             thread = iter;
             break;
@@ -627,15 +625,13 @@ int core_threads_reset(void) {
 void core_threads_destroy(void) {
     core_thread_data_t *thread, *next;
 
-    if (STAILQ_EMPTY(&core_threads))
+    if (dlist_is_empty(&core_threads))
         return;
 
     core_threads_stop();
 
-    thread = STAILQ_FIRST(&core_threads);
-    while (thread) {
-        next = STAILQ_NEXT(thread, entry);
-        STAILQ_REMOVE(&core_threads, thread, core_thread_data, entry);
+    dlist_for_each_elem_container_safe(thread, next, &core_threads, entry) {
+        dlist_elem_remove(&thread->entry);
         free((char *)thread->args.name);
         pthread_attr_destroy(&thread->attrs);
         if (thread->type == CORE_THREAD_TYPE_OBJECT)
