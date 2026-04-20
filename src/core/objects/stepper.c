@@ -40,7 +40,6 @@ typedef struct {
 
 typedef struct {
     core_object_t object;
-    core_object_command_t *current_cmd;
     stepper_config_params_t config;
     uint64_t last_timestep;
     uint64_t move_steps;
@@ -54,6 +53,7 @@ typedef struct {
     bool enabled;
     bool use_pins;
     uint32_t pin_word;
+    uint64_t move_cmd_id;
     pthread_t pin_thread;
 } stepper_t;
 
@@ -126,12 +126,12 @@ stepper_t *object_create(const char *name, void *config_ptr) {
 
 static void stepper_reset(core_object_t *object) {
     stepper_t *stepper = (stepper_t *)object;
+    uint64_t move_id;
 
-    stepper->current_step = 0;
-    if (stepper->current_cmd) {
-        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, -1, NULL);
-        stepper->current_cmd = NULL;
-    }
+    move_id = stepper->move_cmd_id;
+    stepper->move_cmd_id = 0;
+    if (move_id)
+        CORE_CMD_COMPLETE(stepper, move_id, -1, NULL);
 
     stepper->dir = 0;
     stepper->steps = 0;
@@ -149,7 +149,7 @@ static int stepper_enable(core_object_t *object, uint64_t id, void *args) {
     stepper->enabled = !!opts->enable;
     log_debug(stepper, "Enabling %s %u", stepper->object.name,
               stepper->enabled);
-    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
+    CORE_CMD_COMPLETE(stepper, id, 0, NULL);
     return 0;
 }
 
@@ -159,7 +159,7 @@ static int stepper_set_speed(core_object_t *object, uint64_t id, void *args) {
 
     log_debug(stepper, "SPS: %f", opts->steps_per_second);
     stepper->spns = opts->steps_per_second / SEC_TO_NSEC(1);
-    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
+    CORE_CMD_COMPLETE(stepper, id, 0, NULL);
     return 0;
 }
 
@@ -181,7 +181,7 @@ static int stepper_set_accel(core_object_t *object, uint64_t id, void *args) {
         0.5 * stepper->accel.rate * pow(stepper->accel.time, 2);
     stepper->decel.time = stepper->spns / stepper->decel.rate;
     stepper->decel.distance = 0.5 * pow(stepper->spns, 2) / stepper->decel.rate;
-    CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
+    CORE_CMD_COMPLETE(stepper, id, 0, NULL);
     return 0;
 }
 
@@ -197,6 +197,7 @@ static int stepper_move(core_object_t *object, uint64_t id, void *args) {
     stepper->steps = 0;
     stepper->accel.start = 0;
     stepper->decel.start = 0;
+    stepper->move_cmd_id = id;
 
     log_debug(stepper, "Stepper %s moving %lu steps in %u",
               stepper->object.name, stepper->move_steps, stepper->dir);
@@ -269,16 +270,13 @@ static int stepper_exec(core_object_t *object, core_object_command_t *cmd) {
     stepper_t *stepper = (stepper_t *)object;
     int ret;
 
-    if (stepper->current_cmd)
+    if (stepper->move_cmd_id)
         return -1;
 
     ret = command_handlers[cmd->object_cmd_id](object, cmd->command_id,
                                                cmd->args);
     if (ret)
         return ret;
-
-    if (cmd->command_id == STEPPER_COMMAND_MOVE)
-        stepper->current_cmd = cmd;
 
     return 0;
 }
@@ -307,10 +305,7 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
     stepper_t *stepper = (stepper_t *)object;
     uint64_t delta = timestep - stepper->last_timestep;
 
-    if (!stepper->current_cmd)
-        goto done;
-
-    if (stepper->current_cmd->object_cmd_id != STEPPER_COMMAND_MOVE)
+    if (!stepper->move_cmd_id)
         goto done;
 
     if (stepper->steps < stepper->move_steps) {
@@ -345,11 +340,11 @@ static void stepper_update(core_object_t *object, uint64_t ticks,
         log_debug(stepper, "Current steps: %ld, inc: %.15f, remaining: %.15f",
                   stepper->current_step, steps,
                   stepper->move_steps - stepper->steps);
-    } else if (stepper->current_cmd->object_cmd_id == STEPPER_COMMAND_MOVE) {
+    } else {
         stepper_move_complete_event_data_t *data;
 
-        CORE_CMD_COMPLETE(stepper, stepper->current_cmd->command_id, 0, NULL);
-        stepper->current_cmd = NULL;
+        CORE_CMD_COMPLETE(stepper, stepper->move_cmd_id, 0, NULL);
+        stepper->move_cmd_id = 0;
         stepper->steps = 0.0;
         stepper->move_steps = 0.0;
 
