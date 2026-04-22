@@ -33,7 +33,11 @@ PYTHON_VERSION=$(shell $(PYTHON) -c "import platform; print(platform.python_vers
 PYTHON_VERSION_NUMS = $(subst ., ,$(PYTHON_VERSION))
 
 ifeq ($(DEBUG),1)
-	GCC_BUILD_OPTS=CFLAGS='-DVORTEX_DEBUG -g'
+	GCC_BUILD_OPTS=CFLAGS='-DVORTEX_DEBUG -g
+	ifeq ($(TIMER_DEBUG),1)
+		GCC_BUILD_TOPS += -DVORTEX_TIMERS_DEBUG
+	endif
+	GCC_BUILD_OPTS += '
 	MESON_BUILD_OPTS=--config-settings=setup-args="-Dbuildtype=debug"
 endif
 

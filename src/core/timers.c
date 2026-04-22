@@ -16,8 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define TIMER_DEBUG 0
-#if TIMER_DEBUG
+#ifndef VORTEX_TIMERS_DEBUG
+#define VORTEX_TIMERS_DEBUG 0
+#endif
+
+#if VORTEX_TIMERS_DEBUG
 #include <stdio.h>
 #endif
 #include <errno.h>
@@ -76,16 +79,19 @@ static void core_timers_update(uint64_t ticks, void *data);
 #define set_now(ticks) \
     __atomic_store_n(&timers->current, ticks, __ATOMIC_SEQ_CST);
 
-#if TIMER_DEBUG
+#if VORTEX_TIMERS_DEBUG
 FILE *__timer_fd;
-#define dump(ticks, timer, list)                                                           \
-    do {                                                                                   \
-        core_timers_entry_t *__entry;                                                      \
-        fprintf(__timer_fd, "[%lu,0x%lx]:", ticks, (unsigned long)timer);                  \
-        list_for_each_entry(__entry, list, entry)                                          \
-            fprintf(__timer_fd, "0x%lx,%lu:", (unsigned long)__entry, __entry->timestamp); \
-        fprintf(__timer_fd, "\n");                                                         \
-        fflush(__timer_fd);                                                                \
+#define dump(ticks, timer, list)                                                              \
+    do {                                                                                      \
+        core_timers_entry_t *__entry;                                                         \
+        char __buffer[1024];                                                                  \
+        size_t __i;                                                                           \
+        __i += snprintf(__buffer, sizeof(__buffer) - __i, "[TIMER_DEBUG [%lu,0x%lx]:", ticks, \
+                        (unsigned long)timer);                                                \
+        list_for_each_entry(__entry, list, entry)                                             \
+            __i += snprintf(__buffer, sizeof(__buffer) - __i,                                 \
+                            " 0x%lx,%lu:", (unsigned long)__entry, __entry->timestamp);       \
+        dprintf("%s\n", __buffer);                                                            \
     } while (0)
 #endif
 
@@ -95,14 +101,6 @@ int core_timers_init(uint16_t width) {
     timers.mask = (1UL << width) - 1;
     args.timer.callback = core_timers_update;
     args.timer.data = (void *)&timers;
-
-#if TIMER_DEBUG
-    __timer_fd = fopen("timer.debug", "w");
-    if (!__timer_fd) {
-        perror("Failed to open timer.debug");
-        return -1;
-    }
-#endif
 
     return core_thread_create(CORE_THREAD_TYPE_TIMER, &args);
 }
@@ -265,7 +263,7 @@ static void core_timers_update(uint64_t ticks, void *data) {
         } else {
             timer_disarm_locked(timer);
         }
-#if TIMER_DEBUG
+#if VORTEX_TIMERS_DEBUG
         dump(ticks, timer, &timers->armed.list);
 #endif
 
@@ -310,11 +308,6 @@ void core_timers_disarm(void) {
 void core_timers_free(void) {
     core_timers_entry_t *timer;
     core_timers_entry_t *next;
-
-#if TIMER_DEBUG
-    if (__timer_fd)
-        fclose(__timer_fd);
-#endif
 
     pthread_mutex_lock(&timers.lock);
     dlist_for_each_elem_container_safe(timer, next, &timers.armed.list, entry) {
