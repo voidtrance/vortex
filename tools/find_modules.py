@@ -21,6 +21,9 @@ import argparse
 
 def find_hw_objects(source_dir):
     object_dir = pathlib.PosixPath(source_dir)
+    libdir = os.environ.get("CLANG_LIB_DIR")
+    if libdir:
+        cindex.Config.set_library_path(libdir)
     index = cindex.Index.create()
     objects = []
     for file in object_dir.iterdir():

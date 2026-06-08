@@ -44,6 +44,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          cache: 'pip'
       - name: Get Version
         id: vortex-version
         run: echo "vortex-version=$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
@@ -56,12 +57,21 @@ jobs:
           sudo apt install -y meson libgirepository-2.0-dev libcairo2-dev
           python -m pip install --upgrade pip setuptools wheel flake8 meson
           pip install -r virtualenv.txt
-#      - name: Lint with flake8
-#        run: |
-#          # stop the build if there are Python syntax errors or undefined names
-#          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-#          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-#          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "21.1.8"
+          env: 1
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install clang clang-format
+      - name: Setup Environment
+        run: |
+          echo CLANG_INCLUDE_PATH=$(llvm-config --includedir) >> $GITHUB_ENV
+          echo LIBRARY_PATH=$(llvm-config --libdir) >> $GITHUB_ENV
+          echo LLVM_CFLAGS=$(llvm-config --cflags) >> $GITHUB_ENV
+          echo CC=clang >> $GITHUB_ENV
       - name: Build emulator ${{ steps.vortex-version.outputs.vortex-version }}
         run: make package
       - name: Upload asset

@@ -18,7 +18,8 @@ import argparse
 import os
 
 def get_clang_cursor_kind_defs():
-    filename = "/usr/include/clang-c/Index.h"
+    include_path = os.environ.get("CLANG_INCLUDE_PATH", "/usr/include")
+    filename = os.path.join(include_path, "clang-c/Index.h")
     enum_found = False
     defs = ["enum CursorKind {"]
     enum_values = {}
@@ -50,7 +51,8 @@ def get_clang_cursor_kind_defs():
     return defs
 
 def get_clang_type_kind_defs():
-    filename = "/usr/include/clang-c/Index.h"
+    include_path = os.environ.get("CLANG_INCLUDE_PATH", "/usr/include")
+    filename = os.path.join(include_path, "clang-c/Index.h")
     enum_found = False
     defs = ["enum TypeKind {"]
     enum_values = {}

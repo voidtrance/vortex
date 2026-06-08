@@ -24,7 +24,6 @@ VENV ?=
 VENV_PYTHON := $(VENV)/bin/python3
 DEBUG_OPTS :=
 MESON_DEBUG_OPTS :=
-GCC_BUILD_OPTS :=
 VERSION=$(shell git describe --tags --abbrev=0)
 KVER := $(shell uname -r)
 ARCH := $(shell uname -m)
@@ -32,17 +31,33 @@ ARCH := $(shell uname -m)
 PYTHON_VERSION=$(shell $(PYTHON) -c "import platform; print(platform.python_version())")
 PYTHON_VERSION_NUMS = $(subst ., ,$(PYTHON_VERSION))
 
+# Setup Clang
+CLANG_INCLUDE_DIR=$(shell llvm-config --includedir)
+CLANG_LIB_DIR=$(shell llvm-config --libdir)
+LIBRARY_PATH=$(shell llvm-config --libdir)
+CC=clang
+LD_LIBRATY_PATH += $(shell llvm-config --libdir)
+CFLAGS += $(shell llvm-config --cflags)
+LDFLAGS += -L$(shell llvm-config --libdir)
+
 ifeq ($(DEBUG),1)
-	GCC_BUILD_OPTS=CFLAGS='-DVORTEX_DEBUG -g
+	CFLAGS += -DVORTEX_DEBUG -g
 	ifeq ($(TIMER_DEBUG),1)
-		GCC_BUILD_TOPS += -DVORTEX_TIMERS_DEBUG
+		CFLAGS += -DVORTEX_TIMERS_DEBUG
 	endif
-	GCC_BUILD_OPTS += '
 	MESON_BUILD_OPTS=--config-settings=setup-args="-Dbuildtype=debug"
 endif
 
+export CC
+export CFLAGS
+export LDFLAGS
+export CLANG_INCLUDE_DIR
+export CLANG_LIB_DIR
+export LIBRARY_PATH
+export LD_LIBRARY_PATH
+
 all: version
-	CC=clang $(GCC_BUILD_OPTS) $(PYTHON) -m pip install --no-build-isolation \
+	$(PYTHON) -m pip install --no-build-isolation \
 		--editable . $(MESON_BUILD_OPTS)
 	@if [ ! -L compile_commands.json ]; then \
 		ln -s build/cp$(word 1,$(PYTHON_VERSION_NUMS))$(word 2,$(PYTHON_VERSION_NUMS))/compile_commands.json \
@@ -78,7 +93,7 @@ venv:
 	$(VENV)/bin/pip install -r ./virtualenv.txt
 
 wheel: venv version
-	CC=clang $(VENV_PYTHON) -m build -w .
+	$(VENV_PYTHON) -m build -w .
 
 package: version
 	$(PYTHON) -m build -w .
