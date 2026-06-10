@@ -118,6 +118,6 @@ static inline int dlist_is_empty(const dlist_t *head) {
     for (elem = dlist_first_elem_container(head, typeof(*elem), member), \
         next = dlist_next_elem_container(elem, member);                  \
          !dlist_elem_container_is_head(elem, head, member);              \
-         elem = next, next = dlist_next_elem_container(next, member))
+         elem = next, next = dlist_next_elem_container(elem, member))
 
 #endif

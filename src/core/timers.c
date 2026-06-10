@@ -33,7 +33,6 @@
 #include <core_threads.h>
 #include <debug.h>
 #include <utils.h>
-#include <atomics.h>
 #include <dlist.h>
 #include "timers.h"
 
@@ -41,17 +40,17 @@
 
 typedef enum {
     EXECUTE_STATE_NONE = 0,
+    EXECUTE_STATE_RUNNABLE,
     EXECUTE_STATE_EXECUTING,
     EXECUTE_STATE_TO_REMOVE,
-    EXECUTE_STATE_REMOVED,
 } execute_state_t;
 
 #if VORTEX_TIMERS_DEBUG_LISTS
 static const char *__states[] = {
     [EXECUTE_STATE_NONE] = "NONE",
+    [EXECUTE_STATE_RUNNABLE] = "RUNNABLE",
     [EXECUTE_STATE_EXECUTING] = "EXECUTING",
     [EXECUTE_STATE_TO_REMOVE] = "TO_REMOVE",
-    [EXECUTE_STATE_REMOVED] = "REMOVED",
 };
 #endif
 
@@ -59,7 +58,6 @@ typedef struct core_timers_entry_struct {
     dlist_t entry;
     core_timer_t timer;
     uint64_t timestamp;
-    bool armed;
     execute_state_t state;
 } core_timers_entry_t;
 
@@ -77,6 +75,7 @@ typedef struct {
     pthread_mutex_t lock;
     core_timer_set_t armed;
     core_timer_set_t disarmed;
+    core_timer_set_t free;
     uint64_t current;
     uint64_t mask;
 } core_timers_t;
@@ -92,6 +91,11 @@ static core_timers_t timers = {
         "DISARMED",
 #endif
          DLIST_INITIALIZOR(timers.disarmed.list), 0 },
+    .free = {
+#if VORTEX_TIMERS_DEBUG_LISTS
+        "FREE",
+#endif
+         DLIST_INITIALIZOR(timers.free.list), 0 },
     .lock = PTHREAD_MUTEX_INITIALIZER,
     .current = 0,
     .mask = 0,
@@ -105,6 +109,14 @@ static void core_timers_update(uint64_t ticks, void *data);
 
 #define get_now() __atomic_load_n(&timers.current, __ATOMIC_SEQ_CST)
 #define set_now(ticks) __atomic_store_n(&timers->current, ticks, __ATOMIC_SEQ_CST)
+
+#undef dbg_print
+#if VORTEX_TIMERS_DEBUG
+#define dbg_print(fmt, ...) \
+    vortex_logger_log(logger, LOG_LEVEL_DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#else
+#define dbg_print(fmt, ...)
+#endif
 
 #if VORTEX_TIMERS_DEBUG_LISTS
 #define __dump(op, ticks, timer, set, file, line)                                                  \
@@ -123,14 +135,6 @@ static void core_timers_update(uint64_t ticks, void *data);
 #define dump(op, ticks, timer, set) __dump(op, ticks, timer, set, __FILE__, __LINE__)
 #else
 #define dump(op, ticks, timer, set)
-#endif
-
-#undef dbg_print
-#if VORTEX_TIMERS_DEBUG
-#define dbg_print(fmt, ...) \
-    vortex_logger_log(logger, LOG_LEVEL_DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#else
-#define dbg_print(fmt, ...)
 #endif
 
 int core_timers_init(uint16_t width) {
@@ -170,7 +174,7 @@ insert_back:
     dlist_elem_insert_tail(&timer->entry, &set->list);
 
 inserted:
-    timer->armed = true;
+    timer->state = EXECUTE_STATE_RUNNABLE;
     set->count++;
     dump("ARM", get_now(), timer, &timers.armed);
 }
@@ -182,7 +186,7 @@ static void timer_arm(core_timers_entry_t *timer) {
 }
 
 static void timer_disarm_locked(core_timers_entry_t *timer) {
-    timer->armed = false;
+    timer->state = EXECUTE_STATE_NONE;
     dlist_elem_insert_tail(&timer->entry, &timers.disarmed.list);
     dump("DISARM", get_now(), timer, &timers.disarmed);
 }
@@ -195,32 +199,18 @@ static void timer_disarm(core_timers_entry_t *timer) {
 
 static void timer_remove_locked(core_timers_entry_t *timer) {
     dlist_elem_remove(&timer->entry);
-    if (timer->armed) {
-        dump("REMOVE", get_now(), timer, &timers.armed);
+    dump("REMOVE", get_now(), timer,
+         timer->state == EXECUTE_STATE_RUNNABLE ? &timers.armed : &timers.disarmed);
+    if (timer->state == EXECUTE_STATE_RUNNABLE)
         timers.armed.count--;
-    } else {
-        dump("REMOVE", get_now(), timer, &timers.disarmed);
+    else
         timers.disarmed.count--;
-    }
 }
-
-#if 0
-static void timer_remove(core_timers_entry_t *timer) {
-    pthread_mutex_lock(&timers.lock);
-    timer_remove_locked(timer);
-    pthread_mutex_unlock(&timers.lock);
-}
-#endif
 
 core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout) {
     core_timers_entry_t *new_timer;
 
     timeout &= timers.mask;
-
-#if CHECK_TIMER
-    if (timeout && timeout <= get_now())
-        return CORE_TIMER_ERROR;
-#endif
 
     new_timer = malloc(sizeof(*new_timer));
     if (!new_timer) {
@@ -246,11 +236,6 @@ int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout) {
 
     timeout &= timers.mask;
 
-#if CHECK_TIMER
-    if (timeout && timeout <= get_now())
-        return -1;
-#endif
-
     pthread_mutex_lock(&timers.lock);
     timer_remove_locked(timer);
     timer->timestamp = timeout;
@@ -269,11 +254,13 @@ void core_timer_unregister(core_timer_handle_t handle) {
     execute_state_t state;
 
     pthread_mutex_lock(&timers.lock);
-    state = atomic32_exchange(&timer->state, EXECUTE_STATE_TO_REMOVE);
-    if (state == EXECUTE_STATE_NONE) {
-        atomic32_store(&timer->state, EXECUTE_STATE_REMOVED);
+    state = timer->state;
+    state = EXECUTE_STATE_TO_REMOVE;
+    if (state != EXECUTE_STATE_EXECUTING) {
+        dump("UNREGISTER", get_now(), timer,
+             timer->state == EXECUTE_STATE_RUNNABLE ? &timers.armed : &timers.disarmed);
         timer_remove_locked(timer);
-        free(timer);
+        dlist_elem_insert_tail(&timer->entry, &timers.free.list);
     }
 
     pthread_mutex_unlock(&timers.lock);
@@ -291,53 +278,44 @@ static void core_timers_update(uint64_t ticks, void *data) {
 
     set_now(ticks);
     pthread_mutex_lock(&timers->lock);
+    dlist_for_each_elem_container_safe(timer, next, &timers->free.list, entry) {
+        dlist_elem_remove(&timer->entry);
+        free(timer);
+    }
+
     dlist_for_each_elem_container_safe(timer, next, &timers->armed.list, entry) {
+        if (timer->state != EXECUTE_STATE_RUNNABLE)
+            break;
+
+        dump("CHECK", ticks, timer, &timers->armed);
         if (core_timers_compare(timer->timestamp, ticks) > 0)
             break;
 
-        pthread_mutex_unlock(&timers->lock);
-        if (atomic32_compare_exchange(&timer->state, EXECUTE_STATE_NONE, EXECUTE_STATE_EXECUTING))
+        if (timer->state == EXECUTE_STATE_RUNNABLE) {
+            timer->state = EXECUTE_STATE_EXECUTING;
+            pthread_mutex_unlock(&timers->lock);
             reschedule = timer->timer.callback(ticks, timer->timer.data);
-        pthread_mutex_lock(&timers->lock);
-        if (!atomic32_compare_exchange(&timer->state, EXECUTE_STATE_EXECUTING,
-                                       EXECUTE_STATE_NONE)) {
-            if (atomic32_load(&timer->state) == EXECUTE_STATE_TO_REMOVE) {
-                timer_remove_locked(timer);
-                free(timer);
-            }
-
-            continue;
+            pthread_mutex_lock(&timers->lock);
         }
 
-        timer_remove_locked(timer);
-        timer->timestamp = reschedule & timers->mask;
-        if (timer->timestamp) {
-            timer_arm_locked(timer);
-        } else {
-            timer_disarm_locked(timer);
-        }
+        switch (timer->state) {
+        case EXECUTE_STATE_EXECUTING:
+            timer_remove_locked(timer);
+            timer->timestamp = reschedule & timers->mask;
+            if (timer->timestamp)
+                timer_arm_locked(timer);
+            else
+                timer_disarm_locked(timer);
 
-        dump("UPDATE", ticks, timer, &timers->armed.list);
-
-        /*
-         * There is a race condition with handling of the timers
-         * that needs special handling:
-         *   1. At iterations N, both timer and next are timers
-         *      on the armed list.
-         *   2. The timers lock is released above before calling
-         *      timer's callback.
-         *   3. During the callback's execution, next gets disarmed.
-         *      This can happen because during the callback's
-         *      execution, the timers locks is unlocked.
-         *   4. When the callback completes, the timers lock is
-         *      locked and timer is assigned to next. (next is now
-         *      on the disarmed list.)
-         *   5. The new next is now the head of the disarmed list.
-         *   6. On the next iteration, timer is assigned to the
-         *      head of the disarmed list.
-         */
-        if (!next->armed)
+            dump("UPDATE", ticks, timer, &timers->armed);
             break;
+        case EXECUTE_STATE_TO_REMOVE:
+            timer_remove_locked(timer);
+            free(timer);
+        default:
+
+            break;
+        }
     }
 
     pthread_mutex_unlock(&timers->lock);
