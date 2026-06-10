@@ -48,6 +48,10 @@ ifeq ($(DEBUG),1)
 	MESON_BUILD_OPTS=--config-settings=setup-args="-Dbuildtype=debug"
 endif
 
+ifeq ($(VERBOSE),1)
+	MESON_BUILD_OPTS += -v -Ccompile-args="-v"
+endif
+
 export CC
 export CFLAGS
 export LDFLAGS
