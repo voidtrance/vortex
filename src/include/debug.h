@@ -21,15 +21,15 @@
 #ifdef VORTEX_DEBUG
 #include <stdio.h>
 #include <signal.h>
-#define dprint(f, ...)            \
-    ({                            \
-        printf(f, ##__VA_ARGS__); \
-        fflush(stdout);           \
+#define dbg_print(f, ...)                  \
+    ({                                     \
+        fprintf(stderr, f, ##__VA_ARGS__); \
+        fflush(stdout);                    \
     })
 #define breakpoint() raise(SIGSEGV)
 #else
 #define breakpoint()
-#define dprint(f, ...)
+#define dbg_print(f, ...)
 #define printf(f, ...)
 #define fprintf(s, ...)
 #endif
