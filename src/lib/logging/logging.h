@@ -31,9 +31,8 @@ typedef enum {
     LOG_LEVEL_MAX
 } log_level_t;
 
-const char *log_level_names[LOG_LEVEL_MAX] = { "NOTSET",  "DEBUG",   "VERBOSE",
-                                               "INFO",    "WARNING", "ERROR",
-                                               "CRITICAL" };
+static const char *log_level_names[LOG_LEVEL_MAX] = { "NOTSET",  "DEBUG", "VERBOSE", "INFO",
+                                                      "WARNING", "ERROR", "CRITICAL" };
 
 typedef struct logger vortex_logger_t;
 

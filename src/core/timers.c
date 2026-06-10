@@ -18,11 +18,15 @@
 
 #ifndef VORTEX_TIMERS_DEBUG
 #define VORTEX_TIMERS_DEBUG 0
+#define VORTEX_TIMERS_DEBUG_LISTS 0
 #endif
 
 #if VORTEX_TIMERS_DEBUG
-#include <stdio.h>
+#include <logging.h>
+#else
+#define VORTEX_TIMERS_DEBUG_LISTS 0
 #endif
+
 #include <errno.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -42,6 +46,15 @@ typedef enum {
     EXECUTE_STATE_REMOVED,
 } execute_state_t;
 
+#if VORTEX_TIMERS_DEBUG_LISTS
+static const char *__states[] = {
+    [EXECUTE_STATE_NONE] = "NONE",
+    [EXECUTE_STATE_EXECUTING] = "EXECUTING",
+    [EXECUTE_STATE_TO_REMOVE] = "TO_REMOVE",
+    [EXECUTE_STATE_REMOVED] = "REMOVED",
+};
+#endif
+
 typedef struct core_timers_entry_struct {
     dlist_t entry;
     core_timer_t timer;
@@ -53,6 +66,9 @@ typedef struct core_timers_entry_struct {
 typedef dlist_t core_timers_list_t;
 
 typedef struct {
+#if VORTEX_TIMERS_DEBUG_LISTS
+    const char name[16];
+#endif
     core_timers_list_t list;
     uint32_t count;
 } core_timer_set_t;
@@ -66,41 +82,72 @@ typedef struct {
 } core_timers_t;
 
 static core_timers_t timers = {
-    .armed = { DLIST_INITIALIZOR(timers.armed.list), 0 },
-    .disarmed = { DLIST_INITIALIZOR(timers.disarmed.list), 0 },
+    .armed = {
+#if VORTEX_TIMERS_DEBUG_LISTS
+        "ARMED",
+#endif
+         DLIST_INITIALIZOR(timers.armed.list), 0 },
+    .disarmed = {
+#if VORTEX_TIMERS_DEBUG_LISTS
+        "DISARMED",
+#endif
+         DLIST_INITIALIZOR(timers.disarmed.list), 0 },
     .lock = PTHREAD_MUTEX_INITIALIZER,
     .current = 0,
     .mask = 0,
 };
 
+#if VORTEX_TIMERS_DEBUG
+static vortex_logger_t *logger = NULL;
+#endif
+
 static void core_timers_update(uint64_t ticks, void *data);
 
-#define get_now() __atomic_load_n(&timers.current, __ATOMIC_SEQ_CST);
-#define set_now(ticks) \
-    __atomic_store_n(&timers->current, ticks, __ATOMIC_SEQ_CST);
+#define get_now() __atomic_load_n(&timers.current, __ATOMIC_SEQ_CST)
+#define set_now(ticks) __atomic_store_n(&timers->current, ticks, __ATOMIC_SEQ_CST)
 
-#if VORTEX_TIMERS_DEBUG
-FILE *__timer_fd;
-#define dump(ticks, timer, list)                                                              \
-    do {                                                                                      \
-        core_timers_entry_t *__entry;                                                         \
-        char __buffer[1024];                                                                  \
-        size_t __i;                                                                           \
-        __i += snprintf(__buffer, sizeof(__buffer) - __i, "[TIMER_DEBUG [%lu,0x%lx]:", ticks, \
-                        (unsigned long)timer);                                                \
-        list_for_each_entry(__entry, list, entry)                                             \
-            __i += snprintf(__buffer, sizeof(__buffer) - __i,                                 \
-                            " 0x%lx,%lu:", (unsigned long)__entry, __entry->timestamp);       \
-        dprintf("%s\n", __buffer);                                                            \
+#if VORTEX_TIMERS_DEBUG_LISTS
+#define __dump(op, ticks, timer, set, file, line)                                                  \
+    do {                                                                                           \
+        core_timers_entry_t *__entry;                                                              \
+        char __buffer[1024];                                                                       \
+        size_t __i = 0;                                                                            \
+        __i += snprintf(__buffer, sizeof(__buffer) - __i, "[%s](%s) [0x%lx,%s,%lu]:", (set)->name, \
+                        (op), (unsigned long)(timer), __states[(timer)->state], (ticks));          \
+        dlist_for_each_elem_container(__entry, &((set)->list), entry)                              \
+            __i += snprintf(__buffer + __i, sizeof(__buffer) - __i,                                \
+                            " 0x%lx,%s,%lu:", (unsigned long)__entry, __states[__entry->state],    \
+                            __entry->timestamp);                                                   \
+        vortex_logger_log(logger, LOG_LEVEL_DEBUG, file, line, "%s", __buffer);                    \
     } while (0)
+#define dump(op, ticks, timer, set) __dump(op, ticks, timer, set, __FILE__, __LINE__)
+#else
+#define dump(op, ticks, timer, set)
+#endif
+
+#undef dbg_print
+#if VORTEX_TIMERS_DEBUG
+#define dbg_print(fmt, ...) \
+    vortex_logger_log(logger, LOG_LEVEL_DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#else
+#define dbg_print(fmt, ...)
 #endif
 
 int core_timers_init(uint16_t width) {
     core_thread_args_t args;
+#if VORTEX_TIMERS_DEBUG
+    int ret;
+#endif
 
     timers.mask = (1UL << width) - 1;
     args.timer.callback = core_timers_update;
     args.timer.data = (void *)&timers;
+
+#if VORTEX_TIMERS_DEBUG
+    ret = vortex_logger_create("vortex.core.timers", &logger);
+    if (ret)
+        return ret;
+#endif
 
     return core_thread_create(CORE_THREAD_TYPE_TIMER, &args);
 }
@@ -125,6 +172,7 @@ insert_back:
 inserted:
     timer->armed = true;
     set->count++;
+    dump("ARM", get_now(), timer, &timers.armed);
 }
 
 static void timer_arm(core_timers_entry_t *timer) {
@@ -136,6 +184,7 @@ static void timer_arm(core_timers_entry_t *timer) {
 static void timer_disarm_locked(core_timers_entry_t *timer) {
     timer->armed = false;
     dlist_elem_insert_tail(&timer->entry, &timers.disarmed.list);
+    dump("DISARM", get_now(), timer, &timers.disarmed);
 }
 
 static void timer_disarm(core_timers_entry_t *timer) {
@@ -146,10 +195,13 @@ static void timer_disarm(core_timers_entry_t *timer) {
 
 static void timer_remove_locked(core_timers_entry_t *timer) {
     dlist_elem_remove(&timer->entry);
-    if (timer->armed)
+    if (timer->armed) {
+        dump("REMOVE", get_now(), timer, &timers.armed);
         timers.armed.count--;
-    else
+    } else {
+        dump("REMOVE", get_now(), timer, &timers.disarmed);
         timers.disarmed.count--;
+    }
 }
 
 #if 0
@@ -185,6 +237,7 @@ core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout) {
     else
         timer_disarm(new_timer);
 
+    dump("REGISTER", get_now(), new_timer, timeout ? &timers.armed : &timers.disarmed);
     return (core_timer_handle_t)new_timer;
 }
 
@@ -206,6 +259,7 @@ int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout) {
     else
         timer_disarm_locked(timer);
 
+    dump("RESCHEDULE", get_now(), timer, timeout ? &timers.armed : &timers.disarmed);
     pthread_mutex_unlock(&timers.lock);
     return 0;
 }
@@ -242,8 +296,7 @@ static void core_timers_update(uint64_t ticks, void *data) {
             break;
 
         pthread_mutex_unlock(&timers->lock);
-        if (atomic32_compare_exchange(&timer->state, EXECUTE_STATE_NONE,
-                                      EXECUTE_STATE_EXECUTING))
+        if (atomic32_compare_exchange(&timer->state, EXECUTE_STATE_NONE, EXECUTE_STATE_EXECUTING))
             reschedule = timer->timer.callback(ticks, timer->timer.data);
         pthread_mutex_lock(&timers->lock);
         if (!atomic32_compare_exchange(&timer->state, EXECUTE_STATE_EXECUTING,
@@ -263,9 +316,8 @@ static void core_timers_update(uint64_t ticks, void *data) {
         } else {
             timer_disarm_locked(timer);
         }
-#if VORTEX_TIMERS_DEBUG
-        dump(ticks, timer, &timers->armed.list);
-#endif
+
+        dump("UPDATE", ticks, timer, &timers->armed.list);
 
         /*
          * There is a race condition with handling of the timers
@@ -319,6 +371,10 @@ void core_timers_free(void) {
         timer_remove_locked(timer);
         free(timer);
     }
+
     pthread_mutex_unlock(&timers.lock);
     pthread_mutex_destroy(&timers.lock);
+#if VORTEX_TIMERS_DEBUG
+    vortex_logger_destroy(logger);
+#endif
 }
