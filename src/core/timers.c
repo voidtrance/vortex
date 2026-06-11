@@ -68,7 +68,6 @@ typedef struct {
     const char name[16];
 #endif
     core_timers_list_t list;
-    uint32_t count;
 } core_timer_set_t;
 
 typedef struct {
@@ -85,17 +84,17 @@ static core_timers_t timers = {
 #if VORTEX_TIMERS_DEBUG_LISTS
         "ARMED",
 #endif
-         DLIST_INITIALIZOR(timers.armed.list), 0 },
+         DLIST_INITIALIZOR(timers.armed.list) },
     .disarmed = {
 #if VORTEX_TIMERS_DEBUG_LISTS
         "DISARMED",
 #endif
-         DLIST_INITIALIZOR(timers.disarmed.list), 0 },
+         DLIST_INITIALIZOR(timers.disarmed.list) },
     .free = {
 #if VORTEX_TIMERS_DEBUG_LISTS
         "FREE",
 #endif
-         DLIST_INITIALIZOR(timers.free.list), 0 },
+         DLIST_INITIALIZOR(timers.free.list) },
     .lock = PTHREAD_MUTEX_INITIALIZER,
     .current = 0,
     .mask = 0,
@@ -175,7 +174,6 @@ insert_back:
 
 inserted:
     timer->state = EXECUTE_STATE_RUNNABLE;
-    set->count++;
     dump("ARM", get_now(), timer, &timers.armed);
 }
 
@@ -201,10 +199,6 @@ static void timer_remove_locked(core_timers_entry_t *timer) {
     dlist_elem_remove(&timer->entry);
     dump("REMOVE", get_now(), timer,
          timer->state == EXECUTE_STATE_RUNNABLE ? &timers.armed : &timers.disarmed);
-    if (timer->state == EXECUTE_STATE_RUNNABLE)
-        timers.armed.count--;
-    else
-        timers.disarmed.count--;
 }
 
 core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout) {
