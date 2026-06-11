@@ -45,8 +45,7 @@ class Timer:
         return self._timeout
 
     def schedule(self, timeout):
-        if self._callback is None or \
-            (self._timeout == 0 and timeout == 0):
+        if self._callback is None:
             return
         self._timeout = timeout
         self._schedule(self._handle, self._timeout)

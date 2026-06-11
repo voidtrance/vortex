@@ -107,12 +107,13 @@ static vortex_logger_t *logger = NULL;
 static void core_timers_update(uint64_t ticks, void *data);
 
 #define get_now() __atomic_load_n(&timers.current, __ATOMIC_SEQ_CST)
-#define set_now(ticks) __atomic_store_n(&timers->current, ticks, __ATOMIC_SEQ_CST)
+#define set_now(ticks) __atomic_store_n(&timers.current, ticks, __ATOMIC_SEQ_CST)
 
 #undef dbg_print
 #if VORTEX_TIMERS_DEBUG
-#define dbg_print(fmt, ...) \
-    vortex_logger_log(logger, LOG_LEVEL_DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define dbg_print(fmt, ...)                                                                \
+    vortex_logger_log(logger, LOG_LEVEL_DEBUG, __FILE__, __LINE__, "(%lu)" fmt, get_now(), \
+                      ##__VA_ARGS__)
 #else
 #define dbg_print(fmt, ...)
 #endif
@@ -142,9 +143,9 @@ int core_timers_init(uint16_t width) {
     int ret;
 #endif
 
-    timers.mask = (1UL << width) - 1;
+    timers.mask = (~0ULL) >> (64 - width);
     args.timer.callback = core_timers_update;
-    args.timer.data = (void *)&timers;
+    args.timer.data = NULL;
 
 #if VORTEX_TIMERS_DEBUG
     ret = vortex_logger_create("vortex.core.timers", &logger);
@@ -214,7 +215,9 @@ core_timer_handle_t core_timer_register(core_timer_t timer, uint64_t timeout) {
 
     new_timer->timer = timer;
     new_timer->timestamp = timeout;
-    new_timer->state = EXECUTE_STATE_NONE;
+
+    dbg_print("[register] timer=0x%lx: timeout=%lu(%u)", (unsigned long)new_timer,
+              new_timer->timestamp, new_timer->timestamp & timers.mask);
 
     if (timeout)
         timer_arm(new_timer);
@@ -238,6 +241,8 @@ int core_timer_reschedule(core_timer_handle_t handle, uint64_t timeout) {
     else
         timer_disarm_locked(timer);
 
+    dbg_print("[reschedule] timer=0x%lx: timeout=%lu(%u)", (unsigned long)timer, timer->timestamp,
+              timer->timestamp & timers.mask);
     dump("RESCHEDULE", get_now(), timer, timeout ? &timers.armed : &timers.disarmed);
     pthread_mutex_unlock(&timers.lock);
     return 0;
@@ -265,19 +270,18 @@ int core_timers_compare(uint64_t timeout1, uint64_t timeout2) {
 }
 
 static void core_timers_update(uint64_t ticks, void *data) {
-    core_timers_t *timers = (core_timers_t *)data;
     core_timers_entry_t *timer;
     core_timers_entry_t *next;
     uint64_t reschedule = 0;
 
     set_now(ticks);
-    pthread_mutex_lock(&timers->lock);
-    dlist_for_each_elem_container_safe(timer, next, &timers->free.list, entry) {
+    pthread_mutex_lock(&timers.lock);
+    dlist_for_each_elem_container_safe(timer, next, &timers.free.list, entry) {
         dlist_elem_remove(&timer->entry);
         free(timer);
     }
 
-    dlist_for_each_elem_container_safe(timer, next, &timers->armed.list, entry) {
+    dlist_for_each_elem_container_safe(timer, next, &timers.armed.list, entry) {
         if (timer->state != EXECUTE_STATE_RUNNABLE)
             break;
 
@@ -285,23 +289,25 @@ static void core_timers_update(uint64_t ticks, void *data) {
         if (core_timers_compare(timer->timestamp, ticks) > 0)
             break;
 
+        dbg_print("[trigger], timer=0x%lx, timeout=%lu, now=%lu", (unsigned long)timer,
+                  timer->timestamp, ticks);
         if (timer->state == EXECUTE_STATE_RUNNABLE) {
             timer->state = EXECUTE_STATE_EXECUTING;
-            pthread_mutex_unlock(&timers->lock);
+            pthread_mutex_unlock(&timers.lock);
             reschedule = timer->timer.callback(ticks, timer->timer.data);
-            pthread_mutex_lock(&timers->lock);
+            pthread_mutex_lock(&timers.lock);
         }
 
         switch (timer->state) {
         case EXECUTE_STATE_EXECUTING:
             timer_remove_locked(timer);
-            timer->timestamp = reschedule & timers->mask;
+            timer->timestamp = reschedule & timers.mask;
             if (timer->timestamp)
                 timer_arm_locked(timer);
             else
                 timer_disarm_locked(timer);
 
-            dump("UPDATE", ticks, timer, &timers->armed);
+            dump("UPDATE", ticks, timer, &timers.armed);
             break;
         case EXECUTE_STATE_TO_REMOVE:
             timer_remove_locked(timer);
@@ -312,7 +318,7 @@ static void core_timers_update(uint64_t ticks, void *data) {
         }
     }
 
-    pthread_mutex_unlock(&timers->lock);
+    pthread_mutex_unlock(&timers.lock);
     return;
 }
 
