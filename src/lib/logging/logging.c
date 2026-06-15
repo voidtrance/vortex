@@ -33,7 +33,48 @@
 #include <sys/queue.h>
 #include <pthread.h>
 #include <debug.h>
+#include <cache.h>
 #include "logging.h"
+
+#define BLACK "\x1b[38;2;0;0;0m"
+#define BLUE "\x1b[38;2;0;0;255m"
+#define BRONZE "\x1b[38;2;177;86;15m"
+#define CYAN "\x1b[38;2;91;141;222m"
+#define EMERALD "\x1b[38;2;80;200;120m"
+#define GRAY "\x1b[38;2;128;128;128m"
+#define GREEN "\x1b[38;2;0;255;0m"
+#define LIGHT_BLUE "\x1b[38;2;0;128;255m"
+#define LIGHT_GRAY "\x1b[38;2;224;224;224m"
+#define MAGENTA "\x1b[38;2;255;0;255m"
+#define ORANGE "\x1b[38;2;255;128;0m"
+#define RED "\x1b[38;2;255;0;0m"
+#define SKY_BLUE "\x1b[38;2;102;178;255m"
+#define WHITE "\x1b[38;2;255;255;255m"
+#define YELLOW "\x1b[38;2;255;255;0m"
+
+#define BG_BLACK "\x1b[48;2;0;0;0m"
+#define BG_BLUE "\x1b[48;2;0;0;255m"
+#define BG_BRONZE "\x1b[48;2;177;86;15m"
+#define BG_CYAN "\x1b[48;2;91;141;222m"
+#define BG_EMERALD "\x1b[48;2;80;200;120m"
+#define BG_GRAY "\x1b[48;2;128;128;128m"
+#define BG_GREEN "\x1b[48;2;0;255;0m"
+#define BG_LIGHT_BLUE "\x1b[48;2;0;128;255m"
+#define BG_LIGHT_GRAY "\x1b[48;2;224;224;224m"
+#define BG_MAGENTA "\x1b[48;2;255;0;255m"
+#define BG_ORANGE "\x1b[48;2;255;128;0m"
+#define BG_RED "\x1b[48;2;255;0;0m"
+#define BG_SKY_BLUE "\x1b[48;2;102;178;255m"
+#define BG_WHITE "\x1b[48;2;255;255;255m"
+#define BG_YELLOW "\x1b[48;2;255;255;0m"
+
+#define END "\x1b[0m"
+
+static char *colors[] = {
+    [LOG_LEVEL_NOTSET] = "",       [LOG_LEVEL_DEBUG] = BLUE,     [LOG_LEVEL_VERBOSE] = CYAN,
+    [LOG_LEVEL_INFO] = YELLOW,     [LOG_LEVEL_WARNING] = ORANGE, [LOG_LEVEL_ERROR] = RED,
+    [LOG_LEVEL_CRITICAL] = BG_RED, [LOG_LEVEL_MAX] = "",
+};
 
 typedef struct log_token {
     const char *token;
@@ -431,17 +472,17 @@ int vortex_logger_log(vortex_logger_t *logger, log_level_t level,
      * message is added while the lock is dropped, it OK.
      */
     elapsed_time = get_elapsed_time_ns(log_setup);
-    s = snprintf(string, sizeof(string), "%.4f ", elapsed_time / 1000.0);
+    s = snprintf(string, sizeof(string), "%s%.4f%s ", GREEN, elapsed_time / 1000.0, END);
     if (log_setup->extended) {
-        s += snprintf(string + s, sizeof(string) - s,
-                      "[%s] %s:%zu: ", log_level_names[level], filename, line);
+        s += snprintf(string + s, sizeof(string) - s, "[%s%s%s] %s:%zu: ", colors[level],
+                      log_level_names[level], END, filename, line);
     } else {
-        s += snprintf(string + s, sizeof(string) - s, "[%s] ",
-                      log_level_names[level]);
+        s += snprintf(string + s, sizeof(string) - s, "[%s%s%s] ", colors[level],
+                      log_level_names[level], END);
     }
 
     if (logger->prefix)
-        s += snprintf(string + s, sizeof(string) - s, "%s: ", logger->prefix);
+        s += snprintf(string + s, sizeof(string) - s, "%s%s%s: ", CYAN, logger->prefix, END);
 
     va_start(args, format);
     s += vsnprintf(string + s, sizeof(string) - s, format, args);

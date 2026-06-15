@@ -18,7 +18,7 @@ pthreads = dependency('threads')
 core_logging_include = include_directories('.')
 core_logging = library('logging', ['logging.c'],
                         include_directories: [core_include_general, core_include_general],
-                        dependencies: [pthreads],
+                        dependencies: [pthreads, core_utils_dep],
                         install: true,
                         install_dir: py.get_install_dir(pure: false) / 'vortex/core/lib/logging')
 core_logging_dep = declare_dependency(link_with: core_logging,
