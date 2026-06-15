@@ -20,18 +20,16 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include <errno.h>
-#include <sys/queue.h>
 #include <debug.h>
 #include <stdint.h>
+#include <dlist.h>
+#include <utils.h>
 #include "cache.h"
 
 #define OBJECT_CACHE_TAG 0xdeadbeefc0dedead
 
-#define container_of(ptr, member, type)                                 \
-    ({ void *__ptr = (void *)ptr; ((type *)(__ptr - offsetof(type, member))); })
-
 struct cache_object {
-    STAILQ_ENTRY(cache_object) entry;
+    dlist_t entry;
     uint64_t tag;
     object_cache_t *cache;
     void *ptr;
@@ -40,15 +38,13 @@ struct cache_object {
 #endif
 };
 
-STAILQ_HEAD(cache_object_list, cache_object);
-
 struct object_cache {
     void **memory;
     size_t page_size;
     size_t segment;
     size_t num_segments;
-    struct cache_object_list objects;
-    struct cache_object_list alloced;
+    dlist_t objects;
+    dlist_t alloced;
     size_t num_objects;
     size_t object_size;
     pthread_mutex_t lock;
@@ -59,9 +55,13 @@ static bool object_cache_fill(object_cache_t *cache) {
     void *new_memory;
     void *ptr;
     size_t limit;
+    size_t memory_size;
+    size_t batch = 64;
+    size_t per_object_size = cache->object_size + sizeof(struct object_cache);
 
-    /* Allocate a page at a time. */
-    new_memory = calloc(1, cache->page_size);
+    /* Allocate enough space for at least 64 objects. */
+    memory_size = max(cache->page_size, batch * per_object_size);
+    new_memory = calloc(1, memory_size);
     if (!new_memory)
         return false;
 
@@ -86,7 +86,7 @@ static bool object_cache_fill(object_cache_t *cache) {
         }
     }
 
-    limit = cache->page_size - sizeof(struct cache_object) - cache->object_size;
+    limit = memory_size - per_object_size;
     for (ptr = new_memory; ptr < new_memory + limit; cache->num_objects++) {
         struct cache_object *object_entry = (struct cache_object *)ptr;
 
@@ -98,7 +98,7 @@ static bool object_cache_fill(object_cache_t *cache) {
         object_entry->refcount = 0;
 #endif
         ptr += cache->object_size;
-        STAILQ_INSERT_TAIL(&cache->objects, object_entry, entry);
+        dlist_elem_insert_tail(&object_entry->entry, &cache->objects);
     }
 
     cache->memory[cache->segment++] = new_memory;
@@ -121,8 +121,8 @@ int object_cache_create(object_cache_t **cache_ptr, size_t object_size) {
         cache->num_objects = 0;
         cache->refcount = 1;
         cache->memory = NULL;
-        STAILQ_INIT(&cache->objects);
-        STAILQ_INIT(&cache->alloced);
+        DLIST_INITIALIZE(&cache->objects);
+        DLIST_INITIALIZE(&cache->alloced);
         pthread_mutex_init(&cache->lock, NULL);
 
         if (!object_cache_fill(cache)) {
@@ -145,15 +145,15 @@ void *object_cache_alloc(object_cache_t *cache) {
     struct cache_object *object;
 
     pthread_mutex_lock(&cache->lock);
-    if (STAILQ_EMPTY(&cache->objects)) {
+    if (dlist_is_empty(&cache->objects)) {
         if (!object_cache_fill(cache)) {
             pthread_mutex_unlock(&cache->lock);
             return NULL;
         }
     }
 
-    object = STAILQ_FIRST(&cache->objects);
-    STAILQ_REMOVE(&cache->objects, object, cache_object, entry);
+    object = dlist_first_elem_container_or_null(&cache->objects, struct cache_object, entry);
+    dlist_elem_remove(&object->entry);
 
 #ifdef VORTEX_DEBUG
     if (object->refcount) {
@@ -164,7 +164,7 @@ void *object_cache_alloc(object_cache_t *cache) {
     object->refcount++;
 #endif
 
-    STAILQ_INSERT_TAIL(&cache->alloced, object, entry);
+    dlist_elem_insert_tail(&object->entry, &cache->alloced);
     cache->refcount++;
     pthread_mutex_unlock(&cache->lock);
     return object->ptr;
@@ -191,7 +191,7 @@ void object_cache_free(void *object) {
 
     pthread_mutex_lock(&cache->lock);
 #ifdef VORTEX_DEBUG
-    STAILQ_FOREACH(__obj, &cache->alloced, entry)
+    dlist_for_each_elem_container(__obj, &cache->alloced, entry)
         found |= __obj->ptr == object;
 
     if (!found) {
@@ -201,8 +201,8 @@ void object_cache_free(void *object) {
 
     obj->refcount--;
 #endif
-    STAILQ_REMOVE(&cache->alloced, obj, cache_object, entry);
-    STAILQ_INSERT_TAIL(&cache->objects, obj, entry);
+    dlist_elem_remove(&obj->entry);
+    dlist_elem_insert_tail(&obj->entry, &cache->objects);
     cache->refcount--;
     pthread_mutex_unlock(&cache->lock);
 }
