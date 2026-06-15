@@ -73,7 +73,7 @@ class VortexLogger:
         return core_logging.lib.vortex_logger_set_prefix(self._logger, prefix.encode('ascii'))
 
     def log(self, level, msg, *args, **kwargs):
-        # Variadic arguments are supported with CFFI so we cound have
+        # Variadic arguments are supported with CFFI so we could have
         # the C function do the formatting. However, in order to use
         # variadic arguments, each one has to be cast to a C type.
         # This means that each argument would have to be checked and
@@ -188,17 +188,20 @@ def get_level_value(level):
 
     return level
 
-def add_output_stream(stream, level):
+def add_output_stream(stream, level=None):
     """
     Add an additional output stream.
 
     :param stream: An open file descriptor of the stream.
     :return: 0 on success, or an error code of failure.
     """
-    level = get_level_value(level)
-
     if not isinstance(stream, int):
         return errno.EINVAL
+
+    if level is not None:
+        level = get_level_value(level)
+    else:
+        level = get_level()
 
     return core_logging.lib.vortex_logging_add_stream(stream, level)
 
