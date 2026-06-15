@@ -1,6 +1,8 @@
 # Vortex GCode Emulator
 ![logo](/docs/images/vortex.png)
 
+[![Build Check](https://github.com/voidtrance/vortex/actions/workflows/build-check.yml/badge.svg)](https://github.com/voidtrance/vortex/actions/workflows/build-check.yml)
+
 ## Overview
 Vortex is a software-define CNC machine emulator. It provides a set
 of emulated objects that can be instanciated to make up any HW
