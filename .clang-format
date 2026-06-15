@@ -65,7 +65,12 @@ DisableFormat: false
 ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: false
 ForEachMacros:
-  - 'CIRCLEQ_FOREACH'
+  - 'dlist_for_each_elem'
+  - 'dlist_for_each_elem_container'
+  - 'dlist_for_each_elem_container_start_from'
+  - 'dlist_for_each_elem_container_start_reverse'
+  - 'dlist_for_each_elem_container_continue_from'
+  - 'dlist_for_each_elem_container_safe'
   - 'CIRCLEQ_FOREACH_SAFE'
   - 'STAILQ_FOREACH'
   - 'LIST_FOREACH'
