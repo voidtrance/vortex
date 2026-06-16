@@ -1,4 +1,4 @@
-name: vortex-build-check-all
+name: Build Check
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - id: build-deps
         uses: ./.github/actions/build-install-deps
       - name: Build emulator ${{ steps.build-deps.outputs.vortex-version }}
-        run: make DEBUG=1 VORTEX_TIMER_DEBUG=1 VORTEX_TIMER_DEBUG_LISTS=1
+        run: make DEBUG=1 TIMER_DEBUG=1 TIMER_DEBUG_LISTS=1
   build-arm:
     runs-on: ubuntu-24.04-arm
     steps:
@@ -29,6 +29,6 @@ jobs:
       - id: build-deps
         uses: ./.github/actions/build-install-deps
       - name: Build emulator ${{ steps.build-deps.outputs.vortex-version }}
-        run: make DEBUG=1 VORTEX_TIMER_DEBUG=1 VORTEX_TIMER_DEBUG_LISTS=1
+        run: make DEBUG=1 TIMER_DEBUG=1 TIMER_DEBUG_LISTS=1
 
   

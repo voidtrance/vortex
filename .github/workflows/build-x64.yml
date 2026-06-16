@@ -2,7 +2,6 @@ name: vortex-build-x64
 
 on:
   push:
-    branches: [ "master" ]
     tags:
       - 'v*'
   workflow_call:
@@ -28,6 +27,7 @@ permissions:
 
 jobs:
   build:
+    if: github.event.base_ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     outputs:
       output1: ${{ steps.upload-artifact.outputs.artifact-url }}

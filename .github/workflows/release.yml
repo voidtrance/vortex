@@ -16,6 +16,7 @@ jobs:
     uses: ./.github/workflows/build-arm.yml
 
   publish-release:
+    if: github.event.base_ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     needs: [build-dep-x64, build-dep-arm]
     steps:

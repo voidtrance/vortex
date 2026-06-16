@@ -285,7 +285,7 @@ static void core_timers_update(uint64_t ticks, void *data) {
         if (timer->state != EXECUTE_STATE_RUNNABLE)
             break;
 
-        dump("CHECK", ticks, timer, &timers->armed);
+        dump("CHECK", ticks, timer, &timers.armed);
         if (core_timers_compare(timer->timestamp, ticks) > 0)
             break;
 

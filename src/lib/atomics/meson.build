@@ -27,6 +27,7 @@ py_atomics = custom_target('_vortex_atomics', output: '_vortex_atomics.so',
                                     ['-I', '@CURRENT_SOURCE_DIR@', 
                                     '-L', '@OUTDIR@', '-O', '@OUTDIR@'],
                         build_by_default: true,
+                        depends: [core_atomics],
                         install: true,
                         install_dir: py.get_install_dir(pure: false) / 'vortex/core/lib/atomics')
 py.install_sources(['__init__.py'], subdir: 'vortex/core/lib/atomics')

@@ -44,6 +44,9 @@ ifeq ($(DEBUG),1)
 	CFLAGS += -DVORTEX_DEBUG -g
 	ifeq ($(TIMER_DEBUG),1)
 		CFLAGS += -DVORTEX_TIMERS_DEBUG
+		ifeq ($(TIMER_DEBUG_LISTS),1)
+			CFLAGS += -DVORTEX_TIMERS_DEBUG_LISTS
+		endif
 	endif
 	MESON_BUILD_OPTS=--config-settings=setup-args="-Dbuildtype=debug"
 endif

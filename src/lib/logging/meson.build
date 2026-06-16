@@ -24,11 +24,12 @@ core_logging = library('logging', ['logging.c'],
 core_logging_dep = declare_dependency(link_with: core_logging,
                                       include_directories: core_logging_include)
 
-py_kinematics = custom_target('_vortex_logging', output: '_vortex_logging.so',
+py_logging = custom_target('_vortex_logging', output: '_vortex_logging.so',
                         input : root / 'src/lib/logging/_vortex_logging.py',
                         command : [py, '@INPUT@', '-I', '@CURRENT_SOURCE_DIR@', 
                                         '-L', '@OUTDIR@', '-O', '@OUTDIR@'],
                         build_by_default: true,
+                        depends: [core_logging],
                         install: true,
                         install_dir: py.get_install_dir(pure: false) / 'vortex/core/lib/logging')
 py.install_sources(['__init__.py'], subdir: 'vortex/core/lib/logging')
