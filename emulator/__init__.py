@@ -57,7 +57,7 @@ class Emulator:
         self._frontend.set_sequential_mode(sequential)
         self._frontend.set_kinematics_model(self._kinematics)
         self._frontend.set_controller(self._controller)
-        self._command_queue = self._frontend.get_queue()
+        self._command_queue = command_queue
         self._run_emulation = True
         self._timer_frequency = 0
         self._update_frequency = 0
@@ -108,7 +108,7 @@ class Emulator:
             try:
                 command = self._command_queue.get()
             except ShutDown:
-                continue
+                break
             ret = self._controller.exec_command(command.id, command.obj_id,
                                                 command.cmd_id, command.opts)
             if ret:
@@ -118,8 +118,13 @@ class Emulator:
     def stop(self):
         if self._server is not None:
             self._server.stop()
-        self._frontend.stop()
-        self._controller.stop()
+        # If any of the threads have raised an exception,
+        # we can't join them. So, just ignore that error.
+        try:
+            self._frontend.stop()
+            self._controller.stop()
+        except RuntimeError:
+            pass
         fcntl.flock(self.lock_fd, fcntl.LOCK_UN)
         self.lock_fd.close()
         unlink(self.PID_LOCK_PATH)

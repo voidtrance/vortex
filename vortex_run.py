@@ -103,14 +103,28 @@ def emulator_exception_handler(exc_class, exc, tb):
     co = frame.f_code
     logging.critical(f"Exception occured at {co.co_name}:{frame.f_lineno} [{co.co_filename}]:")
     logging.critical(f"     Exception: {str(exc)}")
-    if logging.get_level() <= logging.DEBUG:
-        lines = traceback.format_tb(tb)
-        for entry in lines:
-            for line in entry.split("\n"):
+    lines = traceback.format_tb(tb)
+    logging.critical("")
+    for entry in lines:
+        for line in entry.split("\n"):
+            if line.strip():
                 logging.critical("   " + line.rstrip())
 
 def emulator_thread_exception_handler(args):
     emulator_exception_handler(args.exc_type, args.exc_value, args.exc_traceback)
+    main_thread = threading.main_thread()
+    frames = sys._current_frames()
+    thread_id = main_thread.ident
+    if thread_id not in frames:
+        return
+    frame = frames[thread_id]
+    while frame.f_back is not None and frame.f_code.co_name != "main":
+        frame = frame.f_back
+    emulation = frame.f_locals.get("emulation", None)
+    if not emulation:
+        return
+    logging.verbose("Stopping emulation due to exception.")
+    emulation._command_queue.shutdown(immediate=True)
 
 def main():
     parser = create_arg_parser()
