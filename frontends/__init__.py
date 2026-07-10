@@ -202,6 +202,9 @@ class BaseFrontend:
             self.wait_for_command(cmd_id)
         return cmd_id
 
+    def is_command_complete(self, cmd_id):
+        return self._queue.is_complete(cmd_id)
+
     def wait_for_command(self, cmd_set):
         return self._queue.wait_for_command(cmd_set)
 

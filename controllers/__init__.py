@@ -442,7 +442,7 @@ class Controller(core.VortexCore):
         #    object->exec_command()
         #       CORE_CMD_COMPLETE()
         #                                  core_process_completions()
-        #                                     complete_cm()
+        #                                     complete_cmd()
         #                                        self.command_complete()
         #       return
         #    return

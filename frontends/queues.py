@@ -75,11 +75,14 @@ class CommandQueue(queue.Queue):
             with self.__lock:
                 self.__comp_queue[cmd_id] = QueueCompletion(cmd, result, data)
 
+    def is_complete(self, cmd_id):
+        with self.__lock:
+            return cmd_id in self.__comp_queue
+
     def wait_for_command(self, cmd_ids):
-        if isinstance(cmd_ids, int):
-            cmd_set = [cmd_ids]
-        if not isinstance(cmd_ids, (list, tuple, set)):
-            cmd_set = list(cmd_set)
+        cmd_set = cmd_ids
+        if isinstance(cmd_set, (list, tuple, set)):
+            cmd_set = map(int, cmd_set)
         cmd_set = set(cmd_set)
         comp_set = set()
         completed = []

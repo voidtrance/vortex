@@ -51,7 +51,6 @@ class GCodeFrontend(BaseFrontend):
             super().respond(status, data)
 
     def complete_command(self, id, result, data=None):
-        self.log.debug(f"Command {id} complete: {result}")
         super().complete_command(id, result, data)
         super().respond(CommandStatus.COMPLETE, Completion(id, result, data))
 

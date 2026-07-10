@@ -52,8 +52,7 @@ class DirectFrontend(BaseFrontend):
         else:
             super().respond(CommandStatus.QUEUED, cmd_id)
 
-    def complete_command(self, id, result, data=None):
-        self.log.debug(f"Command {id} complete: {result}")
+    def complete_command(self, id, result, data):
         super().complete_command(id, result, data)
         super().respond(CommandStatus.COMPLETE, Completion(id, result, data))
 
