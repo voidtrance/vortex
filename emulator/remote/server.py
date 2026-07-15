@@ -198,7 +198,12 @@ class RemoteThread(threading.Thread):
                 log.debug(f"Received request: {request}")
                 response = self._process_request(request)
                 log.debug(f"Sending response: {response}")
-                self._conn.sendall(pickle.dumps(response))
+                try:
+                    self._conn.sendall(pickle.dumps(response))
+                except IOError as e:
+                    log.warning("Remote connection unexpected disconnected")
+                    self.stop()
+                    return
                 l = len(pickle.dumps(request))
                 data = data[l:]
     def get_object_list(self):
