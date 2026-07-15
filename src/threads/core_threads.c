@@ -490,8 +490,10 @@ void core_threads_stop(void) {
     }
 
     dlist_for_each_elem_container(thread, &core_threads, entry) {
-        if (thread->type != CORE_THREAD_TYPE_UPDATE && thread->thread_id)
+        if (thread->type != CORE_THREAD_TYPE_UPDATE && thread->thread_id) {
             pthread_join(thread->thread_id, NULL);
+            thread->thread_id = 0;
+        }
     }
 
     /*
@@ -502,6 +504,7 @@ void core_threads_stop(void) {
         if (thread->type == CORE_THREAD_TYPE_UPDATE && thread->thread_id) {
             set_value(thread->args.control, THREAD_CONTROL_STOP);
             pthread_join(thread->thread_id, NULL);
+            thread->thread_id = 0;
             close(thread->args.kmod_fd);
             break;
         }
@@ -639,6 +642,5 @@ void core_threads_destroy(void) {
         if (thread->type == CORE_THREAD_TYPE_OBJECT)
             free((char *)thread->args.args.object.name);
         free(thread);
-        thread = next;
     }
 }

@@ -19,6 +19,7 @@ import select
 import os
 import pickle
 import threading
+from queue import ShutDown
 import vortex.core.lib.logging as logging
 from vortex.core import ObjectKlass
 from vortex.frontends.lib import create_pty
@@ -197,7 +198,10 @@ class BaseFrontend:
             opts = {_o:_v for _o, _v in (s.split('=') for s in opts.split(','))} if opts else {}
         elif not isinstance(opts, dict):
             return False
-        cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, callback)
+        try:
+            cmd_id, cmd = self._queue.queue_command(obj_id, cmd_id, opts, callback)
+        except ShutDown:
+            return False
         if self._run_sequential:
             self.wait_for_command(cmd_id)
         return cmd_id

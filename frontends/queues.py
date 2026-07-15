@@ -42,6 +42,7 @@ class CommandQueue(queue.Queue):
         self.__lock = Lock()
         self.__cmd_queue = {}
         self.__comp_queue = {}
+        self.__is_shutdown = False
 
     def put(self, command):
         if not isinstance(command, Command):
@@ -83,18 +84,27 @@ class CommandQueue(queue.Queue):
         cmd_set = cmd_ids
         if isinstance(cmd_set, (list, tuple, set)):
             cmd_set = map(int, cmd_set)
+        elif isinstance(cmd_set, int):
+            cmd_set = [cmd_set]
         cmd_set = set(cmd_set)
         comp_set = set()
         completed = []
         while not cmd_set & comp_set:
             with self.__lock:
                 comp_set = set(self.__comp_queue.keys())
+                if self.__is_shutdown:
+                    return [Completion(id, -1, None) for id in self.__cmd_queue]
                 for cmd_id in (cmd_set & comp_set):
                     completion = self.__comp_queue.pop(cmd_id)
                     completed.append(Completion(completion.command.id,
                                                 completion.result,
                                                 completion.data))
         return completed
+
+    def shutdown(self, immediate=False):
+        if not self.__is_shutdown:
+            super().shutdown(immediate)
+            self.__is_shutdown = True
 
     def clear(self):
         self.shutdown(True)
@@ -103,7 +113,6 @@ class CommandQueue(queue.Queue):
                 if cmd.callback:
                     cmd.callback(cmd.id, -1, None)
         self.__cmd_count = 0
-        self.is_shutdown = False
 
     @property
     def size(self):

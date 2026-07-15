@@ -17,6 +17,7 @@ import fcntl
 import cProfile
 import pstats
 from os import strerror, getpid, unlink
+from os.path import exists
 from queue import ShutDown
 import vortex.core.lib.logging as logging
 import vortex.emulator.remote.server as remote_server
@@ -116,6 +117,10 @@ class Emulator:
                 self._frontend.complete_command(command.id, ret)
     
     def stop(self):
+        if not self._command_queue.is_shutdown:
+            self._command_queue.shutdown(True)
+        if not exists(self.PID_LOCK_PATH):
+            return
         if self._server is not None:
             self._server.stop()
         # If any of the threads have raised an exception,
@@ -123,6 +128,7 @@ class Emulator:
         try:
             self._frontend.stop()
             self._controller.stop()
+            self._controller.cleanup()
         except RuntimeError:
             pass
         fcntl.flock(self.lock_fd, fcntl.LOCK_UN)
@@ -134,6 +140,3 @@ class Emulator:
             stats.sort_stats(pstats.SortKey.TIME)
             stats.print_stats()
 
-    def __del__(self):
-        if hasattr(self, "_controller") and self._controller:
-            self._controller.cleanup()

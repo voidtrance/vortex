@@ -102,7 +102,7 @@ def emulator_exception_handler(exc_class, exc, tb):
     frame = _tb.tb_frame
     co = frame.f_code
     logging.critical(f"Exception occured at {co.co_name}:{frame.f_lineno} [{co.co_filename}]:")
-    logging.critical(f"     Exception: {str(exc)}")
+    logging.critical(f"     Exception: [{type(exc).__name__}] {str(exc)}")
     lines = traceback.format_tb(tb)
     logging.critical("")
     for entry in lines:
