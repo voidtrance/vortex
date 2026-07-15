@@ -174,6 +174,9 @@ class RemoteThread(threading.Thread):
                 self._log_threads.pop(thread_id)
             else:
                 response.status = errno.ENOENT
+        elif request.type == api.RequestType.HEARTBEAT:
+            response.status = 0
+            response.data = ()
         return response
     def _cmd_complete(self, cmd_id, result, data=None):
         return

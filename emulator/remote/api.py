@@ -32,6 +32,7 @@ class RequestType(enum.IntEnum):
     COMMAND_STATUS = enum.auto()
     OPEN_LOG_STREAM = enum.auto()
     CLOSE_LOG_STREAM = enum.auto()
+    HEARTBEAT = enum.auto()
 
     
 class Request(Namespace):
