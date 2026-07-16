@@ -1,4 +1,4 @@
-name: vortex-build-x64
+name: vortex-build-x86
 
 on:
   push:

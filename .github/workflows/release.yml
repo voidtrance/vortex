@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  build-dep-x64:
-    uses: ./.github/workflows/build-x64.yml
+  build-dep-x86:
+    uses: ./.github/workflows/build-x86.yml
 
   build-dep-arm:
     uses: ./.github/workflows/build-arm.yml
@@ -18,7 +18,7 @@ jobs:
   publish-release:
     if: github.event.base_ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    needs: [build-dep-x64, build-dep-arm]
+    needs: [build-dep-x86, build-dep-arm]
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -28,7 +28,7 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v5
         with:
-          artifact-ids: ${{ needs.build-dep-arm.outputs.artifact-id}}, ${{ needs.build-dep-x64.outputs.artifact-id }}
+          artifact-ids: ${{ needs.build-dep-arm.outputs.artifact-id}}, ${{ needs.build-dep-x86.outputs.artifact-id }}
           merge-multiple: true
       - name: Create GitHub Release
         id: create-release
@@ -40,6 +40,6 @@ jobs:
           prerelease: false
           repository: voidtrance/vortex
           files: |
-            vortex-${{ needs.build-dep-x64.outputs.vortex-version }}-${{ needs.build-dep-x64.outputs.build-arch }}.tar.bz2
+            vortex-${{ needs.build-dep-x86.outputs.vortex-version }}-${{ needs.build-dep-x86.outputs.build-arch }}.tar.bz2
             vortex-${{ needs.build-dep-arm.outputs.vortex-version }}-${{ needs.build-dep-arm.outputs.build-arch }}.tar.bz2
 
