@@ -85,14 +85,14 @@ def create_arg_parser():
                        help="""Enable extended debugging. When enabled, log
                        messages will also contain the source of the message
                        (filename and line number). """)
-    debug.add_argument("-R", "--remote", action="store_true",
-                       help="""Start remote API server thread. This thread
-                       processes requests from the monitoring application.""")
     debug.add_argument("--enable-profiling", action="store_true")
 
     parser.add_argument("-C", "--config", required=True,
                         help="""HW object configuration file. This argument
                         is required.""")
+    parser.add_argument("-R", "--remote", action="store_true",
+                        help="""Start remote API server thread. This thread
+                        processes requests from the monitoring application.""")
     return parser
 
 def emulator_exception_handler(exc_class, exc, tb):
