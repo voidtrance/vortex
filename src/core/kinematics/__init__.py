@@ -93,7 +93,7 @@ class Kinematics:
     def compute_motor_movement(self, cur_position, new_position):
         distance = {x: getattr(new_position, x) - getattr(cur_position, x) \
                     for x in cur_position}
-        delta = self._ffi.new("coordinates_t *", distance)
-        movement = self._ffi.new("coordinates_t *")
+        delta = self._ffi.new("kinematics_coordinates_t *", distance)
+        movement = self._ffi.new("kinematics_coordinates_t *")
         ret = self._lib.kinematics_get_motor_movement(delta, movement)
         return movement
