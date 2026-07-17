@@ -117,6 +117,18 @@ install: wheel
 gdb:
 	$(GDB) $(PYTHON_DEBUG) -ex 'r ./vortex_run.py $(GDB_OPTS)'
 
+action-test:
+	@if [ -z "$(ACT)" ]; then \
+		echo "ERROR: Path to 'act' missing"; \
+		exit 1; \
+	fi
+	@mkdir -p /tmp/artifacts
+	@if ! sudo systemctl is-active -q docker.service; then \
+		sudo systemctl start docker.service; \
+	fi
+	sudo $(ACT) -W .github/workflows/build-check.yml -j build-x86 \
+		--artifact-server-path /tmp/artifacts
+
 clean:
 	$(MAKE) -C /lib/modules/$(KVER)/build M=$${PWD}/src/kmod clean
 	rm -rf build dist builddir
