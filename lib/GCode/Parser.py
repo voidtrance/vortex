@@ -1,5 +1,5 @@
 # vortex - GCode machine emulator
-# Copyright (C) 2024-2025 Mitko Haralanov
+# Copyright (C) 2026 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,6 +13,20 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-subdir('GCode')
-py.install_sources(['constants.py', 'ctypes_helpers.py',
-                    'ext_enum.py', 'utils.py'], subdir: 'vortex/lib')
+from . import GCode
+from typing import *
+
+class GCodeParser:
+    def __init__(self):
+        return
+
+    def parse(self, gcode : str) -> GCode.GCodeCommand:
+        parsed = None
+        if gcode.strip() and not gcode.startswith((';', '/', '#')):
+            parsed = GCode.GCodeCommand(gcode)
+        return parsed
+
+    def parse_file(self, filename : str) -> Generator[GCode.GCodeCommand]:
+        with open(filename, 'r') as fd:
+            for line in fd:
+                yield self.parse(line)

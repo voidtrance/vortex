@@ -1,5 +1,5 @@
 # vortex - GCode machine emulator
-# Copyright (C) 2024-2025 Mitko Haralanov
+# Copyright (C) 2026 Mitko Haralanov
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,6 +13,5 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-subdir('GCode')
-py.install_sources(['constants.py', 'ctypes_helpers.py',
-                    'ext_enum.py', 'utils.py'], subdir: 'vortex/lib')
+py.install_sources('__init__.py', 'GCode.py', 'Parser.py',
+                   subdir: 'vortex/lib/GCode')
