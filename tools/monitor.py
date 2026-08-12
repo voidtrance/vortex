@@ -618,7 +618,7 @@ class MonitorWindow(Gtk.ApplicationWindow):
             label.set_xalign(0.0)
             selector_button_grid.attach(label, 0, i, 1, 1)
             switch = Gtk.Switch()
-            switch.set_active(False)
+            switch.set_active(True)
             switch.connect("notify::active", self.object_frame_toggle, klass)
             selector_button_grid.attach(switch, 1, i, 1, 1)
             setattr(self, f"{klass}_selector_switch", switch)
@@ -780,7 +780,11 @@ class MonitorWindow(Gtk.ApplicationWindow):
             set_widget_margin(self.klass_frames[klass].get_child(), 5)
             if objects.objects[klass]:
                 switch = getattr(self, f"{klass}_selector_switch")
-                switch.set_active(True)
+                # Toggle the frame visibility switch to trigger the
+                # update signal.
+                state = switch.get_active()
+                switch.set_active(not state)
+                switch.set_active(state)
             for i, obj in enumerate(objects.objects[klass]):
                 obj_set.append((obj["id"], obj["name"]))
                 kclass = KLASS_CLASS_MAP.get(klass, KlassObject)
@@ -826,8 +830,7 @@ class MonitorWindow(Gtk.ApplicationWindow):
     def clear(self):
         for klass, frame in self.klass_frames.items():
             frame.clear()
-            switch = getattr(self, f"{klass}_selector_switch")
-            switch.set_active(False)
+            frame.set_visible(False)
         self.set_emulation_time("", "")
         request = api.Request(api.RequestType.CLOSE_LOG_STREAM)
         request.data = self.log_thread_id
