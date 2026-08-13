@@ -92,8 +92,7 @@ static void probe_update(core_object_t *object, uint64_t ticks,
             continue;
 
         probe->position[i] = *(((double *)&status.position) + i) + probe->offsets[i];
-        probe->triggered &= (probe->position[i] >= (probe->offsets[i] - probe->range)) &&
-                            (probe->position[i] <= (probe->offsets[i] + probe->range));
+        probe->triggered &= probe->position[i] <= probe->range;
     }
 
     probe->pin_word = !!probe->triggered;
