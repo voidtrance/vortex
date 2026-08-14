@@ -107,7 +107,6 @@ class CommandQueue(queue.Queue):
             self.__is_shutdown = True
 
     def clear(self):
-        self.shutdown(True)
         with self.__lock:
             for cmd in self.get():
                 if cmd.callback:
