@@ -85,7 +85,13 @@ def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser
             if axis != AxisType.Z or name == "z":
                 s = f"endstop endstop{name.upper()}"
                 econfig.add_section(s)
-                pe = kconfig.getfloat(section, "position_endstop")
+                pin = parse_pin(kconfig.get(section, "endstop_pin"))
+                print(pin)
+                if "virtual" in pin:
+                    pe = 0.0
+                else:
+                    pe = kconfig.getfloat(section, "position_endstop")
+                    econfig.set(s, "pin", pin)
                 minp = kconfig.getfloat(section, "position_min")
                 maxp = kconfig.getfloat(section, "position_max")
                 if abs(minp - pe) < abs(maxp - pe):
@@ -93,8 +99,6 @@ def generate_axis_config(section : str, kconfig : Type[configparser.ConfigParser
                 else:
                     econfig.set(s, "type", "max")
                 econfig.set(s, "axis", str(axis).lower())
-                pin = parse_pin(kconfig.get(section, "endstop_pin"))
-                econfig.set(s, "pin", pin)
 
     s = f"axis axis{str(axis).upper()}"
     if not econfig.has_section(s):
@@ -296,7 +300,7 @@ def generate_probe_config(section : str, kconfig : Type[configparser.ConfigParse
     econfig.add_section(s)
     econfig.set(s, "toolhead", "toolheadA")
     offsets = [kconfig.get(section, "x_offset"), kconfig.get(section, "y_offset"),
-               kconfig.get(section, "z_offset")]
+               str(float(kconfig.get(section, "z_offset")) * -1.)]
     econfig.set(s, "offsets", ",".join(offsets))
     econfig.set(s, "pin", kconfig.get(section, "pin"))
     econfig.set(s, "range", "0.01")
