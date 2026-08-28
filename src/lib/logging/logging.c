@@ -108,9 +108,12 @@ typedef struct log_setup {
     bool extended;
     uint64_t inital_logtime;
     pthread_mutex_t lock;
+    object_cache_t *string_cache;
 } log_setup_t;
 
 static log_setup_t *log_setup = NULL;
+
+#define LOG_STRING_SIZE 8096
 
 static void free_tokens(log_token_t **tokens, size_t n_tokens) {
     for (size_t i = 0; i < n_tokens; i++) {
@@ -277,6 +280,9 @@ int vortex_logging_init(void) {
     log_setup->extended = false;
     STAILQ_INIT(&log_setup->log_streams);
     pthread_mutex_init(&log_setup->lock, NULL);
+    if (object_cache_create(&log_setup->string_cache, LOG_STRING_SIZE))
+        return ENOMEM;
+
     return 0;
 }
 
@@ -436,7 +442,7 @@ int vortex_logger_log(vortex_logger_t *logger, log_level_t level,
     uint64_t elapsed_time;
     log_stream_t *log_stream;
     log_stream_t *next;
-    char string[2048];
+    char *string;
     size_t s = 0;
     bool do_log = true;
 
@@ -466,28 +472,32 @@ int vortex_logger_log(vortex_logger_t *logger, log_level_t level,
     if (!do_log)
         return 0;
 
+    string = object_cache_alloc(log_setup->string_cache);
+
     /*
      * The lock is relase so we dont block other threads while the
      * message is formated. If a filter that would filter out this
      * message is added while the lock is dropped, it OK.
      */
     elapsed_time = get_elapsed_time_ns(log_setup);
-    s = snprintf(string, sizeof(string), "%s%.4f%s ", GREEN, elapsed_time / 1000.0, END);
+    s = snprintf(string, LOG_STRING_SIZE, "%s%.4f%s ", GREEN, elapsed_time / 1000.0, END);
     if (log_setup->extended) {
-        s += snprintf(string + s, sizeof(string) - s, "[%s%s%s] %s:%zu: ", colors[level],
+        s += snprintf(string + s, LOG_STRING_SIZE - s, "[%s%s%s] %s:%zu: ", colors[level],
                       log_level_names[level], END, filename, line);
     } else {
-        s += snprintf(string + s, sizeof(string) - s, "[%s%s%s] ", colors[level],
+        s += snprintf(string + s, LOG_STRING_SIZE - s, "[%s%s%s] ", colors[level],
                       log_level_names[level], END);
     }
 
     if (logger->prefix)
-        s += snprintf(string + s, sizeof(string) - s, "%s%s%s: ", CYAN, logger->prefix, END);
+        s += snprintf(string + s, LOG_STRING_SIZE - s, "%s%s%s: ", CYAN, logger->prefix, END);
 
     va_start(args, format);
-    s += vsnprintf(string + s, sizeof(string) - s, format, args);
+    s += vsnprintf(string + s, LOG_STRING_SIZE - s, format, args);
     va_end(args);
-    s += snprintf(string + s, sizeof(string) - s, "\n");
+    if (s < LOG_STRING_SIZE - 1 && format[strlen(format) - 1] != '\n')
+        string[s++] = '\n';
+    string[s] = '\0';
 
     pthread_mutex_lock(&log_setup->lock);
     log_stream = STAILQ_FIRST(&log_setup->log_streams);
@@ -503,6 +513,7 @@ next_stream:
         log_stream = next;
     }
 
+    object_cache_free(string);
     pthread_mutex_unlock(&log_setup->lock);
     return 0;
 }
@@ -538,6 +549,7 @@ void vortex_logging_deinit(void) {
                     log_setup->filters[i].n_tokens);
     }
 
+    object_cache_destroy(log_setup->string_cache);
     free(log_setup->filters);
     pthread_mutex_destroy(&log_setup->lock);
     free(log_setup);
