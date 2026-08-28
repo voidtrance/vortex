@@ -108,9 +108,12 @@ class CommandQueue(queue.Queue):
 
     def clear(self):
         with self.__lock:
-            for cmd in self.get():
-                if cmd.callback:
-                    cmd.callback(cmd.id, -1, None)
+            try:
+                for cmd in self.get(False):
+                    if cmd.callback:
+                        cmd.callback(cmd.id, -1, None)
+            except queue.Empty:
+                pass
         self.__cmd_count = 0
 
     @property
