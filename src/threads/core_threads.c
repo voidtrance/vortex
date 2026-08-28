@@ -53,7 +53,7 @@ struct core_thread_args {
     core_thread_args_t args;
     struct timespec sleep;
     uint64_t pause_offset;
-    int control;
+    uint8_t control;
     int kmod_fd;
     int ret;
 };
@@ -73,7 +73,7 @@ typedef struct {
     uint64_t controller_ticks;
     uint64_t controller_runtime;
     core_thread_data_t *time_control_thread;
-    int32_t trigger;
+    uint8_t trigger;
 } core_time_data_t;
 
 enum {
@@ -102,13 +102,23 @@ static vortex_logger_t *thread_logger = NULL;
     vortex_logger_log(thread_logger, level, __FILE__, __LINE__, fmt, \
                       ##__VA_ARGS__)
 
-static long timer_update_wait(int32_t *flag) {
-    int32_t wake_value = TIMER_TRIGGER_WAKE;
+#define atomic_load(var) __atomic_load_n((var), __ATOMIC_SEQ_CST)
+#define atomic_store(var, val) ({ __atomic_store_n((var), val, __ATOMIC_SEQ_CST); })
+#define atomic_exhange(var, val)                                                                  \
+    ({                                                                                            \
+        typeof(*(var)) __value_var = (val);                                                       \
+        __atomic_exchange_n((var), &__value_var, val, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); \
+    })
+#define atomic_compare_exchange(var, exp, des)                                           \
+    ({                                                                                   \
+        typeof(*(var)) __value_var = (exp);                                              \
+        __atomic_compare_exchange_n((var), &__value_var, (des), false, __ATOMIC_SEQ_CST, \
+                                    __ATOMIC_SEQ_CST);                                   \
+    })
 
+static long timer_update_wait(uint8_t *flag) {
     while (1) {
-        if (__atomic_compare_exchange_n(flag, &wake_value, TIMER_TRIGGER_WAIT,
-                                        false, __ATOMIC_SEQ_CST,
-                                        __ATOMIC_SEQ_CST))
+        if (atomic_compare_exchange(flag, TIMER_TRIGGER_WAKE, TIMER_TRIGGER_WAIT))
             break;
 
         if (syscall(SYS_futex, flag, FUTEX_WAIT_PRIVATE, TIMER_TRIGGER_WAIT,
@@ -120,11 +130,8 @@ static long timer_update_wait(int32_t *flag) {
     return 0;
 }
 
-static long timer_update_wake(int32_t *flag) {
-    int32_t wait_value = TIMER_TRIGGER_WAIT;
-
-    if (__atomic_compare_exchange_n(flag, &wait_value, TIMER_TRIGGER_WAKE,
-                                    false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+static long timer_update_wake(uint8_t *flag) {
+    if (atomic_compare_exchange(flag, TIMER_TRIGGER_WAIT, TIMER_TRIGGER_WAKE))
         return syscall(SYS_futex, flag, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL,
                        0);
 
@@ -137,18 +144,12 @@ static long timer_update_wake(int32_t *flag) {
 static struct timespec pause_duration = { .tv_sec = 0, .tv_nsec = 50000 };
 
 static inline int do_pause(struct core_thread_args *data) {
-    int pause_val = THREAD_CONTROL_PAUSE;
-    int run_val = THREAD_CONTROL_RUN;
-
-    if (unlikely(__atomic_compare_exchange_n(
-            &data->control, &pause_val, THREAD_CONTROL_PAUSED, false,
-            __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)))
+    if (unlikely(
+            atomic_compare_exchange(&data->control, THREAD_CONTROL_PAUSE, THREAD_CONTROL_PAUSED)))
         return THREAD_CONTROL_PAUSE;
-    else if (unlikely(__atomic_compare_exchange_n(
-                 &data->control, &run_val, THREAD_CONTROL_RUNNING, false,
-                 __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)))
+    else if (atomic_compare_exchange(&data->control, THREAD_CONTROL_RUN, THREAD_CONTROL_RUNNING))
         return THREAD_CONTROL_RUN;
-    return get_value(data->control);
+    return atomic_load(&data->control);
 }
 
 static void *core_time_control_thread(void *arg) {
@@ -160,16 +161,13 @@ static void *core_time_control_thread(void *arg) {
     struct timespec pause_start;
     uint64_t runtime = 0;
     uint64_t loop_count = 0;
-    int run_val = THREAD_CONTROL_RUN;
 
     data->ret = 0;
-    if (!__atomic_compare_exchange_n(&data->control, &run_val,
-                                     THREAD_CONTROL_RUNNING, false,
-                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+    if (!atomic_compare_exchange(&data->control, THREAD_CONTROL_RUN, THREAD_CONTROL_RUNNING))
         pthread_exit(&data->ret);
 
     clock_gettime(THREAD_CLOCK, &global_time_data.start);
-    while (likely(get_value(data->control)) != THREAD_CONTROL_STOP) {
+    while (likely(atomic_load(&data->control)) != THREAD_CONTROL_STOP) {
         int state = do_pause(data);
 
         switch (state) {
@@ -186,8 +184,7 @@ static void *core_time_control_thread(void *arg) {
 
         nanosleep(&data->sleep, NULL);
         clock_gettime(THREAD_CLOCK, &now);
-        runtime =
-            timespec_delta(global_time_data.start, now) - data->pause_offset;
+        runtime = timespec_delta(global_time_data.start, now) - data->pause_offset;
         set_value(global_time_data.controller_runtime, runtime);
         set_value(global_time_data.controller_ticks,
                   (uint64_t)((float)runtime / tick) & controller_clock_mask);
@@ -206,7 +203,6 @@ static void *core_time_control_thread_kmod(void *arg) {
     core_thread_args_t *args = &data->args;
     struct vortex_cmd_init ctrl;
     struct vortex_time_data time_data;
-    int run_val = THREAD_CONTROL_RUN;
     uint64_t loop_count = 0;
     int ret;
 
@@ -221,12 +217,10 @@ static void *core_time_control_thread_kmod(void *arg) {
         pthread_exit(&data->ret);
     }
 
-    if (!__atomic_compare_exchange_n(&data->control, &run_val,
-                                     THREAD_CONTROL_RUNNING, false,
-                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+    if (!atomic_compare_exchange(&data->control, THREAD_CONTROL_RUN, THREAD_CONTROL_RUNNING))
         pthread_exit(&data->ret);
 
-    while (likely(get_value(data->control) != THREAD_CONTROL_STOP)) {
+    while (likely(atomic_load(&data->control) != THREAD_CONTROL_STOP)) {
         if (do_pause(data) == THREAD_CONTROL_PAUSED) {
             nanosleep(&pause_duration, NULL);
             continue;
@@ -251,14 +245,12 @@ static void *core_time_control_thread_kmod(void *arg) {
 static void *core_timer_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
-    int run_val = THREAD_CONTROL_RUN;
 
     data->ret = 0;
-    if (!__atomic_compare_exchange_n(&data->control, &run_val,
-                                     THREAD_CONTROL_RUNNING, false,
-                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+    if (!atomic_compare_exchange(&data->control, THREAD_CONTROL_RUN, THREAD_CONTROL_RUNNING))
         pthread_exit(&data->ret);
-    while (get_value(data->control) != THREAD_CONTROL_STOP) {
+
+    while (atomic_load(&data->control) != THREAD_CONTROL_STOP) {
         timer_update_wait(&global_time_data.trigger);
         args->timer.callback(get_value(global_time_data.controller_ticks),
                              args->timer.data);
@@ -270,14 +262,12 @@ static void *core_timer_thread(void *arg) {
 static void *core_update_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
-    int run_val = THREAD_CONTROL_RUN;
 
     data->ret = 0;
-    if (!__atomic_compare_exchange_n(&data->control, &run_val,
-                                     THREAD_CONTROL_RUNNING, false,
-                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+    if (!atomic_compare_exchange(&data->control, THREAD_CONTROL_RUN, THREAD_CONTROL_RUNNING))
         pthread_exit(&data->ret);
-    while (get_value(data->control) != THREAD_CONTROL_STOP) {
+
+    while (atomic_load(&data->control) != THREAD_CONTROL_STOP) {
         timer_update_wait(&global_time_data.trigger);
         pthread_mutex_lock(&data->lock);
         args->object.callback(args->object.data,
@@ -293,14 +283,12 @@ static void *core_update_thread(void *arg) {
 static void *core_generic_thread(void *arg) {
     struct core_thread_args *data = (struct core_thread_args *)arg;
     core_thread_args_t *args = &data->args;
-    int run_val = THREAD_CONTROL_RUN;
 
     data->ret = 0;
-    if (!__atomic_compare_exchange_n(&data->control, &run_val,
-                                     THREAD_CONTROL_RUNNING, false,
-                                     __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+    if (!atomic_compare_exchange(&data->control, THREAD_CONTROL_RUN, THREAD_CONTROL_RUNNING))
         pthread_exit(&data->ret);
-    while (get_value(data->control) != THREAD_CONTROL_STOP) {
+
+    while (atomic_load(&data->control) != THREAD_CONTROL_STOP) {
         args->worker.callback(args->worker.data);
         nanosleep(&data->sleep, NULL);
     }
@@ -367,7 +355,7 @@ static int start_thread(struct core_thread_data *thread) {
         PTHREAD_CALL(pthread_attr_setschedparam, &thread->attrs, &sched_params);
     }
 
-    thread->args.control = THREAD_CONTROL_RUN;
+    atomic_store(&thread->args.control, THREAD_CONTROL_RUN);
     return pthread_create(&thread->thread_id, &thread->attrs,
                           thread->thread_func, &thread->args);
 }
@@ -389,6 +377,7 @@ int core_thread_create(core_thread_type_t type, core_thread_args_t *args) {
 
     memcpy(&thread->args.args, args, sizeof(thread->args.args));
     thread->type = type;
+    atomic_store(&thread->args.control, THREAD_CONTROL_STOP);
     pthread_mutex_init(&thread->args.lock, NULL);
 
     switch (type) {
@@ -473,10 +462,8 @@ void core_threads_stop(void) {
      * need to be woken up from the futex wait so they
      * can properly exit.
      */
-    if (get_value(global_time_data.time_control_thread->args.control) ==
-        THREAD_CONTROL_PAUSED)
-        set_value(global_time_data.time_control_thread->args.control,
-                  THREAD_CONTROL_RUN);
+    atomic_compare_exchange(&global_time_data.time_control_thread->args.control,
+                            THREAD_CONTROL_PAUSED, THREAD_CONTROL_RUN);
 
     /*
      * Stop all threads except the time control one.
@@ -486,7 +473,7 @@ void core_threads_stop(void) {
      */
     dlist_for_each_elem_container(thread, &core_threads, entry) {
         if (thread->type != CORE_THREAD_TYPE_UPDATE)
-            set_value(thread->args.control, THREAD_CONTROL_STOP);
+            atomic_store(&thread->args.control, THREAD_CONTROL_STOP);
     }
 
     dlist_for_each_elem_container(thread, &core_threads, entry) {
@@ -502,7 +489,7 @@ void core_threads_stop(void) {
      */
     dlist_for_each_elem_container(thread, &core_threads, entry) {
         if (thread->type == CORE_THREAD_TYPE_UPDATE && thread->thread_id) {
-            set_value(thread->args.control, THREAD_CONTROL_STOP);
+            atomic_store(&thread->args.control, THREAD_CONTROL_STOP);
             pthread_join(thread->thread_id, NULL);
             thread->thread_id = 0;
             close(thread->args.kmod_fd);
@@ -576,14 +563,11 @@ int core_threads_pause(void) {
             return errno;
     }
 
-    set_value(time_thread->args.control, THREAD_CONTROL_PAUSE);
+    atomic_store(&time_thread->args.control, THREAD_CONTROL_PAUSE);
 
     /* Wait for pause */
-    while (1) {
-        if (get_value(time_thread->args.control) == THREAD_CONTROL_PAUSED)
-            break;
-    }
-
+    while (atomic_load(&time_thread->args.control) != THREAD_CONTROL_PAUSED)
+        ;
     return 0;
 }
 
@@ -594,10 +578,10 @@ int core_threads_resume(void) {
     if (!time_thread)
         return ENOENT;
 
-    if (get_value(time_thread->args.control) != THREAD_CONTROL_PAUSED)
+    if (atomic_load(&time_thread->args.control) != THREAD_CONTROL_PAUSED)
         return EINVAL;
 
-    set_value(time_thread->args.control, THREAD_CONTROL_RUN);
+    atomic_store(&time_thread->args.control, THREAD_CONTROL_RUN);
     if (time_thread->args.kmod_fd) {
         if (ioctl(time_thread->args.kmod_fd, VORTEX_CMD_RESUME, 0) == -1)
             return errno;
@@ -613,7 +597,7 @@ int core_threads_reset(void) {
     if (!time_thread)
         return ENOENT;
 
-    if (get_value(time_thread->args.control) != THREAD_CONTROL_PAUSED)
+    if (atomic_load(&time_thread->args.control) != THREAD_CONTROL_PAUSED)
         return EINVAL;
 
     if (time_thread->args.kmod_fd) {
