@@ -21,10 +21,10 @@ import pickle
 import threading
 from queue import ShutDown
 import vortex.core.lib.logging as logging
+import vortex.frontends.proto as proto
 from vortex.core import ObjectKlass
 from vortex.frontends.lib import create_pty
 from vortex.frontends.queues import CommandQueue
-from vortex.frontends.proto import *
 
 class BaseFrontend:
     PIPE_PATH = "/tmp/vortex"
@@ -213,9 +213,12 @@ class BaseFrontend:
         return self._queue.wait_for_command(cmd_set)
 
     def respond(self, code, data):
-        response = Response(code, data)
+        response = proto.Response(code, data)
         response = pickle.dumps(response)
-        self._fd.write(b'#$' + response + b'$#')
+        header = proto.Header()
+        header.DATA_LEN = len(response)
+        hdr = pickle.dumps(header)
+        self._fd.write(proto.PACKET_START + hdr + response)
         
     def __del__(self):
         self._fd.close()

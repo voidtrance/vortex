@@ -15,7 +15,7 @@ import vortex.lib.GCode as gcode
 import vortex.emulator.remote.api as api
 from vortex.core import ObjectKlass
 from vortex.core.kinematics import AxisType
-from vortex.frontends.proto import CommandStatus, PacketMarker
+from vortex.frontends.proto import Header, HEADER_LEN, CommandStatus, PACKET_START
 
 class GColor:  # Gnome supported
     END = "\x1b[0m"
@@ -116,6 +116,7 @@ class CLIMode(enum.IntEnum):
     KLIPPER = GCODE
 
 CommandStatus.DISCONNECT = 99
+CommandStatus.INVALID = 100
 
 class HeartbeadThread(threading.Thread):
     def __init__(self, socket_path, set_cb, msg_cb):
@@ -234,18 +235,18 @@ class Interface(cmd.Cmd):
         return line
 
     def get_command_response(self, pipe):
-        start, end = -1, -1
-        while start == -1 and end == -1:
-            try:
-                self._response_stream += pipe.read()
-            except OSError:
-                self.disconnect()
-                return CommandStatus.DISCONNECT
-            start = self._response_stream.find(PacketMarker.START)
-            end = self._response_stream.find(PacketMarker.END)
-        response = self._response_stream[start+2:end]
-        self._response_stream = self._response_stream[end+2:]
-        return pickle.loads(response)
+        try:
+            header = pipe.read(len(PACKET_START) + HEADER_LEN)
+            if header[:2] != PACKET_START:
+                return CommandStatus.INVALID
+            header = pickle.loads(header[2:])
+            response = pipe.read(header.DATA_LEN)
+            return pickle.loads(response)
+        except pickle.PickleError:
+            return CommandStatus.INVALID
+        except OSError:
+            self.disconnect()
+            return CommandStatus.DISCONNECT
 
     def do_connect(self, args):
         if self.frontend and self.server_sock:

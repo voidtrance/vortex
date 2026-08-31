@@ -25,4 +25,12 @@ class CommandStatus(ExtIntEnum):
     COMPLETE = auto()
 
 Response = namedtuple("Response", ["status", "data"])
+
+PACKET_START = b"#$"
+
+class Header:
+    DATA_LEN = 0
+
+HEADER_LEN = 32
+
 Completion = namedtuple("Completion", ["id", "status", "data"])
