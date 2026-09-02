@@ -865,6 +865,8 @@ class MonitorApplication(Adw.Application):
     def do_startup(self, *args):
         Gtk.Application.do_startup(self)
 
+        self.main_window = MonitorWindow(application=self, title="Vortex Monitor")
+
         pause_action = Gio.SimpleAction.new_stateful("emulation-pause",
                                                      GLib.VariantType.new("b"),
                                                      GLib.Variant("b", False))
@@ -883,12 +885,21 @@ class MonitorApplication(Adw.Application):
         quit_action.connect("activate", self.on_quit)
         self.add_action(quit_action)
 
-    def do_activate(self):
-        if not self.main_window:
-            self.main_window = MonitorWindow(application=self, title="Vortex Monitor")
+        if self.connection.connect():
+            # Get the clock a few times to determine if the
+            # emulation is already paused
+            last_clock, _ = self.connection.get_time()
+            for x in range(5):
+                runtime, ticks = self.connection.get_time()
+                if last_clock != runtime:
+                    break
+            if last_clock == runtime:
+                pause_action.set_state(GLib.Variant("b", True))
+                self.main_window.set_paused_state(True)
 
+
+    def do_activate(self):
         self.main_window.present()
-        self.connection.connect()
         self.timeout = GLib.timeout_add(100, self.update)
 
     def get_object_data(self):
