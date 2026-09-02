@@ -36,7 +36,7 @@ button#reset-button { background-image: none; background-color: red; color: whit
 frame > label { font-size: 14pt;}
 toastoverlay > toast { background-color: gray; border-radius: 20px; }
 toastoverlay > toast > widget { margin: 10px; }
-banner { background-color: #22346e; }
+banner { background-color: #22346e; color: red; }
 """
 
 class ConnectionTermiated(Exception):
@@ -82,7 +82,8 @@ class Communicator:
         try:
             self.send(request)
             response = self.receive()
-        except (BrokenPipeError, ConnectionResetError, pickle.UnpicklingError):
+        except (BrokenPipeError, ConnectionResetError, EOFError,
+                pickle.UnpicklingError):
             self.disconnect()
             raise ConnectionTermiated()
         except OSError:
@@ -564,8 +565,6 @@ class MonitorWindow(Gtk.ApplicationWindow):
         main_box.append(self.monitor_box)
 
         self.banner = Adw.Banner.new("Emulation paused")
-        self.banner.set_button_label("Resume")
-        self.banner.set_action_name("app.emulation-resume")
         self.monitor_box.append(self.banner)
 
 
@@ -688,10 +687,12 @@ class MonitorWindow(Gtk.ApplicationWindow):
         self.precision_spin.connect("value-changed", self.set_object_value_precision)
         control_box.append(self.precision_spin)
 
-        pause_button = Gtk.Button(label="Pause")
-        pause_button.set_action_name("app.emulation-pause")
-        pause_button.set_tooltip_text("Pause the emulation.")
-        control_box.append(pause_button)
+        self.pause_button = Gtk.Button(label="Pause")
+        self.pause_button.set_action_name("app.emulation-pause")
+        v = GLib.Variant("b", False)
+        self.pause_button.set_tooltip_text("Pause the emulation.")
+        self.pause_button.set_action_target_value(v)
+        control_box.append(self.pause_button)
 
         capture_button = Gtk.Button(label="Capture State")
         capture_button.set_action_name("app.emulation-capture")
@@ -820,6 +821,10 @@ class MonitorWindow(Gtk.ApplicationWindow):
 
     def set_paused_state(self, paused):
         self.banner.set_revealed(paused)
+        if paused:
+            self.pause_button.set_label("Resume")
+        else:
+            self.pause_button.set_label("Pause")
 
     def notify(self, msg, action=None):
         msg = msg.replace("<", "&lt;").replace(">", "&gt;")
@@ -860,13 +865,11 @@ class MonitorApplication(Adw.Application):
     def do_startup(self, *args):
         Gtk.Application.do_startup(self)
 
-        pause_action = Gio.SimpleAction.new("emulation-pause", None)
+        pause_action = Gio.SimpleAction.new_stateful("emulation-pause",
+                                                     GLib.VariantType.new("b"),
+                                                     GLib.Variant("b", False))
         pause_action.connect("activate", self.pause_emulation)
         self.add_action(pause_action)
-
-        resume_action = Gio.SimpleAction.new("emulation-resume", None)
-        resume_action.connect("activate", self.resume_emulation)
-        self.add_action(resume_action)
 
         reset_action = Gio.SimpleAction.new("emulation-reset", None)
         reset_action.connect("activate", self.reset_emulation)
@@ -951,15 +954,14 @@ class MonitorApplication(Adw.Application):
         return True
 
     def pause_emulation(self, action, param):
-        request = api.Request(api.RequestType.EMULATION_PAUSE)
+        paused = action.get_state().get_boolean()
+        new_state = not paused
+        action.set_state(GLib.Variant("b", new_state))
+        request_type = api.RequestType.EMULATION_PAUSE if new_state else \
+                       api.RequestType.EMULATION_RESUME
+        request = api.Request(request_type)
         response = self.connection.send_with_response(request)
-        self.main_window.set_paused_state(True)
-        return response.data
-
-    def resume_emulation(self, action, param):
-        self.main_window.set_paused_state(False)
-        request = api.Request(api.RequestType.EMULATION_RESUME)
-        response = self.connection.send_with_response(request)
+        self.main_window.set_paused_state(new_state)
         return response.data
 
     def reset_emulation(self, action, param):
