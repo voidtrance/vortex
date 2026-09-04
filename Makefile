@@ -133,3 +133,16 @@ clean:
 	$(MAKE) -C /lib/modules/$(KVER)/build M=$${PWD}/src/kmod clean
 	rm -rf build dist builddir
 	rm -f compile_commands.json version.txt vortex-*.tar.bz2
+
+help:
+	@echo "Makefile targets:"
+	@echo "  venv - Setup emulator virtual environment"
+	@echo "  wheel - Build wheel package"
+	@echo "  package - Build source source/wheel package"
+	@echo "  install - Install emulator in a virtual environment"
+	@echo "  gdb - Start GDB debug sesion"
+	@echo "  action-test - Test Github actions (requires 'act' tool)"
+	@echo "  kmod - Build timing kernel module"
+	@echo "  kmod_sign - Sign kernel module"
+	@echo "  kmod_install - Install kernel module"
+	@echo "  clean - Clean the build environment"
